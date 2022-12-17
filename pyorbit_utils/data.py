@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 
 import numpy as np
@@ -8,7 +9,7 @@ def delete_files_not_folders(path):
         for file in files:
             os.remove(os.path.join(root, file))
 
-            
+
 # The following three functions allow saving/loading of ragged arrays. An
 # example use case is to save the turn-by-turn coordinates of a bunch that
 # has a different number of particles on each turn.

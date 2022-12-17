@@ -93,9 +93,9 @@ def set_bunch_coords(bunch, X, start_index=0):
         bunch.dE(i, dE)
     return bunch
 
-    
+
 def set_bunch_current(bunch, current=None, freq=None):
-    """Set macro-size from current [A] and frequency [Hz]."""    
+    """Set macro-size from current [A] and frequency [Hz]."""
     charge_bunch = current / freq
     charge_particle = abs(float(bunch.charge()) * consts.charge_electron)
     intensity = charge_bunch / charge_particle
@@ -108,10 +108,10 @@ def get_z_to_phase_coeff(bunch, freq=None):
     """Return coefficient to calculate phase [degrees] from z [m]."""
     wavelength = consts.speed_of_light / freq
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
-        
-    
+
+
 def shift_bunch(bunch, new_center=None, verbose=0):
-    """Shift the bunch centroid in phase space.""""
+    """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = new_center
     if verbose:
         print(
@@ -125,16 +125,16 @@ def shift_bunch(bunch, new_center=None, verbose=0):
         )
     for i in range(bunch.getSize()):
         bunch.x(i, bunch.x(i) + x)
-        bunch.y(i, bunch.y(i) + y)  
+        bunch.y(i, bunch.y(i) + y)
         bunch.z(i, bunch.z(i) + z)
-        bunch.xp(i, bunch.xp(i) + xp) 
+        bunch.xp(i, bunch.xp(i) + xp)
         bunch.yp(i, bunch.yp(i) + yp)
         bunch.dE(i, bunch.dE(i) + dE)
     if verbose:
         print("Bunch shift complete.")
     return bunch
 
-    
+
 def center_bunch(bunch):
     """Shift the bunch so that first-order moments are zero."""
     twiss = BunchTwissAnalysis()
@@ -152,11 +152,11 @@ def reverse_bunch(bunch, verbose=0):
         bunch.xp(i, -bunch.xp(i))
         bunch.yp(i, -bunch.yp(i))
         bunch.z(i, -bunch.z(i))
-            
-    
+
+
 def load_bunch(
     filename=None,
-    file_format='pyorbit',
+    file_format="pyorbit",
     verbose=False,
     bunch=None,
 ):
@@ -166,7 +166,7 @@ def load_bunch(
     ----------
     filename : str
         Path the file.
-    file_format : str        
+    file_format : str
         'pyorbit':
             The expected header format is:
         'parmteq':
@@ -194,15 +194,15 @@ def load_bunch(
         header = np.genfromtxt(filename, max_rows=3, usecols=[0, 1, 2, 3, 4], dtype=str)
         n_parts = int(header[0, 4])
         current = np.float(header[1, 3])
-        freq = np.float(header[2, 3])  * 1e6  # MHz to Hz
+        freq = np.float(header[2, 3]) * 1e6  # MHz to Hz
         data = np.loadtxt(filename, skiprows=5)
-        
+
         # Trim off-energy particles.
         kin_energy = np.mean(data[:, 5])  # center energy [MeV]
         ind = np.where(np.abs(data[:, 5] - kin_energy) < (0.05 * kin_energy))[0]
         n_parts = len(ind)
         bunch.getSyncParticle().kinEnergy(kin_energy * 1e-3)
-                
+
         # Unit conversion.
         dE = (data[ind, 5] - kin_energy) * 1e-3  # MeV to GeV
         x = data[ind, 0] * 1e-2  # cm to m
@@ -211,24 +211,23 @@ def load_bunch(
         yp = data[ind, 3]  # radians
         phi = data[ind, 4]  # radians
         z = np.rad2deg(phi) / get_z_to_phase_coeff(bunch, freq=freq)
-        
+
         # Add particles.
         for i in range(n_parts):
             bunch.addParticle(x[i], xp[i], y[i], yp[i], z[i], dE[i])
     else:
         raise KeyError("Unrecognized format '{}'.".format(file_format))
     if verbose:
-        print("Bunch loaded (nparts={} macrosize={}).".format(bunch.getSize(), bunch.macroSize()))
+        print(
+            "Bunch loaded (nparts={} macrosize={}).".format(
+                bunch.getSize(), bunch.macroSize()
+            )
+        )
     return bunch
-        
-    
+
+
 def gen_bunch_from_twiss(
-    n_parts=0,
-    twiss_x=None,
-    twiss_y=None,
-    twiss_z=None,
-    dist_gen=None,
-    **dist_gen_kws
+    n_parts=0, twiss_x=None, twiss_y=None, twiss_z=None, dist_gen=None, **dist_gen_kws
 ):
     """Generate bunch from Twiss parameters."""
     comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -242,7 +241,10 @@ def gen_bunch_from_twiss(
     for i in range(n_parts):
         x, xp, y, yp, z, dE = distributor.getCoordinates()
         x, xp, y, yp, z, dE = orbit_mpi.MPI_Bcast(
-            (x, xp, y, yp, z, dE), data_type, main_rank, comm,
+            (x, xp, y, yp, z, dE),
+            data_type,
+            main_rank,
+            comm,
         )
         if i % size == rank:
             bunch.addParticle(x, xp, y, yp, z, dE)

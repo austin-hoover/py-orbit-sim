@@ -1,4 +1,9 @@
+from __future__ import print_function
+
+import numpy as np
+
 from orbit.consts import consts
+from orbit_utils import Matrix
 
 
 def orbit_matrix_to_numpy(matrix):
@@ -61,7 +66,9 @@ def get_perveance(mass=None, kin_energy=None, line_density=None):
     """
     gamma = 1 + (kin_energy / mass)  # Lorentz factor
     beta = np.sqrt(1 - (1 / gamma) ** 2)  # velocity/speed_of_light
-    return (2 * consts.classical_proton_radius * line_density) / (beta**2 * gamma**3)
+    return (2 * consts.classical_proton_radius * line_density) / (
+        beta**2 * gamma**3
+    )
 
 
 def get_intensity(perveance=None, mass=None, kin_energy=None, bunch_length=None):
