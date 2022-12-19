@@ -8,8 +8,9 @@ from orbit.lattice import AccNode
 from orbit.teapot import teapot
 from orbit.teapot import TEAPOT_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice
-from orbit.twiss import twiss
 from orbit_utils import Matrix
+
+from .misc import orbit_matrix_to_numpy
 
 
 def add_node_at_lattice_entrance(lattice, new_node):
@@ -62,7 +63,7 @@ def get_transfer_matrix(lattice, mass=None, energy=None):
     """
     bunch, params_dict = initialize_bunch(mass, energy)
     matrix_lattice = TEAPOT_MATRIX_Lattice(lattice, bunch)
-    return utils.orbit_matrix_to_numpy(matrix_lattice.oneTurnMatrix)
+    return orbit_matrix_to_numpy(matrix_lattice.oneTurnMatrix)
 
 
 def get_matrix_lattice(lattice, mass=None, kin_energy=None):
