@@ -2,7 +2,7 @@ from __future__ import print_function
 
 import numpy as np
 
-from orbit.consts import consts
+from orbit.utils import consts
 from orbit_utils import Matrix
 
 
