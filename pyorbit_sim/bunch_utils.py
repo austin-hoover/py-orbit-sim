@@ -20,7 +20,6 @@ from orbit.lattice import AccNode
 from orbit.teapot import teapot
 from orbit.teapot import TEAPOT_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice
-from orbit.twiss import twiss
 from orbit.utils import consts
 import orbit_mpi
 from orbit_mpi import mpi_comm
@@ -110,9 +109,9 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
-def shift_bunch(bunch, new_center=None, verbose=0):
+def shift_bunch(bunch, location=None, verbose=0):
     """Shift the bunch centroid in phase space."""
-    x, xp, y, yp, z, dE = new_center
+    x, xp, y, yp, z, dE = location
     if verbose:
         print(
             "Shifting bunch centroid...",
@@ -137,9 +136,10 @@ def shift_bunch(bunch, new_center=None, verbose=0):
 
 def center_bunch(bunch):
     """Shift the bunch so that first-order moments are zero."""
-    twiss = BunchTwissAnalysis()
-    twiss.analyzeBunch(bunch)
-    return shift_bunch(bunch, *[twiss.getAverage(i) for i in range(6)])
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    bunch_twiss_analysis.analyzeBunch(bunch)
+    centroid = [bunch_twiss_analysis.getAverage(i) for i in range(6)]
+    return shift_bunch(bunch, centroid)
 
 
 def reverse_bunch(bunch, verbose=0):
