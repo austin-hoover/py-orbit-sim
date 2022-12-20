@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import numpy as np
+import psdist.bunch as psb
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -110,19 +111,9 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
-def shift_bunch(bunch, new_center=None, verbose=0):
+def shift_bunch(bunch, new_center=None):
     """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = new_center
-    if verbose:
-        print(
-            "Shifting bunch centroid...",
-            "  delta_x = {:.3f}".format(x),
-            "  delta_x = {:.3f}".format(y),
-            "  delta_z = {:.3f}".format(z),
-            "  delta_xp = {:.3f}".format(xp),
-            "  delta_yp = {:.3f}".format(yp),
-            "  delta_dE = {:.3f}".format(dE),
-        )
     for i in range(bunch.getSize()):
         bunch.x(i, bunch.x(i) + x)
         bunch.y(i, bunch.y(i) + y)
@@ -130,8 +121,6 @@ def shift_bunch(bunch, new_center=None, verbose=0):
         bunch.xp(i, bunch.xp(i) + xp)
         bunch.yp(i, bunch.yp(i) + yp)
         bunch.dE(i, bunch.dE(i) + dE)
-    if verbose:
-        print("Bunch shift complete.")
     return bunch
 
 
@@ -142,7 +131,7 @@ def center_bunch(bunch):
     return shift_bunch(bunch, *[twiss.getAverage(i) for i in range(6)])
 
 
-def reverse_bunch(bunch, verbose=0):
+def reverse_bunch(bunch):
     """Reverse the bunch propagation direction.
 
     Since the tail becomes the head of the bunch, the sign of z
@@ -152,13 +141,14 @@ def reverse_bunch(bunch, verbose=0):
         bunch.xp(i, -bunch.xp(i))
         bunch.yp(i, -bunch.yp(i))
         bunch.z(i, -bunch.z(i))
+        
 
 
 def load_bunch(
     filename=None,
     file_format="pyorbit",
-    verbose=False,
     bunch=None,
+    verbose=False,
 ):
     """Load bunch from coordinates file.
 
@@ -220,7 +210,8 @@ def load_bunch(
     if verbose:
         print(
             "Bunch loaded (nparts={} macrosize={}).".format(
-                bunch.getSize(), bunch.macroSize()
+                bunch.getSize(), 
+                bunch.macroSize(),
             )
         )
     return bunch
@@ -249,3 +240,16 @@ def gen_bunch_from_twiss(
         if i % size == rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
     return bunch
+
+
+def decorrelate_bunch(bunch):
+    X = get_bunch_coords(bunch)
+    X = psb.decorrelate(X)
+    bunch = set_bunch_coords(bunch, X)
+    return bunch
+
+
+def downsample_bunch(bunch, samples=None):
+    X = get_bunch_coords(bunch)
+    X = psb.downsample(X, samples)
+    bunch = set_bunch_coords(bunch, X)
