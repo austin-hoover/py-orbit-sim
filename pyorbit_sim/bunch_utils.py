@@ -110,11 +110,6 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
-<<<<<<< HEAD
-def shift_bunch(bunch, new_center=None):
-    """Shift the bunch centroid in phase space."""
-    x, xp, y, yp, z, dE = new_center
-=======
 def shift_bunch(bunch, location=None, verbose=0):
     """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = location
@@ -128,7 +123,6 @@ def shift_bunch(bunch, location=None, verbose=0):
             "  delta_yp = {:.3f}".format(yp),
             "  delta_dE = {:.3f}".format(dE),
         )
->>>>>>> af052fa9cce5125f13719665c11fc0330c268863
     for i in range(bunch.getSize()):
         bunch.x(i, bunch.x(i) + x)
         bunch.y(i, bunch.y(i) + y)
@@ -157,7 +151,6 @@ def reverse_bunch(bunch):
         bunch.xp(i, -bunch.xp(i))
         bunch.yp(i, -bunch.yp(i))
         bunch.z(i, -bunch.z(i))
-        
 
 
 def load_bunch(
@@ -226,7 +219,7 @@ def load_bunch(
     if verbose:
         print(
             "Bunch loaded (nparts={} macrosize={}).".format(
-                bunch.getSize(), 
+                bunch.getSize(),
                 bunch.macroSize(),
             )
         )
