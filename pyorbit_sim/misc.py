@@ -17,14 +17,14 @@ def orbit_matrix_to_numpy(matrix):
 
 def lorentz_factors(mass=1.0, kin_energy=1.0):
     """Return relativistic factors gamma and beta.
-    
+
     Parameters
     ----------
     mass : float
         Particle mass divided by c^2 (units of energy).
     kin_energy : float
         Particle kinetic energy.
-        
+
     Returns
     -------
     gamma, beta : float
@@ -86,7 +86,9 @@ def get_perveance(mass=None, kin_energy=None, line_density=None):
         Dimensionless space charge perveance.
     """
     gamma, beta = lorentz_factors(mass=mass, kin_energy=kin_energy)
-    return (2.0 * consts.classical_proton_radius * line_density) / (beta**2 * gamma**3)
+    return (2.0 * consts.classical_proton_radius * line_density) / (
+        beta**2 * gamma**3
+    )
 
 
 def get_intensity(perveance=None, mass=None, kin_energy=None, bunch_length=None):

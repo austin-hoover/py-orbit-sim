@@ -1,0 +1,103 @@
+<?xml version="1.0" ?>
+<BTF_Lattice>
+ <MEBT bpmFrequency="8.05E8" length="8.62141552" name="FODO" rfFrequency="4.025E8">
+  <accElement length="0.558575174" name="MEBT:DH1" pos="1.189787587" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="1.57079633"/>
+  </accElement>
+  <accElement length="0.096" name="MEBT:QV07" pos="1.655075174" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="5.49162"/>
+    </accElement>
+  <accElement length="0.096" name="MEBT:QH08" pos="1.901075174" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-8.1"/>
+  </accElement>
+  <accElement length="0.096" name="MEBT:QV09" pos="2.347075174" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="1.14258"/>
+  </accElement>
+  <accElement length="0.558575174" name="MEBT:DH2" pos="2.812362761" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="1.57079633"/>
+  </accElement>
+  <accElement length="0.096" name="MEBT:QV10" pos="3.246340348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="6.2618"/>
+  </accElement>
+  <accElement length="0.146" name="MEBT:QH11" pos="3.574340348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-10.4746"/>
+  </accElement>
+  <accElement length="0.146" name="MEBT:QV12" pos="3.780340348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="8.0762"/>
+  </accElement>
+  <accElement length="0.146" name="MEBT:QH13" pos="4.108340348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-12.4097"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ01" pos="4.380840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ02" pos="4.588840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ03" pos="4.796840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ04" pos="5.004840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ05" pos="5.212840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ06" pos="5.420840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ07" pos="5.628840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ08" pos="5.836840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ09" pos="6.044840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ10" pos="6.252840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ11" pos="6.460840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ12" pos="6.668840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ13" pos="6.876840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ14" pos="7.084840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ15" pos="7.292840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ16" pos="7.500840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ17" pos="7.708840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ18" pos="7.916840348" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24"/>
+  </accElement>
+  <accElement length="0.075" name="FODO:FQ19" pos="8.12484035" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <!--<accElement length="0.146" name="MEBT:MQ1" pos="10.45534035" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-9.0"/>
+  </accElement>
+  <accElement length="0.146" name="MEBT:MQ2" pos="10.66134035" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="6.0"/>
+  </accElement>
+  <accElement length="0.558575174" name="MEBT:DH3" pos="12.34212793" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="1.57079633"/>
+  </accElement>-->
+ </MEBT>
+ <FODO bpmFrequency="805000000.0" length="0.0" name="FODO" rfFrequency="402500000.0">
+  <accElement length="0.061" name="FODO:QV01" pos="0.1305" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-26.0"/>
+  </accElement>
+ </FODO>
+</BTF_Lattice>

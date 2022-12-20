@@ -372,53 +372,36 @@ def proj2d_three_column(
 def corner():
     raise NotImplementedError
         
-    
+
 class Plotter:
-    """Manage chains of plotting functions, arguments, and file saving.
-    
-    Attributes
-    ----------
-    transformer : callable
-        Function that transforms the phase space coordinate array.
-    path : str
-        Directory in which to save the data.
-    """
-    def __init__(self, transformer=None, path='.', default_fig_kws=None, default_save_kws=None):
+    def __init__(self, transform=None, path='.', default_save_kws=None):
         self.transform = transform
         self.path = path
-        self.default_fig_kws = default_fig_kws
-        self.default_save_kws = default_save_kws
-        if self.default_fig_kws is None:
-            self.default_fig_kws = dict()
-        if self.default_save_kws is None:
-            self.default_save_kws = dict()
         self.funcs = []
-        self.fig_kws = []
+        self.kws = []
         self.save_kws = []
-        self.plot_kws = []
-        self.names = []
-        self.n_funcs = 0
-            
-    def add_func(self, func, fig_kws=None, save_kws=None, name=None, **kws):
+        self.default_save_kws = default_save_kws
+        if self.default_save_kws is None:
+            self.default_save_kws  = dict()
+        
+    def add_func(self, func, save_kws=None, name=None, **kws):
         self.funcs.append(func)
-        self.fig_kws.append(fig_kws if fig_kws else self.default_fig_kws)
+        self.kws.append(kws)
+        self.names.append(name if name else 'plot_{}'.format(len(self.funcs)))
         self.save_kws.append(save_kws if save_kws else self.default_save_kws)
-        self.names.append(name if name else 'plot{}'.format(self.counter))
-        self.plot_kws.append(kws if kws else dict())
-        self.n_funcs += 1
         
     def plot(self, X, info=None, verbose=False):
         if self.transform is not None:
             X = self.transform(X)
         for i in range(len(self.funcs)):
+            if verbose:
+                print("Calling '{}' ({}).".format(self.names[i], self.func.__name__))
+            self.funcs[i](X, info=info, **self.kws[i])
             filename = self.names[i]
             if 'step' in info:
                 filename = '{}_{:03}'.format(filename, info['step'])
             if 'node' in info:
                 filename = '{}_{}'.format(filename, info['node'])
             filename = os.path.join(self.path, filename)
-            if verbose:
-                print("Calling plot function '{}' ({}).".format(self.names[i], self.funcs[i].__name__))
-            self.funcs[i](X, info=info, fig_kws=self.fig_kws[i], **self.plot_kws[i])
-            plt.savefig(filename, **self.save_kws[i])
+            plt.savefig(os.path.join(self.path, filename, **self.save_kws[i])
             plt.close()

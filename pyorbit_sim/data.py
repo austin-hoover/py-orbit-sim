@@ -11,13 +11,13 @@ def read_orbit_bunch_file(filename, dims=None, dframe=False):
     if dims is not None:
         cols = [d if type(d) is int else names.index(d) for d in dims]
     names = [names[c] for c in cols]
-    df = pd.read_table(filename, sep=' ', skiprows=14, usecols=cols, names=names)
+    df = pd.read_table(filename, sep=" ", skiprows=14, usecols=cols, names=names)
     # Convert to mm, mrad, keV
-    for col in ['x', 'xp', 'y', 'yp', 'z']:
+    for col in ["x", "xp", "y", "yp", "z"]:
         if col in df.columns:
             df[col] *= 1e3
-    if 'dE' in df.columns:
-        df['dE'] *= 1e6
+    if "dE" in df.columns:
+        df["dE"] *= 1e6
     if dframe:
         return df
     return df.values

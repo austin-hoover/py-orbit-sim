@@ -1,0 +1,26 @@
+<SaveRestoreDocument acceleratorPath="/ade/Diag/openxal/site/optics/btf/main.xal" date="Mon Aug 31 15:55:01 EDT 2020" version="2.0.0">
+<MachineState comment="empirical tuning 32 mA; missing DC34a's">
+<record readback="1.1294140000000001" readback_pv="BTF_MEBT_Mag:PS_QH01:B" setpoint="157.94" setpoint_pv="BTF_MEBT_Mag:PS_QH01:I_Set"/>
+<record readback="1.246356" readback_pv="BTF_MEBT_Mag:PS_QV02:B" setpoint="280.06" setpoint_pv="BTF_MEBT_Mag:PS_QV02:I_Set"/>
+<record readback="1.090316869864503" readback_pv="BTF_MEBT_Mag:PS_QH03:B" setpoint="6.75" setpoint_pv="BTF_MEBT_Mag:PS_QH03:I_Set"/>
+<record readback="-0.6250663645928864" readback_pv="BTF_MEBT_Mag:PS_QV04:B" setpoint="-3.57" setpoint_pv="BTF_MEBT_Mag:PS_QV04:I_Set"/>
+<record readback="-0.0011788793189431894" readback_pv="BTF_MEBT_Mag:PS_QH05:B" setpoint="0.0" setpoint_pv="BTF_MEBT_Mag:PS_QH05:I_Set"/>
+<record readback="-0.0010891385906686558" readback_pv="BTF_MEBT_Mag:PS_QV06:B" setpoint="0.0" setpoint_pv="BTF_MEBT_Mag:PS_QV06:I_Set"/>
+<record readback="-0.5305618644310225" readback_pv="BTF_MEBT_Mag:PS_QV07:B" setpoint="-3.05" setpoint_pv="BTF_MEBT_Mag:PS_QV07:I_Set"/>
+<record readback="0.759020331680228" readback_pv="BTF_MEBT_Mag:PS_QH08:B" setpoint="3.521" setpoint_pv="BTF_MEBT_Mag:PS_QH08:I_Set"/>
+<record readback="-0.2690018300970861" readback_pv="BTF_MEBT_Mag:PS_QV09:B" setpoint="-1.5499999999999998" setpoint_pv="BTF_MEBT_Mag:PS_QV09:I_Set"/>
+<record readback="-0.36512582710748165" readback_pv="BTF_MEBT_Mag:PS_QV10:B" setpoint="-2.1" setpoint_pv="BTF_MEBT_Mag:PS_QV10:I_Set"/>
+<record readback="1.6165596695733964" readback_pv="BTF_MEBT_Mag:PS_QH11:B" setpoint="7.539" setpoint_pv="BTF_MEBT_Mag:PS_QH11:I_Set"/>
+<record readback="-1.6465221991312797" readback_pv="BTF_MEBT_Mag:PS_QV12:B" setpoint="-7.4" setpoint_pv="BTF_MEBT_Mag:PS_QV12:I_Set"/>
+<record readback="1.3790706751740045" readback_pv="BTF_MEBT_Mag:PS_QH13:B" setpoint="6.3500000000000005" setpoint_pv="BTF_MEBT_Mag:PS_QH13:I_Set"/>
+<record readback="1.295136019055386" readback_pv="BTF_MEBT_Mag:PS_QH33:B" setpoint="5.99" setpoint_pv="BTF_MEBT_Mag:PS_QH33:I_Set"/>
+<record readback="-1.3605818487047139" readback_pv="BTF_MEBT_Mag:PS_QV34:B" setpoint="-7.6" setpoint_pv="BTF_MEBT_Mag:PS_QV34:I_Set"/>
+<record readback="3.473906135559082" readback_pv="BTF_MEBT_Mag:PS_DCH01:I" setpoint="3.5" setpoint_pv="BTF_MEBT_Mag:PS_DCH01:I_Set"/>
+<record readback="-0.0119842529296875" readback_pv="BTF_MEBT_Mag:PS_DCV01:I" setpoint="0.0" setpoint_pv="BTF_MEBT_Mag:PS_DCV01:I_Set"/>
+<record readback="3.9759435653686523" readback_pv="BTF_MEBT_Mag:PS_DCH02:I" setpoint="4.0" setpoint_pv="BTF_MEBT_Mag:PS_DCH02:I_Set"/>
+<record readback="-0.023018074035644532" readback_pv="BTF_MEBT_Mag:PS_DCV02:I" setpoint="0.0" setpoint_pv="BTF_MEBT_Mag:PS_DCV02:I_Set"/>
+<record readback="358.0" readback_pv="BTF_MEBT_Mag:PS_DH07:I" setpoint="358.0" setpoint_pv="BTF_MEBT_Mag:PS_DH07:I_Set"/>
+<record readback="358.0" readback_pv="BTF_MEBT_Mag:PS_DH07:I" setpoint="358.0" setpoint_pv="BTF_MEBT_Mag:PS_DH07:I_Set"/>
+<record readback="358.0" readback_pv="BTF_MEBT_Mag:PS_DH07:I" setpoint="358.0" setpoint_pv="BTF_MEBT_Mag:PS_DH07:I_Set"/>
+</MachineState>
+</SaveRestoreDocument>

@@ -6,8 +6,8 @@ import subprocess
 def ensure_path_exists(path):
     if not os.path.isdir(path):
         os.makedirs(path)
-        
-        
+
+
 def delete_files_not_folders(path):
     for root, folders, files in os.walk(path):
         for file in files:
@@ -17,8 +17,12 @@ def delete_files_not_folders(path):
 def git_url():
     url = None
     try:
-        url = subprocess.check_output(['git', 'config', '--get', 'remote.origin.url']).decode("utf-8").strip()
-        if url and url.endswith('.git'):
+        url = (
+            subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+            .decode("utf-8")
+            .strip()
+        )
+        if url and url.endswith(".git"):
             url = url[:-4]
     except subprocess.CalledProcessError:
         pass
@@ -28,7 +32,9 @@ def git_url():
 def is_git_clean():
     clean = False
     try:
-        clean = False if subprocess.check_output(['git', 'status', '--porcelain']) else True
+        clean = (
+            False if subprocess.check_output(["git", "status", "--porcelain"]) else True
+        )
     except subprocess.CalledProcessError:
         pass
     return clean
@@ -37,7 +43,11 @@ def is_git_clean():
 def git_revision_hash():
     commit = None
     try:
-        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode("utf-8").strip()
+        commit = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .decode("utf-8")
+            .strip()
+        )
     except subprocess.CalledProcessError:
         pass
     return str(commit)
@@ -55,4 +65,4 @@ def file_hash(filename):
 def url_style(url, text=None):
     if text is None:
         text = url
-    return {'text': text, 'url': url}
+    return {"text": text, "url": url}
