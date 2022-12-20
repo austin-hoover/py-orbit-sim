@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 
-def load_bunch(filename, dims=None, dframe=False):
+def read_orbit_bunch_file(filename, dims=None, dframe=False):
     names = ["x", "xp", "y", "yp", "z", "dE"]
     cols = list(range(6))
     if dims is not None:
