@@ -2,12 +2,25 @@ from __future__ import print_function
 import os
 
 import numpy as np
+import pandas as pd
 
 
-def delete_files_not_folders(path):
-    for root, folders, files in os.walk(path):
-        for file in files:
-            os.remove(os.path.join(root, file))
+def load_bunch(filename, dims=None, dframe=False):
+    names = ["x", "xp", "y", "yp", "z", "dE"]
+    cols = list(range(6))
+    if dims is not None:
+        cols = [d if type(d) is int else names.index(d) for d in dims]
+    names = [names[c] for c in cols]
+    df = pd.read_table(filename, sep=' ', skiprows=14, usecols=cols, names=names)
+    # Convert to mm, mrad, keV
+    for col in ['x', 'xp', 'y', 'yp', 'z']:
+        if col in df.columns:
+            df[col] *= 1e3
+    if 'dE' in df.columns:
+        df['dE'] *= 1e6
+    if dframe:
+        return df
+    return df.values
 
 
 # The following three functions allow saving/loading of ragged arrays. An

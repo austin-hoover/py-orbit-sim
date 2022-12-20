@@ -15,6 +15,27 @@ def orbit_matrix_to_numpy(matrix):
     return array
 
 
+def lorentz_factors(mass=1.0, kin_energy=1.0):
+    """Return relativistic factors gamma and beta.
+    
+    Parameters
+    ----------
+    mass : float
+        Particle mass divided by c^2 (units of energy).
+    kin_energy : float
+        Particle kinetic energy.
+        
+    Returns
+    -------
+    gamma, beta : float
+        beta = absolute velocity divided by the speed of light
+        gamma = sqrt(1 - (1/beta)**2)
+    """
+    gamma = 1.0 + (kin_energy / mass)
+    beta = np.sqrt(gamma**2 - 1.0) / gamma
+    return gamma, beta
+
+
 def get_Brho(mass, kin_energy):
     """Compute magnetic rigidity (B rho).
 
@@ -31,7 +52,7 @@ def get_Brho(mass, kin_energy):
         Magnetic rigidity [T * m].
     """
     pc = get_pc(mass, kin_energy)
-    return 1e9 * (pc / speed_of_light)
+    return 1.0e9 * (pc / speed_of_light)
 
 
 def get_pc(mass, kin_energy):
@@ -44,7 +65,7 @@ def get_pc(mass, kin_energy):
     kin_energy : float
         Particle kinetic energy [GeV].
     """
-    return np.sqrt(kin_energy * (kin_energy + 2 * mass))
+    return np.sqrt(kin_energy * (kin_energy + 2.0 * mass))
 
 
 def get_perveance(mass=None, kin_energy=None, line_density=None):
@@ -64,11 +85,8 @@ def get_perveance(mass=None, kin_energy=None, line_density=None):
     float
         Dimensionless space charge perveance.
     """
-    gamma = 1 + (kin_energy / mass)  # Lorentz factor
-    beta = np.sqrt(1 - (1 / gamma) ** 2)  # velocity/speed_of_light
-    return (2 * consts.classical_proton_radius * line_density) / (
-        beta**2 * gamma**3
-    )
+    gamma, beta = lorentz_factors(mass=mass, kin_energy=kin_energy)
+    return (2.0 * consts.classical_proton_radius * line_density) / (beta**2 * gamma**3)
 
 
 def get_intensity(perveance=None, mass=None, kin_energy=None, bunch_length=None):
@@ -90,12 +108,11 @@ def get_intensity(perveance=None, mass=None, kin_energy=None, bunch_length=None)
     float
         The beam intensity.
     """
-    gamma = 1 + (kin_energy / mass)  # Lorentz factor
-    beta = np.sqrt(1 - (1 / gamma) ** 2)  # velocity/speed_of_light
+    gamma, beta = lorentz_factors(mass=mass, kin_energy=kin_energy)
     return (
         beta**2
         * gamma**3
         * perveance
         * bunch_length
-        / (2 * classical_proton_radius)
+        / (2.0 * classical_proton_radius)
     )
