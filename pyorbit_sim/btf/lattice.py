@@ -280,7 +280,7 @@ class BTFLatticeGenerator(MagnetConverter):
                 else:
                     # Ignore other elements (not sure what these could be... probably nothing).
                     continue
-        print("Lattice initialized.")
+        return self.lattice
 
     def update_quads(self, units="Amps", **setpoints):
         """Update quadrupole gradients in lattice definition.
