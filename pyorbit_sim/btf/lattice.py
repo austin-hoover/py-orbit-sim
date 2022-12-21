@@ -322,7 +322,7 @@ class BTFLatticeGenerator(MagnetConverter):
 
     def load_quads(self, filename, units="Tesla"):
         """Update quadrupoles from .mstate file."""
-        if filename.endswith(".mstate")
+        if filename.endswith(".mstate"):
             if units == "Tesla":
                 setpoints = quad_readbacks_from_mstate(filename)
             elif units == "Amps":
