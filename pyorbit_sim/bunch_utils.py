@@ -104,6 +104,14 @@ def set_bunch_current(bunch, current=None, freq=None):
     return bunch
 
 
+def scale_bunch_macrosize(bunch, factor=1.0, verbose=False):
+    bunch.macroSize(factor * bunch.macroSize())
+    if verbose:
+        print('Scaled bunch macrosize by factor {}.'.format(factor))
+        print('New bunch macrosize = {}.'.format(bunch.macroSize()))
+    return bunch
+
+
 def get_z_to_phase_coeff(bunch, freq=None):
     """Return coefficient to calculate phase [degrees] from z [m]."""
     wavelength = consts.speed_of_light / freq

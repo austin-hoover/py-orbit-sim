@@ -8,10 +8,16 @@ import numpy as np
 
 from orbit.py_linac.linac_parsers import SNS_LinacLatticeFactory
 from orbit.py_linac.lattice.LinacApertureNodes import LinacApertureNode
+from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
+from orbit.py_linac.lattice_modifications import Add_bend_apertures_to_lattice
+from orbit.py_linac.lattice_modifications import Add_drift_apertures_to_lattice
+from orbit.py_linac.lattice_modifications import Replace_Quads_to_OverlappingQuads_Nodes
 from orbit.py_linac.overlapping_fields.overlapping_quad_fields_lib import EngeFunction
 from orbit.py_linac.overlapping_fields.overlapping_quad_fields_lib import SimpleQuadFieldFunc
 from orbit.py_linac.overlapping_fields.overlapping_quad_fields_lib import PMQ_Trace3D_Function
+from orbit.space_charge.sc3d import setSC3DAccNodes
 from orbit.utils.xml import XmlDataAdaptor
+from spacecharge import SpaceChargeCalc3D
 
 
 PIPE_DIAMETER = 0.04
@@ -64,15 +70,15 @@ def quad_params_from_mstate(filename, param_name='setpoint'):
 
 def quad_setpoints_from_mstate(filename):
     """Load quadrupole setpoints [A] from .mstate file."""
-    return quad_params_from_mstate(filename, 'setpoint')
+    return quad_params_from_mstate(filename, param_name='setpoint')
 
 
 def quad_readbacks_from_mstate(filename):
     """Load quadrupole readbacks [T] from .mstate file."""
-    return quad_params_from_mstate(filename, 'readback')
+    return quad_params_from_mstate(filename, param_name='readback')
 
 
-def get_quad_func(quad):
+def get_quad_func(quad_node):
     """Generate Enge's Function for BTF quadrupoles.
 
     This is factory is specific to the BTF magnets. Some Enge's function parameters
@@ -82,13 +88,13 @@ def get_quad_func(quad):
 
     Parameters
     ----------
-    quad : AccNode
+    quad_node : AccNode
 
     Returns
     -------
     EngeFunction
     """
-    name = quad.getName()
+    name = quad_node.getName()
     if name in ["MEBT:QV02"]:
         length_param = 0.066
         acceptance_diameter_param = 0.0363
@@ -119,9 +125,9 @@ def get_quad_func(quad):
         cutoff_level = 0.01
         return PMQ_Trace3D_Function(length_param, ri, ro, cutoff_level=cutoff_level)
     # General Enge's Function (for other quads with given aperture parameter):
-    elif quad.hasParam("aperture"):
-        length_param = quad.getLength()
-        acceptance_diameter_param = quad.getParam("aperture")
+    elif quad_node.hasParam("aperture"):
+        length_param = quad_node.getLength()
+        acceptance_diameter_param = quad_node.getParam("aperture")
         cutoff_level = 0.001
         return EngeFunction(length_param, acceptance_diameter_param, cutoff_level)
     else:
@@ -129,90 +135,15 @@ def get_quad_func(quad):
         msg += os.linesep
         msg += "Cannot create the EngeFunction for the quad!"
         msg += os.linesep
-        msg = msg + "quad name = " + quad.getName()
+        msg = msg + "quad name = " + quad_node.getName()
         msg = msg + os.linesep
         msg = msg + "It does not have the aperture parameter!"
         msg = msg + os.linesep
         orbitFinalize(msg)
         return None
+                
     
-    
-class MagnetConverter:
-    """Convert magnet gradient/current."""
-
-    def __init__(self, coef_filename=None):
-        self.coef_filename = coef_filename
-        self.coeff = file_to_dict(self.coef_filename)
-
-    def c2gl(self, quadname, scaledAI):
-        """Convert current to gradient.
-
-        quadname : str
-            Quadrupole name (i.e., 'QH01').
-        scaledAI : float
-            Current setpoint (corresponds with scaled AI in IOC) [A].
-        """
-        scaledAI = float(scaledAI)
-        try:
-            A = float(self.coeff[quadname][0])
-            B = float(self.coeff[quadname][1])
-            GL = A * scaledAI + B * scaledAI**2
-        except KeyError:
-            print(
-                "Do not know conversion factor for element {};".format(quadname),
-                "gradient value not assigned.",
-            )
-            GL = []
-        return GL
-
-    def gl2c(self, quadname, GL):
-        """Convert gradient to current.
-
-        quadname : str
-            Quadrupole name (i.e., 'QH01').
-        GL : float
-            Integrated gradient [T].
-        """
-        GL = float(GL)
-        try:
-            A = float(self.coeff[quadname][0])
-            B = float(self.coeff[quadname][1])
-            if B == 0 and A == 0:  # handle case of 0 coefficients
-                scaledAI = 0
-            elif B == 0 and A != 0:  # avoid division by 0 for quads with 0 offset
-                scaledAI = GL / A
-            else:
-                scaledAI = 0.5 * (A / B) * (-1 + np.sqrt(1 + 4 * GL * B / A**2))
-        except KeyError:
-            print(
-                "Do not know conversion factor for element {};".format(quadname),
-                "current set to zero.",
-            )
-            scaledAI = 0
-        return scaledAI
-
-    def igrad2current(self, inputdict):
-        """inputdict has key = magnet name, value = integrated gradient GL [T]."""
-        outputdict = OrderedDict.fromkeys(self.coeff.keys(), [])
-        for name in inputdict:
-            try:
-                outputdict[name] = self.gl2c(name, inputdict[name])
-            except:
-                print("Something went wrong on element {}.".format(name))
-        return outputdict
-
-    def current2igrad(self, inputdict):
-        """inputdict has key = magnet name, value = current setpoint [A]."""
-        outputdict = OrderedDict.fromkeys(self.coeff.keys(), [])
-        for name in inputdict:
-            try:
-                outputdict[name] = self.c2gl(name, inputdict[name])
-            except:
-                print("Something went wrong on element {}.".format(name))
-        return outputdict
-
-
-class BTFLatticeGenerator(MagnetConverter):
+class BTFLatticeGenerator:
     """Class to generate BTF lattice.
 
     Attributes
@@ -231,13 +162,98 @@ class BTFLatticeGenerator(MagnetConverter):
         coef_filename : str
             File name for magnet coefficients.
         """
-        MagnetConverter.__init__(self, coef_filename=coef_filename)
+        self.coef_filename = coef_filename
+        self.coeff = file_to_dict(coef_filename)
         self.lattice = None
         self.magnets = None
+        self.space_charge_nodes = None
+        self.aperture_nodes = None
         self.pipe_diameter = PIPE_DIAMETER
         self.slit_widths = SLIT_WIDTHS
         
-    def init_lattice(self, xml=None, beamlines=None, max_drift_length=0.012):
+    def current_to_gradient(self, quad_name, current):
+        """Convert current to gradient.
+
+        Parameters
+        ----------
+        quad_name : str
+            Quadrupole name (i.e., 'QH01').
+        current : float
+            Current setpoint [A]. (Corresponds with scaled AI in IOC.)
+            
+        Returns
+        -------
+        gradient : float
+            Integrated gradient [T].
+        """
+        current = float(current)
+        sign = np.sign(current)
+        current = np.abs(current)
+        try:
+            A = float(self.coeff[quad_name][0])
+            B = float(self.coeff[quad_name][1])
+            gradient = sign * (A * current + B * current**2) 
+        except KeyError: 
+            print(
+                "Do not know conversion factor for element {}".format(quad_name),
+                "gradient value not assigned.",
+            ) 
+            gradient = []
+        return gradient
+
+    def gradient_to_current(self, quad_name, gradient):
+        """Convert gradient to current.
+
+        Parameters
+        ----------
+        quad_name : str
+            Quadrupole name (i.e., 'QH01').
+        gradient : float
+            Integrated gradient [T].
+            
+        Returns
+        -------
+        current : float
+            Current [A]. (Corresponds with scaled AI in IOC.)
+        """
+        gradient = float(gradient) 
+        sign = np.sign(gradient)
+        gradient = np.abs(gradient)
+        try:
+            A = float(self.coeff[quadname][0])
+            B = float(self.coeff[quadname][1])
+            if B == 0 and A == 0 : # handle case of 0 coefficients
+                current = 0
+            elif B == 0 and A != 0 : # avoid division by 0 for quads with 0 offset
+                current = gradient / A
+            else:
+                current = 0.5 * (A / B) * (-1.0 + np.sqrt(1.0 + 4.0 * GL * B / A**2))
+        except KeyError: 
+            print("Do not know conversion factor for element %s, current set to 0"%quadname) 
+            current = 0
+        return sign * current
+            
+    def get_quad_gradient(self, quad_name):
+        """Return integrated gradient (GL) [T].
+
+        By definition, a focusing quad has a positive gradient. (Special treatment
+        for QV02: gradient is always positive.)
+        """
+        quad = self.magnets[quad_name]['Node']
+        gradient = -quad.getParam('dB/dr') * quad.getLength()
+        if quad_name == 'QV02':
+            gradient = -gradient
+        return gradient
+    
+    def get_quad_kappa(self, quad_name):
+        """Return kappa parameter (dB/dr) [T/m]."""
+        quad = self.magnets[quad_name]['Node']
+        kappa = quad.getParam('dB/dr')
+        if quad_name == 'QV02':
+            kappa = -kappa
+        return kappa
+        
+    def init_lattice(self, xml=None, beamlines=None, max_drift_length=0.012, verbose=True):
         """Initialize lattice from xml file.
         
         Parameters
@@ -253,124 +269,148 @@ class BTFLatticeGenerator(MagnetConverter):
             raise ValueError('No xml file provided.')
         if beamlines is None:
             beamlines = ["MEBT1", "MEBT2", "MEBT3"]
-
+            
         btf_linac_factory = SNS_LinacLatticeFactory()
         btf_linac_factory.setMaxDriftLength(max_drift_length)
         self.lattice = btf_linac_factory.getLinacAccLattice(beamlines, xml)
         self.magnets = collections.OrderedDict()
-        for quad in self.lattice.getQuads():
+        self.quads = collections.OrderedDict()
+        for quad_node in self.lattice.getQuads():
             # Node name is "beamline:quad"; example: "MEBT1:QV03".
-            quad_name = quad.getName().split(":")[1]
+            quad_name = quad_node.getName().split(":")[1]
             self.magnets[quad_name] = dict()
-            self.magnets[quad_name]["Node"] = quad
-            # By convention, focusing quad has GL > 0. QV02 is always positive.
-            GL = -quad.getParam("dB/dr") * quad.getLength()
-            if quad_name == "QV02":
-                GL = -GL
-            # Record coefficients and current if applicable (FODO quads do not have
+            self.magnets[quad_name]['Node'] = quad_node       
+            self.quads[quad_name] = quad_node
+            # Record coefficients and current if applicable. (FODO quads do not have
             # set current and are caught by try loop.)
             try:
-                self.magnets[quad_name]["coeff"] = self.coeff[quad_name]
-                self.magnets[quad_name]["current"] = self.gl2c(quad_name, GL)
+                self.magnets[quad_name]['coeff'] = self.coeff[quad_name]
+                self.magnets[quad_name]['current'] = self.gradient_to_current(
+                    quad_name, 
+                    self.get_quad_gradient(quad_name),
+                )
             except:
-                # Catch quads that do not have PV names.
-                if "FQ" in quad_name:  # FODO PMQs
-                    self.magnets[quad_name]["coeff"] = [0, 0]
-                    self.magnets[quad_name]["current"] = 0
+                # Catch PMQs or elements without PV names.
+                if 'FQ' in quad_name:  # FODO PMQs
+                    self.magnets[quad_name]['coeff'] = [0.0, 0.0]
+                    self.magnets[quad_name]['current'] = 0.0
                 else:
                     # Ignore other elements (not sure what these could be... probably nothing).
                     continue
-        return self.lattice
-
-    def update_quads(self, units="Amps", **setpoints):
-        """Update quadrupole gradients in lattice definition.
-
-        units : str
-            The units of the values in `setpoints`. 
-        **setpoints
-            Keys are quadrupole names; values are currents. Names should not include
-            beamline name ('QH01' instead of 'MEBT1:QH01').
+        return self.lattice 
+    
+    def update_quad(self, quad_name=None, value=None, value_type=None, verbose=True):
+        """Update quadrupole field strength (current or gradient).
+                
+        Parameters
+        ----------
+        quad_name : str
+            The name of the quadrupole element.
+        value : float
+            Either the quadrupole current [A] or integrated field gradient [T].
+        value_type : {'current', 'gradient'}
+            Determines the meaning of `value`.
         """
-        for element_name, value in setpoints.items():
-            if units == "Amps":
-                GL = self.c2gl(element_name, float(value))
-                newcurrent = float(value)
-            elif units == "Tesla":
-                GL = float(value)
-                newcurrent = self.gl2c(element_name, float(value))
-            else:
-                raise (
-                    TypeError,
-                    "Do not understand unit {} for quadrupole setting".format(units),
-                )
-            try:
-                self.magnets[element_name]["current"] = newcurrent
-                # Update gradient in node definition. By convention, the
-                # focusing quad has GL > 0. (Special treatment for QV02 polarity:
-                # kappa + current, GL are always positive.)
-                newkappa = -GL / self.magnets[element_name]["Node"].getLength()
-                if element_name == "QV02":
-                    newkappa = -newkappa
-                self.magnets[element_name]["Node"].setParam("dB/dr", newkappa)
-                print(
-                    "Changed {} to {:.3f} [A] (dB/dr={:.3f} [T/m], GL={:.3f} [T]).".format(
-                        element_name, float(newcurrent), newkappa, GL
-                    )
-                )
-            except KeyError:
-                print("Element {} is not defined.".format(element_name))
-
-    def load_quads(self, filename, units="Tesla"):
-        """Update quadrupoles from .mstate file."""
-        if filename.endswith(".mstate"):
-            if units == "Tesla":
-                setpoints = quad_readbacks_from_mstate(filename)
-            elif units == "Amps":
-                setpoints = quad_setpoints_from_mstate(filename)
-            self.update_quads(units=units, **setpoints)
+        if quad_name not in self.quads:
+            print("Element '{}' is not a quad.".format(quad_name))
+            return
+        value = float(value)
+        if value_type == 'current':
+            current = value
+            gradient = self.current_to_gradient(quad_name, current)
+        elif value_type == 'gradient':
+            gradient = value
+            current = self.gradient_to_current(quad_name, gradient)  
+        kappa = self.get_quad_kappa(quad_name)
+        self.magnets[quad_name]['Node'].setParam('dB/dr', kappa)
+        self.magnets[quad_name]['current'] = current
+        if verbose:
+            print(
+                "Updated {} to {:.3f} [A] (dB/dr={:.3f} [T/m], GL={:.3f} [T])."
+                .format(quad_name, current, kappa, gradient)
+            )
+            
+    def update_quads_from_mstate(self, filename, value_type=None, verbose=True):
+        setpoints = dict()
+        if value_type == 'gradient':
+            setpoints = quad_readbacks_from_mstate(filename)
+        elif value_type == 'current':
+            setpoints = quad_setpoints_from_mstate(filename)
+        for quad_name, value in setpoints.items():
+            self.update_quad(quad_name, value, value_type=value_type, verbose=verbose)
+                        
+    def update_pmq(self, quad_name=None, value=None, field='gradient'):
+        if quad_name not in self.quads:
+            print("Element '{}' is not a quad.".format(quad_name))
+            return
+        value = float(value)
+        node = self.magnets[quad_name]['Node']
+        if field == 'gradient':
+            gradient = value
+            length = node.getLength()
+            kappa = -gradient / length
+            self.magnets[name]['Node'].setParam('dB/dr', kappa)
+            print("Updated {} to GL = {:.3f} [T] (dB/dr = {:.3f} [T/m], L = {:.3f} [m])."
+                  .format(quad_name, gradient, kappa, length))
+        elif field == 'length':
+            length = value
+            gradient = -node.getParam('dB/dr') * node.getLength()
+            node.setLength(length)
+            kappa = -gradient / node.getLength() 
+            node.setParam('dB/dr', kappa)
+            print("Updated {} to L = {:.3f} [m] (dB/dr = {:.3f} [T/m], GL = {:.3f} [T])."
+                  .format(quad_name, length, kappa, gradient))
         else:
-            raise NameError("{} lacks .mstate extension.".format(filename))
-
-    def update_pmqs(self, field='GL', **setpoints):
-        """Update quadrupole gradients in lattice definition.
+            raise TypeError("Invalid field '{}' for PMQ".format(field))
+            
+    def make_pmq_fields_overlap(self, z_step=0.001, verbose=True):
+        pmq_names = ['MEBT:FQ{}'.format(i) for i in range(14, 33)]
+        if verbose:
+            for pmq_name in pmq_names:
+                print('Replacing {} with overlapping field model.'.format(pmq_name))
+        Replace_Quads_to_OverlappingQuads_Nodes(
+            self.lattice,
+            z_step,
+            accSeq_Names=['MEBT3'],
+            quad_Names=pmq_names,
+            EngeFunctionFactory=get_quad_func,
+        )
         
-        field : str
-            The field to edit. 
-        **setpoints
-            Key is quadrupole name ('FQ01'); value is magnetic field strength [Tesla].         
-        """
-        for element_name, value in setpoints.items():
-            if field == "GL":
-                newGL = float(value)
-                try:
-                    L = self.magnets[element_name]["Node"].getLength()
-                    newkappa = newGL / L  # convention: focusing quad has + GL
-                    self.magnets[element_name]["Node"].setParam("dB/dr", newkappa)
-                    print(
-                        "Changed %s to GL = %.3f T (dB/dr=%.3f T/m, L=%.3f)"
-                        % (element_name, float(newGL), newkappa, L)
-                    )
-                except KeyError:
-                    print("Element %s is not defined" % (element_name))
-            elif field == "Length":
-                newL = float(value)
-                try:
-                    GL = (
-                        self.magnets[element_name]["Node"].getParam("dB/dr")
-                        * self.magnets[element_name]["Node"].getLength()
-                    )
-                    self.magnets[element_name]["Node"].setLength(newL)
-                    # changing length but holding GL fixed changes effective strength kappa
-                    newkappa = GL / self.magnets[element_name]["Node"].getLength()
-                    self.magnets[element_name]["Node"].setParam("dB/dr", newkappa)
-                    print(
-                        "Changed %s to L = %.3f m (dB/dr=%.3f T/m, GL=%.3f T)"
-                        % (element_name, float(newL), newkappa, GL)
-                    )
-                except KeyError:
-                    print("Element {} is not defined".format(element_name))
-            else:
-                raise (TypeError, "Do not understand field={} for PMQ element".format(field))
+    def add_space_charge_nodes(
+        self,
+        grid_size_x=64, 
+        grid_size_y=64,
+        grid_size_z=64,
+        path_length_min=0.01,
+        n_bunches=3,
+        freq=402.5e-6,
+        verbose=True,
+    ):
+        sc_calc = SpaceChargeCalc3D(grid_size_x, grid_size_y, grid_size_z)
+        if n_bunches > 1: 
+            sc_calc.numExtBunches(n_bunches)
+            sc_calc.freqOfBunches(freq)
+        self.space_charge_nodes = setSC3DAccNodes(self.lattice, path_length_min, sc_calc)
+        if verbose:
+            print('Added {} space charge nodes.'.format(len(self.space_charge_nodes)))
+        return self.space_charge_nodes
+    
+    def add_aperture_nodes(self, drift_step=0.1, start=0.0, stop=None, verbose=True):
+        aperture_nodes = Add_quad_apertures_to_lattice(self.lattice)
+        aperture_nodes = Add_bend_apertures_to_lattice(self.lattice, aperture_nodes, step=0.1)
+        if stop is None:
+            stop = self.lattice.getLength()
+        self.aperture_nodes = Add_drift_apertures_to_lattice(
+            self.lattice,
+            start,
+            stop,
+            drift_step,
+            self.pipe_diameter,
+            aperture_nodes,
+        )
+        if verbose:
+            print('Added {} aperture nodes.'.format(len(self.aperture_nodes)))
+        return self.aperture_nodes
 
     def add_slit(self, slit_name, pos=0.0, width=None):
         """Add a slit to the lattice.
@@ -378,7 +418,7 @@ class BTFLatticeGenerator(MagnetConverter):
         Parameters
         ----------
         slit_name : str
-            The name of slit, e.g., 'MEBT:HZ04'.
+            The name of slit, e.g., 'HZ04'.
         pos : float
             Transverse position of slit [mm] (bunch center is at zero).
         width : float or None
@@ -390,41 +430,37 @@ class BTFLatticeGenerator(MagnetConverter):
         """
         if width is None:
             width = self.slit_widths[slit_name]
-
-        # Determine if horizontal or vertical slit.
-        if slit_name[0] == "V":
-            dx = width * 1e-3
+            
+        if slit_name.startswith('V'):
+            dx = width * 1.0e-3
             dy = 1.1 * self.pipe_diameter
-            c = pos * 1e-3
+            c = pos * 1.0e-3
             d = 0.0
-        elif slit_name[0] == "H":
-            dy = width * 1e-3
+        elif slit_name.startswith('H'):
+            dy = width * 1.0e-3
             dx = 1.1 * self.pipe_diameter
-            d = pos * 1e-3
+            d = pos * 1.0e-3
             c = 0.0
         else:
             raise KeyError("Cannot determine plane for slit {}".format(slit_name))
-
+            
         a = 0.5 * dx
         b = 0.5 * dy
         shape = 3  # rectangular
-
-        # Create aperture node. In this call, pos is longitudinal position.
-        slit_node = self.lattice.getNodeForName("MEBT:" + slit_name)
+        slit_node = self.lattice.getNodeForName('MEBT:{}'.format(slit_name))
+        pos = slit_node.getPosition()
+        
         aperture_node = LinacApertureNode(
             shape,
-            a,
-            b,
+            0.5 * dx,
+            0.5 * dy,
             c=c,
             d=d,
-            pos=slit_node.getPosition(),
+            pos=pos,
             name=slit_name,
         )
-
-        # Add as child to slit marker node.
-        aperture_node.setName(slit_node.getName() + ":Aprt")
+        aperture_node.setName('{}:Aprt'.format(slit_node.getName()))
         aperture_node.setSequence(slit_node.getSequence())
         slit_node.addChildNode(aperture_node, slit_node.ENTRANCE)
-        print("Inserted {} at {:.3f} mm".format(slit_name, pos))
-
+        print('Inserted {} at s={:.3f} [mm].'.format(slit_name, pos))
         return aperture_node

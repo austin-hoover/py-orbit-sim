@@ -11,9 +11,9 @@ from orbit_utils import Matrix
 
 
 def get_matrix_lattice(lattice, mass=None, kin_energy=None):
-    bunch = Bunch()
-    bunch.mass(mass)
-    bunch.getSyncParticle().kinEnergy(kin_energy)
+    test_bunch = Bunch()
+    test_bunch.mass(mass)
+    test_bunch.getSyncParticle().kinEnergy(kin_energy)
     return TEAPOT_MATRIX_Lattice(lattice, test_bunch)
 
 

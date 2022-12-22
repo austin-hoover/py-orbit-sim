@@ -10,14 +10,7 @@ from bunch import Bunch
 from bunch import BunchTwissAnalysis
 from orbit.diagnostics.diagnostics import get_bunch_coords
 from orbit.lattice import AccActionsContainer
-from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
-from orbit.py_linac.lattice_modifications import Add_bend_apertures_to_lattice
-from orbit.py_linac.lattice_modifications import Add_drift_apertures_to_lattice
-from orbit.space_charge.sc3d import setSC3DAccNodes
-from orbit.space_charge.sc3d import setUniformEllipsesSCAccNodes
 import orbit.utils.consts as consts
-from spacecharge import SpaceChargeCalc3D
-from spacecharge import SpaceChargeCalcUnifEllipse
 
 from ..bunch_utils import reverse_bunch
 
@@ -135,25 +128,7 @@ class Monitor:
         return df
 
 
-def add_aperture_nodes(
-    lattice, pipe_diameter=0.04, drift_step=0.1, start=0.0, stop=None,
-):
-    aperture_nodes = Add_quad_apertures_to_lattice(lattice)
-    aperture_nodes = Add_bend_apertures_to_lattice(lattice, aperture_nodes, step=0.1)
-    if stop is None:
-        stop = lattice.getLength()
-    aperture_nodes = Add_drift_apertures_to_lattice(
-        lattice,
-        start,
-        stop,
-        drift_step,
-        pipe_diameter,
-        aperture_nodes,
-    )
-    return aperture_nodes
-
-
-def track_bunch(self, bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
+def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
     if stop is None:
         stop = lattice.getLength()
     node_start, index_start, s0_start, s1_start = _parse_start_stop(start, lattice)
@@ -167,13 +142,14 @@ def track_bunch(self, bunch, lattice, monitor=None, start=0.0, stop=None, verbos
     if verbose:
         print("Tracking from {} to {}.".format(stop, start))
     time_start = time.clock()
+    params_dict={
+        "old_pos": -1.0,
+        "count": 0,
+        "pos_step": 0.005,
+    }
     lattice.trackBunch(
         bunch,
-        paramsDict={
-            "old_pos": -1.0,
-            "count": 0,
-            "pos_step": 0.005,
-        },
+        paramsDict=params_dict,
         actionContainer=action_container,
         index_start=index_start,
         index_stop=index_stop,
@@ -207,17 +183,17 @@ def track_bunch_reverse(bunch, lattice, monitor=None, start=0.0, stop=None, verb
 def _parse_start_stop(argument, lattice):
     """Return (node, number, position_start, position_stop)."""
     if type(argument) is str:
-        node = self.lattice.getNodeForName(start)
+        node = lattice.getNodeForName(argument)
         return (
             node,
-            self.lattice.getNodeIndex(node),
+            lattice.getNodeIndex(node),
             node.getPosition() - 0.5 * node.getLength(),
             node.getPosition() + 0.5 * node.getLength(),
         )
     elif type(argument) in [float, int]:
         min_position = 0.0
-        max_position = self.lattice.getLength()
+        max_position = lattice.getLength()
         argument = np.clip(argument, min_position, max_position)
-        return self.lattice.getNodeForPosition(argument)
+        return lattice.getNodeForPosition(argument)
     else:
         raise TypeError("Invalid type {}.".format(type(argument)))
