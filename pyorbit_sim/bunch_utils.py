@@ -1,4 +1,6 @@
 from __future__ import print_function
+import os
+import sys
 
 import numpy as np
 import psdist.bunch as psb
@@ -163,7 +165,7 @@ def reverse_bunch(bunch):
 
 def load_bunch(
     filename=None,
-    file_format="pyorbit",
+    file_format='pyorbit',
     bunch=None,
     verbose=False,
 ):
@@ -189,7 +191,7 @@ def load_bunch(
         If None, create a new bunch; otherwise, load into this bunch.
     """
     if verbose:
-        print("Reading bunch from file '{}'...".format(filename))
+        print("Loading bunch from file '{}'...".format(filename))
     if not os.path.isfile(filename):
         raise ValueError("File '{}' does not exist.".format(filename))
     if bunch is None:
@@ -226,7 +228,7 @@ def load_bunch(
         raise KeyError("Unrecognized format '{}'.".format(file_format))
     if verbose:
         print(
-            "Bunch loaded (nparts={} macrosize={}).".format(
+            "Bunch loaded (nparts={}, macrosize={}).".format(
                 bunch.getSize(),
                 bunch.macroSize(),
             )
@@ -259,14 +261,27 @@ def gen_bunch_from_twiss(
     return bunch
 
 
-def decorrelate_bunch(bunch):
+def decorrelate_bunch(bunch, verbose=False):
+    if verbose:
+        print('Decorrelating x-xp, y-yp, z-dE...')
     X = get_bunch_coords(bunch)
     X = psb.decorrelate(X)
     bunch = set_bunch_coords(bunch, X)
+    if verbose:
+        print('Decorrelation complete.')
     return bunch
 
 
-def downsample_bunch(bunch, samples=None):
+def downsample_bunch(bunch, samples=None, verbose=False):
+    if verbose:
+        print('Downsampling bunch (samples={})...'.format(samples))
     X = get_bunch_coords(bunch)
     X = psb.downsample(X, samples)
-    bunch = set_bunch_coords(bunch, X)
+    new_bunch = Bunch()
+    bunch.copyEmptyBunchTo(new_bunch)
+    new_bunch = set_bunch_coords(new_bunch, X)
+    new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
+    new_bunch.copyBunchTo(bunch)
+    if verbose:
+        print('Downsampling complete.')
+    return bunch
