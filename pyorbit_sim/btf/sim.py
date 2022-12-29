@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 import pandas as pd
+from psdist import ap
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -77,14 +78,13 @@ class Monitor:
             return
         params_dict["old_pos"] = position
         params_dict["count"] += 1
-
+ 
         # Print update statement.
         n_steps = params_dict["count"]
         n_parts = bunch.getSizeGlobal()
         print(
-            "Step {}, n_parts {}, s={:.3f} [m], node {}".format(
-                n_steps, n_parts, position, node.getName()
-            )
+            "step={}, s={:.3f} [m], node={}, n_parts={}"
+            .format(n_steps, position, node.getName(), n_parts)
         )
 
         # Update history.
@@ -104,7 +104,7 @@ class Monitor:
         for i in range(6):
             for j in range(i + 1):
                 key = "cov_{}-{}".format(j, i)
-                self.history[key].append(bunch_twiss_analysis.getCorrelation(j, i))
+                self.history[key].append(bunch_twiss_analysis.getCorrelation(j, i))            
 
         # Make plots.
         if self.plotter is not None:
@@ -126,6 +126,25 @@ class Monitor:
         df = pd.DataFrame(data=data, columns=keys)
         df.to_csv(filename, sep=delimeter, index=False)
         return df
+    
+    
+def _parse_start_stop(argument, lattice):
+    """Return (node, number, position_start, position_stop)."""
+    if type(argument) is str:
+        node = lattice.getNodeForName(argument)
+        return (
+            node,
+            lattice.getNodeIndex(node),
+            node.getPosition() - 0.5 * node.getLength(),
+            node.getPosition() + 0.5 * node.getLength(),
+        )
+    elif type(argument) in [float, int]:
+        min_position = 0.0
+        max_position = lattice.getLength()
+        argument = np.clip(argument, min_position, max_position)
+        return lattice.getNodeForPosition(argument)
+    else:
+        raise TypeError("Invalid type {}.".format(type(argument)))
 
 
 def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
@@ -140,7 +159,7 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
         action_container.addAction(monitor.action, AccActionsContainer.EXIT)
 
     if verbose:
-        print("Tracking from {} to {}.".format(stop, start))
+        print("Tracking from {} to {}.".format(start, stop))
     time_start = time.clock()
     params_dict={
         "old_pos": -1.0,
@@ -164,6 +183,7 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
 
 
 def track_bunch_reverse(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
+    """Untested!"""
     if type(start) is float:
         start = self.lattice.getLength() - start
     if type(stop) is float:
@@ -178,22 +198,3 @@ def track_bunch_reverse(bunch, lattice, monitor=None, start=0.0, stop=None, verb
     if monitor is not None:
         node_stop, index_stop, s0_stop, s1_stop = _parse_start_stop(stop, lattice)
         monitor.history["position"] = 2.0 * s1_stop - monitor.history["position"]
-
-        
-def _parse_start_stop(argument, lattice):
-    """Return (node, number, position_start, position_stop)."""
-    if type(argument) is str:
-        node = lattice.getNodeForName(argument)
-        return (
-            node,
-            lattice.getNodeIndex(node),
-            node.getPosition() - 0.5 * node.getLength(),
-            node.getPosition() + 0.5 * node.getLength(),
-        )
-    elif type(argument) in [float, int]:
-        min_position = 0.0
-        max_position = lattice.getLength()
-        argument = np.clip(argument, min_position, max_position)
-        return lattice.getNodeForPosition(argument)
-    else:
-        raise TypeError("Invalid type {}.".format(type(argument)))

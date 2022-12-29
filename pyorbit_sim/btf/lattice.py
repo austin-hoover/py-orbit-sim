@@ -60,11 +60,10 @@ def quad_params_from_mstate(filename, param_name='setpoint'):
     state_da = XmlDataAdaptor.adaptorForFile(filename)
     setpoints = collections.OrderedDict()
     for item in state_da.data_adaptors[0].data_adaptors:
-        # Get magnet name from pvname.
-        pvname = item.getParam("setpoint_pv").split(":")
-        psname = pvname[1].split("_")
-        magname = psname[1]
-        setpoints[magname] = float(item.getParam(param_name))
+        pv_name = item.getParam("setpoint_pv").split(":")
+        ps_name = pv_name[1].split("_")
+        mag_name = ps_name[1]
+        setpoints[mag_name] = float(item.getParam(param_name))
     return setpoints
 
 
@@ -99,8 +98,7 @@ def get_quad_func(quad_node):
         length_param = 0.066
         acceptance_diameter_param = 0.0363
         cutoff_level = 0.001
-        func = EngeFunction(length_param, acceptance_diameter_param, cutoff_level)
-        return func
+        return EngeFunction(length_param, acceptance_diameter_param, cutoff_level)
     elif name in ["MEBT:QH01"]:
         length_param = 0.061
         acceptance_diameter_param = 0.029
@@ -183,7 +181,7 @@ class BTFLatticeGenerator:
             
         Returns
         -------
-        gradient : float
+        float
             Integrated gradient [T].
         """
         current = float(current)
@@ -200,7 +198,7 @@ class BTFLatticeGenerator:
             ) 
             gradient = []
         return gradient
-
+    
     def gradient_to_current(self, quad_name, gradient):
         """Convert gradient to current.
 
@@ -220,16 +218,19 @@ class BTFLatticeGenerator:
         sign = np.sign(gradient)
         gradient = np.abs(gradient)
         try:
-            A = float(self.coeff[quadname][0])
-            B = float(self.coeff[quadname][1])
-            if B == 0 and A == 0 : # handle case of 0 coefficients
-                current = 0
-            elif B == 0 and A != 0 : # avoid division by 0 for quads with 0 offset
+            A = float(self.coeff[quad_name][0])
+            B = float(self.coeff[quad_name][1])
+            if B == 0 and A == 0:
+                current = 0.0
+            elif B == 0 and A != 0 :
                 current = gradient / A
             else:
-                current = 0.5 * (A / B) * (-1.0 + np.sqrt(1.0 + 4.0 * GL * B / A**2))
+                current = 0.5 * (A / B) * (-1.0 + np.sqrt(1.0 + 4.0 * gradient * B / A**2))
         except KeyError: 
-            print("Do not know conversion factor for element %s, current set to 0"%quadname) 
+            print(
+                "Do not know conversion factor for element {}".format(quad_name),
+                "current set to 0.",
+            ) 
             current = 0
         return sign * current
             
@@ -239,65 +240,22 @@ class BTFLatticeGenerator:
         By definition, a focusing quad has a positive gradient. (Special treatment
         for QV02: gradient is always positive.)
         """
-        quad = self.magnets[quad_name]['Node']
-        gradient = -quad.getParam('dB/dr') * quad.getLength()
+        quad_node = self.magnets[quad_name]['Node']
+        gradient = -quad_node.getParam('dB/dr') * quad_node.getLength()
         if quad_name == 'QV02':
             gradient = -gradient
         return gradient
     
-    def get_quad_kappa(self, quad_name):
-        """Return kappa parameter (dB/dr) [T/m]."""
-        quad = self.magnets[quad_name]['Node']
-        kappa = quad.getParam('dB/dr')
+    def set_quad_gradient(self, quad_name, gradient):
+        quad_node = self.magnets[quad_name]['Node']
+        kappa = -gradient / quad_node.getLength()
         if quad_name == 'QV02':
             kappa = -kappa
-        return kappa
+        quad_node.setParam('dB/dr', kappa)
         
-    def init_lattice(self, xml=None, beamlines=None, max_drift_length=0.012, verbose=True):
-        """Initialize lattice from xml file.
-        
-        Parameters
-        ----------
-        xml : str
-            Path to the XML file.
-        beamlines : list[str]
-            List of beamlines to include in the lattice construction.
-        max_drift_length : float
-            Maximum drift length [m].
-        """
-        if xml is None:
-            raise ValueError('No xml file provided.')
-        if beamlines is None:
-            beamlines = ["MEBT1", "MEBT2", "MEBT3"]
-            
-        btf_linac_factory = SNS_LinacLatticeFactory()
-        btf_linac_factory.setMaxDriftLength(max_drift_length)
-        self.lattice = btf_linac_factory.getLinacAccLattice(beamlines, xml)
-        self.magnets = collections.OrderedDict()
-        self.quads = collections.OrderedDict()
-        for quad_node in self.lattice.getQuads():
-            # Node name is "beamline:quad"; example: "MEBT1:QV03".
-            quad_name = quad_node.getName().split(":")[1]
-            self.magnets[quad_name] = dict()
-            self.magnets[quad_name]['Node'] = quad_node       
-            self.quads[quad_name] = quad_node
-            # Record coefficients and current if applicable. (FODO quads do not have
-            # set current and are caught by try loop.)
-            try:
-                self.magnets[quad_name]['coeff'] = self.coeff[quad_name]
-                self.magnets[quad_name]['current'] = self.gradient_to_current(
-                    quad_name, 
-                    self.get_quad_gradient(quad_name),
-                )
-            except:
-                # Catch PMQs or elements without PV names.
-                if 'FQ' in quad_name:  # FODO PMQs
-                    self.magnets[quad_name]['coeff'] = [0.0, 0.0]
-                    self.magnets[quad_name]['current'] = 0.0
-                else:
-                    # Ignore other elements (not sure what these could be... probably nothing).
-                    continue
-        return self.lattice 
+    def set_quad_current(self, quad_name, current):
+        quad_node = self.magnets[quad_name]
+        quad_node['current'] = current
     
     def update_quad(self, quad_name=None, value=None, value_type=None, verbose=True):
         """Update quadrupole field strength (current or gradient).
@@ -312,8 +270,9 @@ class BTFLatticeGenerator:
             Determines the meaning of `value`.
         """
         if quad_name not in self.quads:
-            print("Element '{}' is not a quad.".format(quad_name))
+            print("Unknown quadrupole '{}'.".format(quad_name))
             return
+    
         value = float(value)
         if value_type == 'current':
             current = value
@@ -321,13 +280,13 @@ class BTFLatticeGenerator:
         elif value_type == 'gradient':
             gradient = value
             current = self.gradient_to_current(quad_name, gradient)  
-        kappa = self.get_quad_kappa(quad_name)
-        self.magnets[quad_name]['Node'].setParam('dB/dr', kappa)
-        self.magnets[quad_name]['current'] = current
+            
+        self.set_quad_gradient(quad_name, gradient)
+        self.set_quad_current(quad_name, current)
         if verbose:
             print(
-                "Updated {} to {:.3f} [A] (dB/dr={:.3f} [T/m], GL={:.3f} [T])."
-                .format(quad_name, current, kappa, gradient)
+                "Updated {} to I={:.3f} [A] (GL={:.3f} [T])."
+                .format(quad_name, current, gradient)
             )
             
     def update_quads_from_mstate(self, filename, value_type=None, verbose=True):
@@ -341,7 +300,7 @@ class BTFLatticeGenerator:
                         
     def update_pmq(self, quad_name=None, value=None, field='gradient'):
         if quad_name not in self.quads:
-            print("Element '{}' is not a quad.".format(quad_name))
+            print("Unknown quadrupole '{}'.".format(quad_name))
             return
         value = float(value)
         node = self.magnets[quad_name]['Node']
@@ -392,7 +351,16 @@ class BTFLatticeGenerator:
             sc_calc.freqOfBunches(freq)
         self.space_charge_nodes = setSC3DAccNodes(self.lattice, path_length_min, sc_calc)
         if verbose:
-            print('Added {} space charge nodes.'.format(len(self.space_charge_nodes)))
+            print(
+                'Added {} space charge nodes'.format(len(self.space_charge_nodes)),
+                '(grid={}X{}X{}, n_bunches={}, path_length_min={})'.format(
+                    grid_size_x, 
+                    grid_size_y, 
+                    grid_size_z, 
+                    n_bunches, 
+                    path_length_min,
+                )
+            )
         return self.space_charge_nodes
     
     def add_aperture_nodes(self, drift_step=0.1, start=0.0, stop=None, verbose=True):
@@ -409,7 +377,15 @@ class BTFLatticeGenerator:
             aperture_nodes,
         )
         if verbose:
-            print('Added {} aperture nodes.'.format(len(self.aperture_nodes)))
+            print(
+                'Added {} aperture nodes.'.format(len(self.aperture_nodes)),
+                'pipe_diameter={}, drift_step={}, start={}, stop={},'.format(
+                    self.pipe_diameter,
+                    drift_step, 
+                    start, 
+                    stop, 
+                )
+            )
         return self.aperture_nodes
 
     def add_slit(self, slit_name, pos=0.0, width=None):
@@ -464,3 +440,48 @@ class BTFLatticeGenerator:
         slit_node.addChildNode(aperture_node, slit_node.ENTRANCE)
         print('Inserted {} at s={:.3f} [mm].'.format(slit_name, pos))
         return aperture_node
+    
+    def init_lattice(self, xml=None, beamlines=None, max_drift_length=0.012, verbose=True):
+        """Initialize lattice from xml file.
+        
+        Parameters
+        ----------
+        xml : str
+            Path to the XML file.
+        beamlines : list[str]
+            List of beamlines to include in the lattice construction.
+        max_drift_length : float
+            Maximum drift length [m].
+        """
+        if xml is None:
+            raise ValueError('No xml file provided.')
+        if beamlines is None:
+            beamlines = ["MEBT1", "MEBT2", "MEBT3"]
+            
+        btf_linac_factory = SNS_LinacLatticeFactory()
+        btf_linac_factory.setMaxDriftLength(max_drift_length)
+        self.lattice = btf_linac_factory.getLinacAccLattice(beamlines, xml)
+        self.magnets = collections.OrderedDict()
+        self.quads = collections.OrderedDict()
+        for quad_node in self.lattice.getQuads():
+            # Node name is "beamline:quad"; example: "MEBT1:QV03".
+            quad_name = quad_node.getName().split(":")[1]
+            self.magnets[quad_name] = dict()
+            self.magnets[quad_name]['Node'] = quad_node       
+            self.quads[quad_name] = quad_node
+            # Record coefficients and current if applicable. (FODO quads do not have
+            # set current and are caught by try loop.)
+            try:
+                self.magnets[quad_name]['coeff'] = self.coeff[quad_name]
+                self.magnets[quad_name]['current'] = self.gradient_to_current(
+                    quad_name, 
+                    self.get_quad_gradient(quad_name),
+                )
+            except:
+                if 'FQ' in quad_name:  # FODO PMQs
+                    self.magnets[quad_name]['coeff'] = [0.0, 0.0]
+                    self.magnets[quad_name]['current'] = 0.0
+                else:
+                    # Ignore other elements (not sure what these could be... probably nothing).
+                    continue
+        return self.lattice 
