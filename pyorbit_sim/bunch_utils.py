@@ -3,7 +3,7 @@ import os
 import sys
 
 import numpy as np
-import psdist.bunch as psb
+import psdist as ps
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -107,6 +107,7 @@ def set_bunch_current(bunch, current=None, freq=None):
 
 
 def scale_bunch_macrosize(bunch, factor=1.0, verbose=False):
+    """Scale the macrosize of each bunch particle."""
     bunch.macroSize(factor * bunch.macroSize())
     if verbose:
         print('Scaled bunch macrosize by factor {}.'.format(factor))
@@ -120,7 +121,7 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
-def shift_bunch(bunch, location=None, verbose=0):
+def shift_bunch(bunch, location=None, verbose=False):
     """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = location
     if verbose:
@@ -265,7 +266,7 @@ def decorrelate_bunch(bunch, verbose=False):
     if verbose:
         print('Decorrelating x-xp, y-yp, z-dE...')
     X = get_bunch_coords(bunch)
-    X = psb.decorrelate(X)
+    X = ps.cloud.decorrelate(X)
     bunch = set_bunch_coords(bunch, X)
     if verbose:
         print('Decorrelation complete.')
@@ -276,7 +277,7 @@ def downsample_bunch(bunch, samples=None, verbose=False):
     if verbose:
         print('Downsampling bunch (samples={})...'.format(samples))
     X = get_bunch_coords(bunch)
-    X = psb.downsample(X, samples)
+    X = ps.cloud.downsample(X, samples)
     new_bunch = Bunch()
     bunch.copyEmptyBunchTo(new_bunch)
     new_bunch = set_bunch_coords(new_bunch, X)
