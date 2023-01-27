@@ -1,3 +1,2 @@
 numpy
 pandas
-psdist>=0.1.1

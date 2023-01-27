@@ -3,7 +3,6 @@ import os
 import sys
 
 import numpy as np
-import psdist as ps
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -266,18 +265,26 @@ def decorrelate_bunch(bunch, verbose=False):
     if verbose:
         print('Decorrelating x-xp, y-yp, z-dE...')
     X = get_bunch_coords(bunch)
-    X = ps.cloud.decorrelate(X)
+    for i in range(0, X.shape[1], 2):
+        idx = np.random.permutation(np.arange(X.shape[0]))
+        X[:, i : i + 2] = X[idx, i : i + 2]
     bunch = set_bunch_coords(bunch, X)
     if verbose:
         print('Decorrelation complete.')
     return bunch
 
 
-def downsample_bunch(bunch, samples=None, verbose=False):
+def downsample_bunch(bunch, samples=1, verbose=False):
     if verbose:
         print('Downsampling bunch (samples={})...'.format(samples))
     X = get_bunch_coords(bunch)
-    X = ps.cloud.downsample(X, samples)
+
+    if 0 < samples < 1:
+        samples = samples * X.shape[0]
+    samples = int(np.clip(samples, 1, X.shape[0]))
+    idx = np.random.choice(X.shape[0], samples, replace=False)
+    X = X[idx, :]
+
     new_bunch = Bunch()
     bunch.copyEmptyBunchTo(new_bunch)
     new_bunch = set_bunch_coords(new_bunch, X)
