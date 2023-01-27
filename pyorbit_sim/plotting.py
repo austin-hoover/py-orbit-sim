@@ -202,7 +202,7 @@ def plot_image(
     rms_ellipse_kws=None,
     divide_by_max=False,
     return_mesh=False,
-    **plot_kws,
+    **plot_kws
 ):
     """Plot a 2D image.
     Parameters
