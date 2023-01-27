@@ -403,5 +403,5 @@ class Plotter:
             if 'node' in info:
                 filename = '{}_{}'.format(filename, info['node'])
             filename = os.path.join(self.path, filename)
-            plt.savefig(os.path.join(self.path, filename, **self.save_kws[i])
+            plt.savefig(os.path.join(self.path, filename, **self.save_kws[i]))
             plt.close()
