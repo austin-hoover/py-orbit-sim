@@ -14,7 +14,7 @@ import numpy as np
 
 
 DIMS = ["x", "xp", "y", "yp", "z", "dE"]
-UNITS = ["mm", "mrad", "mm", "mrad", "mm", "keV"]
+UNITS = ["m", "rad", "m", "rad", "m", "GeV"]
 
 
 def centers_from_edges(edges):
@@ -102,7 +102,7 @@ def histogram_bin_edges(X, bins=10, limits=None):
     return [np.histogram_bin_edges(X[:, i], bins[i], limits[i]) for i in range(n)]
 
 
-def image_profiles(
+def plot_image_profiles(
     f,
     x=None,
     y=None,
@@ -111,7 +111,7 @@ def image_profiles(
     profy=True,
     kind="step",
     scale=0.12,
-    **plot_kws,
+    **plot_kws
 ):
     """Overlay a 1D projection on top of a 2D image.
     Parameters
@@ -160,7 +160,7 @@ def image_profiles(
     return ax
 
 
-def image_rms_ellipse(
+def plot_image_rms_ellipse
     f, x=None, y=None, ax=None, level=1.0, center_at_mean=True, **ellipse_kws
 ):
     """Compute and plot the rms ellipse.
@@ -185,7 +185,7 @@ def image_rms_ellipse(
     return rms_ellipse(Sigma, center, level=level, ax=ax, **ellipse_kws)
 
 
-def image(
+def plot_image(
     f,
     x=None,
     y=None,
@@ -280,9 +280,9 @@ def image(
     if rms_ellipse:
         if rms_ellipse_kws is None:
             rms_ellipse_kws = dict()
-        image_rms_ellipse(f, x=x, y=y, ax=ax, **rms_ellipse_kws)
+        plot_image_rms_ellipsef, x=x, y=y, ax=ax, **rms_ellipse_kws)
     if profx or profy:
-        image_profiles(f, x=x, y=y, ax=ax, profx=profx, profy=profy, **prof_kws)
+        plot_image_profiles(f, x=x, y=y, ax=ax, profx=profx, profy=profy, **prof_kws)
     if return_mesh:
         return ax, mesh
     else:
@@ -318,7 +318,7 @@ def proj2d(
     edges = histogram_bin_edges(X[:, axis], bins=bins, limits=limits)
     hist, _ = np.histogramdd(X[:, axis], edges)
     centers = [centers_from_edges(e) for e in edges]
-    ax = image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
+    ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
     
     if text is not None:
         if 's' in info:
@@ -363,7 +363,7 @@ def proj2d_three_column(
         edges = histogram_bin_edges(X[:, ind], bins=bins, limits=lims)
         hist, _ = np.histogramdd(X[:, ind], edges)
         centers = [centers_from_edges(e) for e in edges]  
-        ax = image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
+        ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
         if text is not None:
             if 's' in info:
                 ax.set_title('s = {:.3f} [m]'.format(info['s']))
