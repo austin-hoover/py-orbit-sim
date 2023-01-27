@@ -160,7 +160,7 @@ def plot_image_profiles(
     return ax
 
 
-def plot_image_rms_ellipse
+def plot_image_rms_ellipse(
     f, x=None, y=None, ax=None, level=1.0, center_at_mean=True, **ellipse_kws
 ):
     """Compute and plot the rms ellipse.
