@@ -5,7 +5,6 @@ import time
 
 import numpy as np
 import pandas as pd
-from psdist import ap
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
