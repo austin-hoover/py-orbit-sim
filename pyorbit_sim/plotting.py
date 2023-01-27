@@ -280,7 +280,7 @@ def plot_image(
     if rms_ellipse:
         if rms_ellipse_kws is None:
             rms_ellipse_kws = dict()
-        plot_image_rms_ellipsef, x=x, y=y, ax=ax, **rms_ellipse_kws)
+        plot_image_rms_ellipse(f, x=x, y=y, ax=ax, **rms_ellipse_kws)
     if profx or profy:
         plot_image_profiles(f, x=x, y=y, ax=ax, profx=profx, profy=profy, **prof_kws)
     if return_mesh:
