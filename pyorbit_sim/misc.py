@@ -15,7 +15,7 @@ def orbit_matrix_to_numpy(matrix):
     return array
 
 
-def lorentz_factors(mass=1.0, kin_energy=1.0):
+def lorentz_factors(mass=None, kin_energy=None):
     """Return relativistic factors gamma and beta.
 
     Parameters
@@ -36,7 +36,7 @@ def lorentz_factors(mass=1.0, kin_energy=1.0):
     return gamma, beta
 
 
-def get_Brho(mass, kin_energy):
+def get_Brho(mass=None, kin_energy=None):
     """Compute magnetic rigidity (B rho).
 
     Parameters
@@ -55,7 +55,7 @@ def get_Brho(mass, kin_energy):
     return 1.0e9 * (pc / speed_of_light)
 
 
-def get_pc(mass, kin_energy):
+def get_pc(mass=None, kin_energy=None):
     """Compute momentum * speed_of_light [GeV].
 
     Parameters
