@@ -47,11 +47,13 @@ class Monitor:
         plotter=None,
         dispersion_flag=False,
         emit_norm_flag=False,
+        pos_step=0.005,
     ):
         self.start_position = start_position
         self.plotter = plotter
         self.dispersion_flag = dispersion_flag
         self.emit_norm_flag = emit_norm_flag
+        self.pos_step = 0.005
         keys = [
             "position",
             "node",
@@ -73,7 +75,7 @@ class Monitor:
         position = params_dict["path_length"] + self.start_position
         if params_dict["old_pos"] == position:
             return
-        if params_dict["old_pos"] + params_dict["pos_step"] > position:
+        if params_dict["old_pos"] + self.pos_step > position:
             return
         params_dict["old_pos"] = position
         params_dict["count"] += 1
@@ -94,8 +96,12 @@ class Monitor:
         self.history["gamma"].append(bunch.getSyncParticle().gamma())
         self.history["beta"].append(bunch.getSyncParticle().beta())
         bunch_twiss_analysis = BunchTwissAnalysis()
+        order = 2
         bunch_twiss_analysis.computeBunchMoments(
-            bunch, 2, self.dispersion_flag, self.emit_norm_flag
+            bunch, 
+            order, 
+            self.dispersion_flag, 
+            self.emit_norm_flag
         )
         for i in range(6):
             key = "mean_{}".format(i)
@@ -119,16 +125,16 @@ class Monitor:
         for key in self.history:
             self.history[key] = []
 
-    def write(self, filename=None, delimeter=","):
+    def write(self, filename=None, delimiter=","):
         keys = list(self.history)
         data = np.array([self.history[key] for key in keys]).T
         df = pd.DataFrame(data=data, columns=keys)
-        df.to_csv(filename, sep=delimeter, index=False)
+        df.to_csv(filename, sep=delimiter, index=False)
         return df
-    
-    
-def _parse_start_stop(argument, lattice):
-    """Return (node, number, position_start, position_stop)."""
+
+
+def _get_node(argument, lattice):
+    """Return (node, node_index, position_start, position_stop)."""
     if type(argument) is str:
         node = lattice.getNodeForName(argument)
         return (
@@ -137,21 +143,17 @@ def _parse_start_stop(argument, lattice):
             node.getPosition() - 0.5 * node.getLength(),
             node.getPosition() + 0.5 * node.getLength(),
         )
-    elif type(argument) in [float, int]:
-        min_position = 0.0
-        max_position = lattice.getLength()
-        argument = np.clip(argument, min_position, max_position)
-        return lattice.getNodeForPosition(argument)
     else:
-        raise TypeError("Invalid type {}.".format(type(argument)))
+        return lattice.getNodeForPosition(position)
 
 
 def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
+    """Track bunch from start to stop."""
     if stop is None:
-        stop = lattice.getLength()
-    node_start, index_start, s0_start, s1_start = _parse_start_stop(start, lattice)
-    node_stop, index_stop, s0_stop, s1_stop = _parse_start_stop(stop, lattice)
-
+        stop = lattice.getLength()     
+    node_start, index_start, s0_start, s1_start = _get_node(start, lattice)
+    node_stop, index_stop, s0_stop, s1_stop = _get_node(stop, lattice)
+        
     action_container = AccActionsContainer("monitor")
     if monitor is not None:
         monitor.start_position = s0_start
@@ -159,12 +161,13 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
 
     if verbose:
         print("Tracking from {} to {}.".format(start, stop))
+        
     time_start = time.clock()
-    params_dict={
-        "old_pos": -1.0,
-        "count": 0,
-        "pos_step": 0.005,
-    }
+        
+    params_dict = dict()
+    params_dict["old_pos"] = -1.0
+    params_dict["count"] = 0
+        
     lattice.trackBunch(
         bunch,
         paramsDict=params_dict,
@@ -177,6 +180,7 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=0):
     if monitor is not None:
         monitor.action(params_dict)
     params_dict["old_pos"] = -1
+    
     if verbose:
         print("time = {:.3f} [sec]".format(time.clock() - time_start))
 
@@ -189,11 +193,9 @@ def track_bunch_reverse(bunch, lattice, monitor=None, start=0.0, stop=None, verb
         stop = self.lattice.getLength() - stop
     lattice.reverseOrder()
     bunch = reverse_bunch(bunch)
-    track_bunch(
-        bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbose
-    )
+    track_bunch(bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbosef)
     lattice.reverseOrder()
     bunch = reverse_bunch(bunch)
     if monitor is not None:
-        node_stop, index_stop, s0_stop, s1_stop = _parse_start_stop(stop, lattice)
+        node_stop, index_stop, s0_stop, s1_stop = _get_node(stop, lattice)
         monitor.history["position"] = 2.0 * s1_stop - monitor.history["position"]
