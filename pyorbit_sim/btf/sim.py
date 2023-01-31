@@ -39,6 +39,8 @@ class Monitor:
         Plotting manager. We can decide when this plotter should activate.
     emit_norm_flag, dispersion_flag : bool
         Used by `BunchTwissAnalysis` class.
+    verbose : bool
+        Whether to print progress.
     """
 
     def __init__(
@@ -48,11 +50,12 @@ class Monitor:
         dispersion_flag=False,
         emit_norm_flag=False,
         pos_step=0.005,
+        verbose=True,
     ):
         self.start_position = start_position
         self.plotter = plotter
-        self.dispersion_flag = dispersion_flag
-        self.emit_norm_flag = emit_norm_flag
+        self.dispersion_flag = int(dispersion_flag)
+        self.emit_norm_flag = int(emit_norm_flag)
         self.pos_step = 0.005
         keys = [
             "position",
@@ -68,6 +71,8 @@ class Monitor:
             for j in range(i + 1):
                 keys.append("cov_{}-{}".format(j, i))
         self.history = {key: [] for key in keys}
+        self.start_time = None
+        self.verbose = verbose
 
     def action(self, params_dict):
         node = params_dict["node"]
@@ -83,10 +88,14 @@ class Monitor:
         # Print update statement.
         n_steps = params_dict["count"]
         n_parts = bunch.getSizeGlobal()
-        print(
-            "step={}, s={:.3f} [m], node={}, n_parts={}"
-            .format(n_steps, position, node.getName(), n_parts)
-        )
+        if self.start_time is None:
+            self.start_time = time.clock()
+        time_ellapsed = time.clock() - self.start_time
+        if self.verbose:
+            print(
+                "step={}, s={:.3f} [m], node={}, time={:.3f}, n_parts={}"
+                .format(n_steps, position, node.getName(), time_ellapsed, n_parts)
+            )
 
         # Update history.
         self.history["position"].append(position)
