@@ -65,6 +65,13 @@ def get_bunch_coords(bunch):
     return X
 
 
+def get_bunch_coords_global(bunch):
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    return
+
+
 def set_bunch_coords(bunch, X, start_index=0):
     """Assign phase space coordinate array to bunch.
 
@@ -102,15 +109,6 @@ def set_bunch_current(bunch, current=None, freq=None):
     intensity = charge_bunch / charge_particle
     macro_size = intensity / bunch.getSizeGlobal()
     bunch.macroSize(macro_size)
-    return bunch
-
-
-def scale_bunch_macrosize(bunch, factor=1.0, verbose=False):
-    """Scale the macrosize of each bunch particle."""
-    bunch.macroSize(factor * bunch.macroSize())
-    if verbose:
-        print('Scaled bunch macrosize by factor {}.'.format(factor))
-        print('New bunch macrosize = {}.'.format(bunch.macroSize()))
     return bunch
 
 

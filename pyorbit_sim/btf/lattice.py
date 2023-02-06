@@ -17,6 +17,7 @@ from orbit.py_linac.overlapping_fields.overlapping_quad_fields_lib import Simple
 from orbit.py_linac.overlapping_fields.overlapping_quad_fields_lib import PMQ_Trace3D_Function
 from orbit.space_charge.sc3d import setSC3DAccNodes
 from orbit.utils.xml import XmlDataAdaptor
+import orbit_mpi
 from spacecharge import SpaceChargeCalc3D
 
 
