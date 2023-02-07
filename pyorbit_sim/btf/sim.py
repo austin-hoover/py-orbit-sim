@@ -189,7 +189,7 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True
     params_dict['step'] = 0
     
     if _mpi_rank == 0 and verbose:
-        print("Tracking from {} to {}.".format(start, stop))
+        print("Tracking from {} to {}.".format(start['node'].getName(), stop['node'].getName()))
         
     time_start = time.clock()
     lattice.trackBunch(
