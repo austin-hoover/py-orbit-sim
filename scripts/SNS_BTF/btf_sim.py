@@ -13,7 +13,8 @@ from orbit.lattice import AccActionsContainer
 import orbit.utils.consts as consts
 import orbit_mpi
 
-from ..bunch_utils import reverse_bunch
+sys.path.insert(1, os.getcwd())
+from pyorbit_sim.bunch_utils import reverse_bunch
 
 
 class Monitor:
@@ -168,6 +169,7 @@ def _get_node(argument, lattice):
         's0': s0,
         's1': s1,
     }    
+
 
 def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     """Track bunch from start to stop."""

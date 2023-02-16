@@ -1,3 +1,3 @@
-# py-orbit-sim
+# PyORBIT scripts
 
-Tools for PyORBIT simulations.
+This repository tracks PyORBIT scripts for accelerator physics studies.
