@@ -11,7 +11,7 @@ from orbit.py_linac.lattice import LinacAccNodes
 from orbit.utils import consts
 import orbit_mpi
 
-from btf_lattice import BTFLatticeGenerator
+from SNS_BTF import BTFLatticeGenerator
 
 sys.path.append(os.getcwd())
 from pyorbit_sim.linac import Monitor

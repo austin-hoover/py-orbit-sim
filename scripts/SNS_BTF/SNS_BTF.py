@@ -1,4 +1,4 @@
-"""BTF lattice generation."""
+"""SNS-BTF lattice generation."""
 from __future__ import print_function
 import collections
 import os
