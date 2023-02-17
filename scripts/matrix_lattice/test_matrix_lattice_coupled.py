@@ -15,8 +15,8 @@ from orbit.utils.consts import mass_proton
 
 kin_energy = 1.0  # [GeV]
 mass = mass_proton  # [GeV / c^2]
-lattice_filename = '../data/SNS_ring_Evans_2022-12-19.lat'
-lattice_seq = 'rnginjsol'
+lattice_filename = '/home/46h/repo/accelerator-models/SNS/RING/SNS_ring_nux6.18_nuy6.18.lat'
+lattice_seq = 'rnginj'
 
 lattice = TEAPOT_Lattice()
 lattice.readMADX(lattice_filename, lattice_seq)

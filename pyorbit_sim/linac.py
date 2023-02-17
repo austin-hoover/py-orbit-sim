@@ -1,3 +1,4 @@
+"""Helpers for linac simulations."""
 from __future__ import print_function
 import os
 import sys
@@ -13,7 +14,6 @@ from orbit.lattice import AccActionsContainer
 import orbit.utils.consts as consts
 import orbit_mpi
 
-sys.path.insert(1, os.getcwd())
 from pyorbit_sim.bunch_utils import reverse_bunch
 
 
@@ -207,6 +207,7 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True
 
 
 def track_bunch_reverse(bunch, lattice, monitor=None, start=None, stop=None, verbose=0):
+    """Untested"""
     if start is None:
         start = lattice.getLength()     
     if stop is None:

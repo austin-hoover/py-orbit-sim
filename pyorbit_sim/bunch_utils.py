@@ -118,6 +118,60 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
+def center_bunch(bunch):
+    """Shift the bunch so that first-order moments are zero."""
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    bunch_twiss_analysis.analyzeBunch(bunch)
+    centroid = [bunch_twiss_analysis.getAverage(i) for i in range(6)]
+    return shift_bunch(bunch, centroid)
+
+
+def decorrelate_bunch(bunch, verbose=False):
+    if verbose:
+        print('Decorrelating x-xp, y-yp, z-dE...')
+    X = get_bunch_coords(bunch)
+    for i in range(0, X.shape[1], 2):
+        idx = np.random.permutation(np.arange(X.shape[0]))
+        X[:, i : i + 2] = X[idx, i : i + 2]
+    bunch = set_bunch_coords(bunch, X)
+    if verbose:
+        print('Decorrelation complete.')
+    return bunch
+
+
+def downsample_bunch(bunch, samples=1, verbose=False):
+    if verbose:
+        print('Downsampling bunch (samples={})...'.format(samples))
+    X = get_bunch_coords(bunch)
+
+    if 0 < samples < 1:
+        samples = samples * X.shape[0]
+    samples = int(np.clip(samples, 1, X.shape[0]))
+    idx = np.random.choice(X.shape[0], samples, replace=False)
+    X = X[idx, :]
+
+    new_bunch = Bunch()
+    bunch.copyEmptyBunchTo(new_bunch)
+    new_bunch = set_bunch_coords(new_bunch, X)
+    new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
+    new_bunch.copyBunchTo(bunch)
+    if verbose:
+        print('Downsampling complete.')
+    return bunch
+
+
+def reverse_bunch(bunch):
+    """Reverse the bunch propagation direction.
+
+    Since the tail becomes the head of the bunch, the sign of z
+    changes but the sign of dE does not change.
+    """
+    for i in range(bunch.getSize()):
+        bunch.xp(i, -bunch.xp(i))
+        bunch.yp(i, -bunch.yp(i))
+        bunch.z(i, -bunch.z(i))
+
+
 def shift_bunch(bunch, location=None, verbose=False):
     """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = location
@@ -139,26 +193,6 @@ def shift_bunch(bunch, location=None, verbose=False):
         bunch.yp(i, bunch.yp(i) + yp)
         bunch.dE(i, bunch.dE(i) + dE)
     return bunch
-
-
-def center_bunch(bunch):
-    """Shift the bunch so that first-order moments are zero."""
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    bunch_twiss_analysis.analyzeBunch(bunch)
-    centroid = [bunch_twiss_analysis.getAverage(i) for i in range(6)]
-    return shift_bunch(bunch, centroid)
-
-
-def reverse_bunch(bunch):
-    """Reverse the bunch propagation direction.
-
-    Since the tail becomes the head of the bunch, the sign of z
-    changes but the sign of dE does not change.
-    """
-    for i in range(bunch.getSize()):
-        bunch.xp(i, -bunch.xp(i))
-        bunch.yp(i, -bunch.yp(i))
-        bunch.z(i, -bunch.z(i))
 
 
 def load_bunch(
@@ -256,38 +290,4 @@ def gen_bunch_from_twiss(
         )
         if i % size == rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
-    return bunch
-
-
-def decorrelate_bunch(bunch, verbose=False):
-    if verbose:
-        print('Decorrelating x-xp, y-yp, z-dE...')
-    X = get_bunch_coords(bunch)
-    for i in range(0, X.shape[1], 2):
-        idx = np.random.permutation(np.arange(X.shape[0]))
-        X[:, i : i + 2] = X[idx, i : i + 2]
-    bunch = set_bunch_coords(bunch, X)
-    if verbose:
-        print('Decorrelation complete.')
-    return bunch
-
-
-def downsample_bunch(bunch, samples=1, verbose=False):
-    if verbose:
-        print('Downsampling bunch (samples={})...'.format(samples))
-    X = get_bunch_coords(bunch)
-
-    if 0 < samples < 1:
-        samples = samples * X.shape[0]
-    samples = int(np.clip(samples, 1, X.shape[0]))
-    idx = np.random.choice(X.shape[0], samples, replace=False)
-    X = X[idx, :]
-
-    new_bunch = Bunch()
-    bunch.copyEmptyBunchTo(new_bunch)
-    new_bunch = set_bunch_coords(new_bunch, X)
-    new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
-    new_bunch.copyBunchTo(bunch)
-    if verbose:
-        print('Downsampling complete.')
     return bunch
