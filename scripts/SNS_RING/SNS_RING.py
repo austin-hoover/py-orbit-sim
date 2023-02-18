@@ -12,6 +12,7 @@ from orbit.aperture import CircleApertureNode
 from orbit.aperture import EllipseApertureNode
 from orbit.aperture import RectangleApertureNode
 from orbit.aperture import TeapotApertureNode
+from orbit.aperture.ApertureLatticeModifications import addTeapotApertureNode
 from orbit.bumps import bumps
 from orbit.bumps import BumpLatticeModifications
 from orbit.bumps import TDTeapotSimpleBumpNode
@@ -98,7 +99,6 @@ class SNS_RING(TIME_DEP_Lattice):
         self.sync_parts = None
         self.lostbunch = None
         self.params_dict = None
-        self.collimator_node = None
         self.foil_node = None
         self.inj_node = None
         self.rf_nodes = None
@@ -107,6 +107,8 @@ class SNS_RING(TIME_DEP_Lattice):
         self.longitudinal_space_charge_node = None
         self.transverse_space_charge_nodes = None
         self.diagnostics_nodes = dict()
+        self.aperture_nodes = dict()
+        self.collimator_nodes = dict()
 
     def init_bunch(self, mass=0.938, kin_energy=1.0):
         self.bunch = Bunch()
@@ -116,27 +118,6 @@ class SNS_RING(TIME_DEP_Lattice):
         self.lostbunch = Bunch()
         self.lostbunch.addPartAttr("LostParticleAttributes")
         self.params_dict = {"bunch": self.bunch, "lostbunch": self.lostbunch}
-
-    def add_collimator_node(
-        self,
-        angle=0.0,
-        density_fac=1.0,
-        length=0.00001,
-        ma=9,
-        a=0.110,
-        b=0.0,
-        c=0.0,
-        d=0.0,
-        position=0.5,
-        shape=1,
-        name="collimator1",
-    ):
-        """Add black absorber collimator to act as an aperture."""
-        self.collimator_node = TeapotCollimatorNode(
-            length, ma, density_fac, shape, a, b, c, d, angle, position, name
-        )
-        addTeapotCollimatorNode(self, position, self.collimator_node)
-        return self.collimator_node
 
     def add_foil_node(
         self,
@@ -262,63 +243,6 @@ class SNS_RING(TIME_DEP_Lattice):
     #         start_node.addChildNode(self.inj_node, AccNode.ENTRANCE)
               # return self.inj_node
 
-    def add_rf_harmonic_nodes(self, **kws):
-        """Add RF harmonic cavity nodes.
-
-        **kws
-            Dictionary with keys {'RF1', 'RF2'}. Each value is a dictionary with
-            keys {'phase', 'hnum', 'voltage'}.
-        """
-        z_to_phi = 2.0 * math.pi / self.getLength()
-        dE_sync = 0.0
-        length = 0.0
-        kws.setdefault("RF1", dict(phase=0.0, hnum=1.0, voltage=+2.0e-6))
-        kws.setdefault("RF2", dict(phase=0.0, hnum=2.0, voltage=-4.0e-6))  
-
-        self.rf_nodes = dict()
-        self.rf_nodes["RF1a"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1a",
-        )
-        self.rf_nodes["RF1b"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1b",
-        )
-        self.rf_nodes["RF1c"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1c",
-        )
-        self.rf_nodes["RF2"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF2"]["hnum"],
-            kws["RF2"]["voltage"],
-            kws["RF2"]["phase"],
-            length,
-            name="RF2",
-        )
-        
-        RFLatticeModifications.addRFNode(self, 184.273, self.rf_nodes["RF1a"])
-        RFLatticeModifications.addRFNode(self, 186.571, self.rf_nodes["RF1b"])
-        RFLatticeModifications.addRFNode(self, 188.868, self.rf_nodes["RF1c"])
-        RFLatticeModifications.addRFNode(self, 191.165, self.rf_nodes["RF2"])
-        return self.rf_nodes
-
     def add_longitudinal_impedance_node(
         self,
         n_macros_min=1000,
@@ -410,7 +334,7 @@ class SNS_RING(TIME_DEP_Lattice):
         n_boundary_points=128,
         n_free_space_modes=32,
         r_boundary=0.220,
-        kind="slicebyslice"
+        kind="slicebyslice",
     ):
         boundary = Boundary2D(n_boundary_points, n_free_space_modes, "Circle", r_boundary, r_boundary)
         if kind == "2p5d":
@@ -447,15 +371,15 @@ class SNS_RING(TIME_DEP_Lattice):
         self.diagnostics_nodes['tune'] = tune_node
         return tune_node
     
-    def add_moments_diagnostics_node(self, order=4):
+    def add_moments_diagnostics_node(self, order=4, position=0.0):
         moments_node = TeapotMomentsNode("moments", order)
         start_node = self.getNodes()[0]
         start_node.addChildNode(moments_node, AccNode.ENTRANCE)
         self.diagnostics_nodes["moments"] = moments_node
         return moments_node
 
-    def add_apertures_inj(self):
-        """Add apertures and displacements -- injection chicane."""
+    def add_inj_chicane_aperture_displacement_nodes(self):
+        """Add apertures and displacements for injection chicane."""
         xcenter = 0.100
         xb10m = 0.0
         xb11m = 0.09677
@@ -465,9 +389,7 @@ class SNS_RING(TIME_DEP_Lattice):
         ycenter = 0.023
 
         bumpwave = ConstantWaveform(1.0)
-
-        self.aperture_nodes = dict()
-
+        
         xb10i = 0.0
         apb10xi = -xb10i
         apb10yi = ycenter
@@ -565,12 +487,36 @@ class SNS_RING(TIME_DEP_Lattice):
         nodes["dh_a13"].addChildNode(cdb13i, AccNode.ENTRANCE)
         nodes["dh_a13"].addChildNode(cdb13f, AccNode.EXIT)
         nodes["dh_a13"].addChildNode(appb13f, AccNode.EXIT)
-        
-    def add_apertures_ring(self):
-        """Add apertures and collimators -- around the ring.
+                            
+    def add_aperture_node_circle(self, rx=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
+        aperture_node = CircleApertureNode(rx, position, x, y, name)
+        addTeapotApertureNode(self, position, aperture_node)        
+        if name == "aperture_node":
+            name = "{}_{}".format(name, len(self.aperture_nodes))
+        self.aperture_nodes[name] = aperture_node
+        return aperture_node
+    
+    def add_aperture_node_ellipse(self, rx=0.0, ry=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
+        aperture_node = EllipseApertureNode(rx, ry, position, x, y, name)
+        addTeapotApertureNode(self, position, aperture_node)        
+        if name == "aperture_node":
+            name = "{}_{}".format(name, len(self.aperture_nodes))
+        self.aperture_nodes[name] = aperture_node
+        return aperture_node
+    
+    def add_aperture_node_circular(self, rx=0.0, ry=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
+        aperture_node = RectangleApertureNode(rx, ry, position, x, y, name)
+        addTeapotApertureNode(self, position, aperture_node)        
+        if name == "aperture_node":
+            name = "{}_{}".format(name, len(self.aperture_nodes))
+        self.aperture_nodes[name] = aperture_node
+        return aperture_node
+                
+    def add_aperture_nodes(self):
+        """Add apertures throughout the ring.
 
-        This does not work with my lattice. The parent nodes are currently selected by index,
-        but this does not work for .LAT file. The parent nodes should be selected by name.
+        This does not work with the standard MADX output file: The parent nodes are currently 
+        selected by index; they need to be selected by name.
         """
         nodes = self.getNodes()
 
@@ -742,25 +688,9 @@ class SNS_RING(TIME_DEP_Lattice):
         appell31 = EllipseApertureNode(a115p8, b078p7, 226.9270, 0.0, 0.0, name="arcdipole")
         appell32 = EllipseApertureNode(a115p8, b078p7, 230.9270, 0.0, 0.0, name="arcdipole")
 
-        p1 = TeapotCollimatorNode(0.60000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 50.3771)
-        scr1t = TeapotCollimatorNode(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1921)
-        scr1c = TeapotCollimatorNode(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1966)
-        scr2t = TeapotCollimatorNode(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2365)
-        scr2c = TeapotCollimatorNode(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2410)
-        scr3t = TeapotCollimatorNode(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3902)
-        scr3c = TeapotCollimatorNode(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3947)
-        scr4t = TeapotCollimatorNode(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4346)
-        scr4c = TeapotCollimatorNode(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4391)
-        p2sh1 = TeapotCollimatorNode(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 51.6228)
-        p2 = TeapotCollimatorNode(1.80000, 3, 0.65, 2, 0.080, 0.048, 0.0, 0.0, 0.0, 51.9428)
-        p2sh2 = TeapotCollimatorNode(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 53.7428)
-        s1sh1 = TeapotCollimatorNode(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 57.2079)
-        s1 = TeapotCollimatorNode(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 58.2179)
-        s1sh2 = TeapotCollimatorNode(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 59.4079)
-        s2sh1 = TeapotCollimatorNode(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 64.8679)
-        s2 = TeapotCollimatorNode(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779)
-        s2sh2 = TeapotCollimatorNode(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679)
-
+        ## These parent nodes should be defined by name, not index. The indexing throws errors
+        ## in the standard MADX output lattice.
+        
         ap06200 = nodes[173]
         ap06201 = nodes[186]
 
@@ -1073,21 +1003,101 @@ class SNS_RING(TIME_DEP_Lattice):
         apell31.addChildNode(appell31, AccNode.EXIT)
         apell32.addChildNode(appell32, AccNode.EXIT)
 
-        # addTeapotCollimatorNode(self, 50.3771, p1)
-        addTeapotCollimatorNode(self, 51.1921, scr1t)
-        addTeapotCollimatorNode(self, 51.1966, scr1c)
-        addTeapotCollimatorNode(self, 51.2365, scr2t)
-        addTeapotCollimatorNode(self, 51.2410, scr2c)
-        addTeapotCollimatorNode(self, 51.3902, scr3t)
-        addTeapotCollimatorNode(self, 51.3947, scr3c)
-        addTeapotCollimatorNode(self, 51.4346, scr4t)
-        addTeapotCollimatorNode(self, 51.4391, scr4c)
-        # addTeapotCollimatorNode(self, 51.6228, p2sh1)
-        # addTeapotCollimatorNode(self, 51.9428, p2)
-        # addTeapotCollimatorNode(self, 53.7428, p2sh2)
-        # addTeapotCollimatorNode(self, 57.2079, s1sh1)
-        # addTeapotCollimatorNode(self, 58.2179, s1)
-        # addTeapotCollimatorNode(self, 59.4079, s1sh2)
-        # addTeapotCollimatorNode(self, 64.8679, s2sh1)
-        # addTeapotCollimatorNode(self, 65.8779, s2)
-        # addTeapotCollimatorNode(self, 67.0679, s2sh2)
+    def add_collimator_node(
+        self,
+        length=0.00001,
+        ma=9,
+        density_fac=1.0,
+        shape=1,
+        a=0.110,
+        b=0.0,
+        c=0.0,
+        d=0.0,
+        angle=0.0,
+        position=0.5,
+        name="collimator_node",
+    ):            
+        collimator_node = TeapotCollimatorNode(length, ma, density_fac, shape, a, b, c, d, angle, position, name)
+        addTeapotCollimatorNode(self, position, collimator_node)        
+        if name == 'collimator_node':
+            name = "{}_{}".format(name, len(self.collimator_nodes))
+        self.collimator_nodes[name] = collimator_node
+        return collimator_node
+
+    def add_collimator_nodes(self):
+        """Add collimators throughout the ring."""
+        self.add_collimator_node(0.60000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 50.3771, 'p1')
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1921, 'scr1t')
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1966, 'scr1c')
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2365, 'scr2t')
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2410, 'scr2c')
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3902, 'scr3t')
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3947, 'scr3c')
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4346, 'scr4t')
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4391, 'scr4c')
+        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 51.6228, 'p2sh1')
+        self.add_collimator_node(1.80000, 3, 0.65, 2, 0.080, 0.048, 0.0, 0.0, 0.0, 51.9428, 'p2')
+        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 53.7428, 'p2sh2')
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 57.2079, 's1sh1')
+        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 58.2179, 's1')
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 59.4079, 's1sh2')
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 64.8679, 's2sh1')
+        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779, 's2')
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679, 's2sh2')
+        
+    def add_rf_harmonic_nodes(self, **kws):
+        """Add RF harmonic cavity nodes.
+
+        **kws
+            Dictionary with keys {'RF1', 'RF2'}. Each value is a dictionary with
+            keys {'phase', 'hnum', 'voltage'}.
+        """
+        z_to_phi = 2.0 * math.pi / self.getLength()
+        dE_sync = 0.0
+        length = 0.0
+        kws.setdefault("RF1", dict(phase=0.0, hnum=1.0, voltage=+2.0e-6))
+        kws.setdefault("RF2", dict(phase=0.0, hnum=2.0, voltage=-4.0e-6))  
+
+        self.rf_nodes = dict()
+        self.rf_nodes["RF1a"] = RFNode.Harmonic_RFNode(
+            z_to_phi,
+            dE_sync,
+            kws["RF1"]["hnum"],
+            kws["RF1"]["voltage"],
+            kws["RF1"]["phase"],
+            length,
+            name="RF1a",
+        )
+        self.rf_nodes["RF1b"] = RFNode.Harmonic_RFNode(
+            z_to_phi,
+            dE_sync,
+            kws["RF1"]["hnum"],
+            kws["RF1"]["voltage"],
+            kws["RF1"]["phase"],
+            length,
+            name="RF1b",
+        )
+        self.rf_nodes["RF1c"] = RFNode.Harmonic_RFNode(
+            z_to_phi,
+            dE_sync,
+            kws["RF1"]["hnum"],
+            kws["RF1"]["voltage"],
+            kws["RF1"]["phase"],
+            length,
+            name="RF1c",
+        )
+        self.rf_nodes["RF2"] = RFNode.Harmonic_RFNode(
+            z_to_phi,
+            dE_sync,
+            kws["RF2"]["hnum"],
+            kws["RF2"]["voltage"],
+            kws["RF2"]["phase"],
+            length,
+            name="RF2",
+        )
+        
+        RFLatticeModifications.addRFNode(self, 184.273, self.rf_nodes["RF1a"])
+        RFLatticeModifications.addRFNode(self, 186.571, self.rf_nodes["RF1b"])
+        RFLatticeModifications.addRFNode(self, 188.868, self.rf_nodes["RF1c"])
+        RFLatticeModifications.addRFNode(self, 191.165, self.rf_nodes["RF2"])
+        return self.rf_nodes
