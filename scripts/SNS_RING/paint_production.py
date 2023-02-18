@@ -1,9 +1,12 @@
-##############################################################
-#
-# Jeff Holmes 03/15/2021  0.47 MW, 1.3 GeV, Second Target 10 Hz
-#
-##############################################################
+"""Full SNS injection simulation for Second Target Station (STS):
 
+Beam power = 0.47 MW
+Beam energy = 1.3 GeV
+Beam repetition rate = 10 Hz
+
+Author: Jeff Holmes 
+Date: 2021-03-15
+"""
 import math
 import sys
 import time
