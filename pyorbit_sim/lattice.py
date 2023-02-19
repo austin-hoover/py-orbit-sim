@@ -70,8 +70,8 @@ def split_node(node, max_part_length=None):
 
 def set_node_fringe(node=None, setting=False, verbose=False):
     try:
-        node.setUsageFringeFieldIN(False)
-        node.setUsageFringeFieldOUT(False)
+        node.setUsageFringeFieldIN(setting)
+        node.setUsageFringeFieldOUT(setting)
         if verbose:
             print('Set {} fringe {}'.format(node.getName(), setting))
     except:
