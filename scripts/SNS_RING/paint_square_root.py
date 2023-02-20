@@ -12,6 +12,8 @@ matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
+from tqdm import trange
 
 from bunch import Bunch
 from foil import Foil
@@ -81,8 +83,8 @@ from spacecharge import SpaceChargeCalc2p5D
 from spacecharge import SpaceChargeCalcSliceBySlice2D
 
 from SNS_RING import SNS_RING
-from SNS_RING import X_FOIL
-from SNS_RING import Y_FOIL
+from SNS_RING import X_INJ
+from SNS_RING import Y_INJ
 
 sys.path.append(os.getcwd())
 from pyorbit_sim import utils
@@ -159,225 +161,252 @@ nominal_bunch_length_frac=(50.0 / 64.0)
 info = open(get_filename("info.txt"), "w")
 info.write("git_hash: {}\n".format(git_hash))
 info.write("git_url: {}\n".format(git_url))
+info.close()
 
 
-# # Lattice setup and linear analysis
-# # --------------------------------------------------------------------------------------
 
-# # Create time-dependent lattice.
-# ring = SNS_RING()
-# ring.readMADX(
-#     "/home/46h/repo/accelerator-models/SNS/RING/SNS_RING_nux6.18_nuy6.18.lat",
-#     "rnginj",
-# )
-# ring.initialize()
+# Lattice setup and linear analysis
+# --------------------------------------------------------------------------------------
 
-
-# # Linear lattice analysis (uncoupled)
-
-# ## Turn off fringe fields. (This is affecting the MATRIX_Lattice tune calculation
-# ## below. But shouldn't MATRIX_Lattice just extract the linear transfer matrix
-# # from each node? TODO: Figure out what's going on.)
-# ring.set_fringe_fields(False)
-
-# ## Analyze the one-turn transfer matrix.
-# test_bunch = Bunch()
-# test_bunch.mass(mass)
-# test_bunch.getSyncParticle().kinEnergy(kin_energy)
-# matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
-# tmat_params = matrix_lattice.getRingParametersDict()
-# if _mpi_rank == 0:
-#     print("Transfer matrix parameters (uncoupled):")
-#     pprint(tmat_params)
-
-# ## Save parameters throughout the ring.
-# (pos_nu_x, pos_alpha_x, pos_beta_x) = matrix_lattice.getRingTwissDataX()
-# (pos_nu_y, pos_alpha_y, pos_beta_y) = matrix_lattice.getRingTwissDataY()
-# twiss = pd.DataFrame()
-# twiss["s"] = np.array(pos_nu_x)[:, 0]
-# twiss["nu_x"] = np.array(pos_nu_x)[:, 1]
-# twiss["nu_y"] = np.array(pos_nu_y)[:, 1]
-# twiss["alpha_x"] = np.array(pos_alpha_x)[:, 1]
-# twiss["alpha_y"] = np.array(pos_alpha_y)[:, 1]
-# twiss["beta_x"] = np.array(pos_beta_x)[:, 1]
-# twiss["beta_y"] = np.array(pos_beta_y)[:, 1]
-# if _mpi_rank == 0:
-#     twiss.to_csv(get_filename("lattice_twiss.dat"), sep=" ")
-
-# (pos_disp_x, pos_disp_p_x) = matrix_lattice.getRingDispersionDataX()
-# (pos_disp_y, pos_disp_p_y) = matrix_lattice.getRingDispersionDataY()
-# dispersion = pd.DataFrame()
-# dispersion["s"] = np.array(pos_disp_x)[:, 0]
-# dispersion["disp_x"] = np.array(pos_disp_x)[:, 1]
-# dispersion["disp_y"] = np.array(pos_disp_y)[:, 1]
-# dispersion["disp_p_x"] = np.array(pos_disp_p_x)[:, 1]
-# dispersion["disp_p_y"] = np.array(pos_disp_p_y)[:, 1]
-# if _mpi_rank == 0:
-#     dispersion.to_csv(get_filename("lattice_dispersion.dat"), sep=" ")
+# Create time-dependent lattice.
+ring = SNS_RING()
+ring.readMADX(
+    "/home/46h/repo/accelerator-models/SNS/RING/SNS_RING_nux6.18_nuy6.18.lat",
+    "rnginj",
+)
+ring.initialize()
 
 
-# # Linear lattice analysis (coupled)
+# Linear lattice analysis (uncoupled)
+
+## Turn off fringe fields. (This is affecting the MATRIX_Lattice tune calculation
+## below. But shouldn't MATRIX_Lattice just extract the linear transfer matrix
+# from each node? TODO: Figure out what's going on.)
+ring.set_fringe_fields(False)
+
+## Analyze the one-turn transfer matrix.
+test_bunch = Bunch()
+test_bunch.mass(mass)
+test_bunch.getSyncParticle().kinEnergy(kin_energy)
+matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
+tmat_params = matrix_lattice.getRingParametersDict()
+if _mpi_rank == 0:
+    print("Transfer matrix parameters (uncoupled):")
+    pprint(tmat_params)
+
+## Save parameters throughout the ring.
+(pos_nu_x, pos_alpha_x, pos_beta_x) = matrix_lattice.getRingTwissDataX()
+(pos_nu_y, pos_alpha_y, pos_beta_y) = matrix_lattice.getRingTwissDataY()
+twiss = pd.DataFrame()
+twiss["s"] = np.array(pos_nu_x)[:, 0]
+twiss["nu_x"] = np.array(pos_nu_x)[:, 1]
+twiss["nu_y"] = np.array(pos_nu_y)[:, 1]
+twiss["alpha_x"] = np.array(pos_alpha_x)[:, 1]
+twiss["alpha_y"] = np.array(pos_alpha_y)[:, 1]
+twiss["beta_x"] = np.array(pos_beta_x)[:, 1]
+twiss["beta_y"] = np.array(pos_beta_y)[:, 1]
+if _mpi_rank == 0:
+    twiss.to_csv(get_filename("lattice_twiss.dat"), sep=" ")
+
+(pos_disp_x, pos_disp_p_x) = matrix_lattice.getRingDispersionDataX()
+(pos_disp_y, pos_disp_p_y) = matrix_lattice.getRingDispersionDataY()
+dispersion = pd.DataFrame()
+dispersion["s"] = np.array(pos_disp_x)[:, 0]
+dispersion["disp_x"] = np.array(pos_disp_x)[:, 1]
+dispersion["disp_y"] = np.array(pos_disp_y)[:, 1]
+dispersion["disp_p_x"] = np.array(pos_disp_p_x)[:, 1]
+dispersion["disp_p_y"] = np.array(pos_disp_p_y)[:, 1]
+if _mpi_rank == 0:
+    dispersion.to_csv(get_filename("lattice_dispersion.dat"), sep=" ")
+
+
+# Linear lattice analysis (coupled)
             
-# ## Analyze the one-turn transfer matrix.
-# matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterization="LB")
-# tmat_params = matrix_lattice.getRingParametersDict()
-# if _mpi_rank == 0:
-#     print("Transfer matrix parameters (coupled):")
-#     pprint(tmat_params)
+## Analyze the one-turn transfer matrix.
+matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterization="LB")
+tmat_params = matrix_lattice.getRingParametersDict()
+if _mpi_rank == 0:
+    print("Transfer matrix parameters (coupled):")
+    pprint(tmat_params)
             
-# ## Compute Twiss parameters throughout the ring.
-# ## [...]
+## Compute Twiss parameters throughout the ring.
+## [...]
 
-# ## Turn off fringe fields. (See previous comment.)
-# ring.set_fringe_fields(True)
+## Turn off fringe fields. (See previous comment.)
+ring.set_fringe_fields(True)
 
 
-# # Bunch setup
-# # --------------------------------------------------------------------------------------
+# Bunch setup
+# --------------------------------------------------------------------------------------
 
-# # Initialize the bunch.
-# bunch = Bunch()
-# bunch.mass(mass)
-# sync_part = bunch.getSyncParticle()
-# sync_part.kinEnergy(kin_energy)
-# lostbunch = Bunch()
-# lostbunch.addPartAttr("LostParticleAttributes")
-# params_dict = {"bunch": bunch, "lostbunch": lostbunch}
-# ring.set_bunch(bunch, lostbunch, params_dict)
+# Initialize the bunch.
+bunch = Bunch()
+bunch.mass(mass)
+sync_part = bunch.getSyncParticle()
+sync_part.kinEnergy(kin_energy)
+lostbunch = Bunch()
+lostbunch.addPartAttr("LostParticleAttributes")
+params_dict = {"bunch": bunch, "lostbunch": lostbunch}
+ring.set_bunch(bunch, lostbunch, params_dict)
 
-# # Compute the macroparticle size from the minipulse width, intensity, and number
-# # of macroparticles.
-# nominal_minipulse_intensity = nominal_intensity / nominal_n_inj_turns
-# nominal_bunch_length_frac = 50.0 / 64.0
-# bunch_length_factor = bunch_length_frac / nominal_bunch_length_frac
-# minipulse_intensity = nominal_minipulse_intensity * bunch_length_factor
-# intensity = minipulse_intensity * n_inj_turns
-# macro_size = intensity / n_inj_turns / n_macros_per_turn
-# bunch.macroSize(macro_size)
+# Compute the macroparticle size from the minipulse width, intensity, and number
+# of macroparticles.
+nominal_minipulse_intensity = nominal_intensity / nominal_n_inj_turns
+nominal_bunch_length_frac = 50.0 / 64.0
+bunch_length_factor = bunch_length_frac / nominal_bunch_length_frac
+minipulse_intensity = nominal_minipulse_intensity * bunch_length_factor
+intensity = minipulse_intensity * n_inj_turns
+macro_size = intensity / n_inj_turns / n_macros_per_turn
+bunch.macroSize(macro_size)
 
             
-# # Injection kicker optimization
-# # --------------------------------------------------------------------------------------
+# Injection kicker optimization
+# --------------------------------------------------------------------------------------
 
-# # Fringe fields complicate things. Turn them off for now.
-# ring.set_fringe_fields(False)
+# Define center of injected distribution.
+x_inj = X_INJ
+y_inj = Y_INJ
 
-# # Initial coordinates of closed orbit at injection point [x, x', y, y'].
-# inj_coords_t0 = np.zeros(4)
-# inj_coords_t0[0] = ring.x_foil
-# inj_coords_t0[1] = 0.0
-# inj_coords_t0[2] = ring.y_foil
-# inj_coords_t0[3] = 0.0
+# Fringe fields complicate things. Turn them off for now.
+ring.set_fringe_fields(False)
 
-# # Final coordinates of closed orbit at injection point  [x, x', y, y'].
-# inj_coords_t1 = np.zeros(4)
-# inj_coords_t1[0] = ring.x_foil - 0.035
-# inj_coords_t1[1] = 0.0
-# inj_coords_t1[2] = ring.y_foil
-# inj_coords_t1[3] = -0.0015
+# Initial coordinates of closed orbit at injection point [x, x', y, y'].
+inj_coords_t0 = np.zeros(4)
+inj_coords_t0[0] = x_inj
+inj_coords_t0[1] = 0.0
+inj_coords_t0[2] = y_inj
+inj_coords_t0[3] = 0.0
 
-
-# def plot_traj(trajectory, figname="fig.png"):
-#     fig, ax = plt.subplots()
-#     ax.plot(trajectory["s"], 1000.0 * trajectory["x"], marker=".")
-#     ax.plot(trajectory["s"], 1000.0 * trajectory["y"], marker=".")
-#     ax.set_ylim(-1.0, 65.0)
-#     fig.savefig(os.path.join(os.path.dirname(os.path.realpath(__file__)), figname))
+# Final coordinates of closed orbit at injection point  [x, x', y, y'].
+inj_coords_t1 = np.zeros(4)
+inj_coords_t1[0] = x_inj- 0.035
+inj_coords_t1[1] = 0.0
+inj_coords_t1[2] = y_inj
+inj_coords_t1[3] = -0.0015
 
 
-# inj_controller = ring.get_injection_controller(
-#     mass=mass, 
-#     kin_energy=kin_energy, 
-#     inj_mid="injm1", 
-#     inj_start="bpm_a09", 
-#     inj_end="bpm_b01",
-# )
+def plot_traj(trajectory, figname="fig.png"):
+    fig, ax = plt.subplots()
+    ax.plot(trajectory["s"], 1000.0 * trajectory["x"], marker=".")
+    ax.plot(trajectory["s"], 1000.0 * trajectory["y"], marker=".")
+    ax.set_ylim(-1.0, 65.0)
+    fig.savefig(os.path.join(os.path.dirname(os.path.realpath(__file__)), figname))
 
-# if _mpi_rank == 0:
-#     # (This is just stalling when I run with more than one MPI node; not sure why.)
+
+inj_controller = ring.get_injection_controller(
+    mass=mass, 
+    kin_energy=kin_energy, 
+    inj_mid="injm1", 
+    inj_start="bpm_a09", 
+    inj_end="bpm_b01",
+)
+
+if _mpi_rank == 0:
+    ## (This is just stalling when I run with more than one MPI node; not sure why.)
     
-#     # Remove kicker limits.
-#     inj_controller.scale_kicker_limits(100.0)
+    ## Remove kicker limits.
+    inj_controller.scale_kicker_limits(100.0)
 
-#     # Bias the vertical orbit using vkickers.
-#     inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
-#     inj_controller.print_inj_coords()
-#     plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_bias.png"))
+    ## Bias the vertical orbit using vkickers.
+    # inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
+    inj_controller.print_inj_coords()
+    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_bias.png"))
 
-#     # Set the initial phase space coordinates at the injection point.
-#     solver_kws = dict(max_nfev=2500, verbose=2, ftol=1.0e-12, xtol=1.0e-12)
-#     kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
-#     inj_controller.print_inj_coords()
-#     figname
-#     plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t0.png"))
+    ## Set the initial phase space coordinates at the injection point.
+    solver_kws = dict(max_nfev=2500, verbose=2, ftol=1.0e-12, xtol=1.0e-12)
+    kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
+    inj_controller.print_inj_coords()
+    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t0.png"))
 
-#     # Set the final phase space coordinates at the injection point.
-#     kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
-#     inj_controller.print_inj_coords()
-#     plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t1.png"))
+    ## Set the final phase space coordinates at the injection point.
+    kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
+    inj_controller.print_inj_coords()
+    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t1.png"))
 
-#     # Convert to list for MPI_Bcast
-#     kicker_angles_t0 = kicker_angles_t0.tolist()
-#     kicker_angles_t1 = kicker_angles_t1.tolist()
+    ## Convert to list for MPI_Bcast
+    kicker_angles_t0 = kicker_angles_t0.tolist()
+    kicker_angles_t1 = kicker_angles_t1.tolist()
 
-# # Get the kicker angles from rank 0.
-# kicker_angles_t0 = orbit_mpi.MPI_Bcast(kicker_angles_t0, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
-# kicker_angles_t1 = orbit_mpi.MPI_Bcast(kicker_angles_t1, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
-# kicker_angles_t0 = np.array(kicker_angles_t0)
-# kicker_angles_t1 = np.array(kicker_angles_t1)
+# Get the kicker angles from rank 0.
+kicker_angles_t0 = orbit_mpi.MPI_Bcast(kicker_angles_t0, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
+kicker_angles_t1 = orbit_mpi.MPI_Bcast(kicker_angles_t1, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
+kicker_angles_t0 = np.array(kicker_angles_t0)
+kicker_angles_t1 = np.array(kicker_angles_t1)
 
-# # Initialize the kickers.
-# inj_controller.set_kicker_angles(kicker_angles_t0)
+# Initialize the kickers.
+inj_controller.set_kicker_angles(kicker_angles_t0)
 
-# # Assign sqrt(t) kicker waveforms.
-# ring.setLatticeOrder()
-# t0 = 0.0
-# t1 = n_inj_turns * seconds_per_turn
-# amps_t0 = np.ones(8)
-# amps_t1 = np.abs(kicker_angles_t1 / kicker_angles_t0)
-# for node, a0, a1 in zip(inj_controller.kicker_nodes, amps_t0, amps_t1):
-#     waveform = SquareRootWaveform(t0=t0, t1=t1, a0=a0, a1=a1, sync_part=sync_part)
-#     ring.setTimeDepNode(node.getParam("TPName"), waveform)
+# Assign sqrt(t) kicker waveforms.
+seconds_per_turn = ring.getLength() / (sync_part.beta() * consts.speed_of_light)
+t0 = 0.0
+t1 = n_inj_turns * seconds_per_turn
+strengths_t0 = np.ones(8)
+strengths_t1 = np.abs(kicker_angles_t1 / kicker_angles_t0)
+ring.setLatticeOrder()
+for node, s0, s1 in zip(inj_controller.kicker_nodes, strengths_t0, strengths_t1):
+    waveform = SquareRootWaveform(t0=t0, t1=t1, s0=s0, s1=s1, sync_part=sync_part)
+    ring.setTimeDepNode(node.getParam("TPName"), waveform)
 
     
-# # Injection
-# # --------------------------------------------------------------------------------------
+ring.set_fringe_fields(False)
 
-# # ring.add_inj_node()
+    
+# Injection
+# --------------------------------------------------------------------------------------
 
-# ring.add_foil_node(
-#     xmin=-0.0085,
-#     xmax=+0.0085,
-#     ymin=-0.0080,
-#     ymax=+0.1000,
-#     thickness=390.0,
-#     scatter="full",
-# )
+xmin = x_inj - 0.0085
+xmax = x_inj + 0.0085
+ymin = y_inj - 0.0080
+ymax = y_inj + 0.1000
+
+ring.add_inj_node(
+    n_parts=n_macros_per_turn,
+    n_parts_max=n_macros_total,
+    xmin=xmin,
+    xmax=xmax,
+    ymin=ymin,
+    ymax=ymax,
+    dist_x_kind="joho",
+    dist_y_kind="joho",
+    dist_z_kind="snsespread",
+    dist_x_kws=None,
+    dist_y_kws=None,
+    dist_z_kws=None,
+)
+
+ring.add_foil_node(
+    xmin=xmin,
+    xmax=xmax,
+    ymin=ymin,
+    ymax=ymax,
+    thickness=390.0,
+    scatter="full",
+)
 
 
-# # Apertures, collimators, and displacements
-# # --------------------------------------------------------------------------------------
+# Apertures, collimators, and displacements
+# --------------------------------------------------------------------------------------
 
-# ring.add_inj_chicane_aperture_displacement_nodes()
-# ring.add_collimator_nodes()
+ring.add_inj_chicane_aperture_displacement_nodes()
+ring.add_collimator_nodes()
 
-# ## Aperture nodes need to be added as child nodes, but Jeff's benchmarks script selects
-# ## the parent nodes by index; does not work with standard MADX output lattice.
+## Aperture nodes need to be added as child nodes, but Jeff's benchmarks script selects
+## the parent nodes by index; does not work with standard MADX output lattice.
 
-# # ring.add_aperture_nodes()
-
-
-# # RF cavities
-# # --------------------------------------------------------------------------------------
-
-# ring.add_rf_harmonic_nodes(
-#     RF1=dict(phase=0.0, hnum=1.0, voltage=+2.0e-6),
-#     RF2=dict(phase=0.0, hnum=2.0, voltage=-4.0e-6),
-# )
+# ring.add_aperture_nodes()
 
 
-# # Impedance
-# # --------------------------------------------------------------------------------------
+# RF cavities
+# --------------------------------------------------------------------------------------
+
+ring.add_rf_harmonic_nodes(
+    RF1=dict(phase=0.0, hnum=1.0, voltage=+2.0e-6),
+    RF2=dict(phase=0.0, hnum=2.0, voltage=-4.0e-6),
+)
+
+
+# Impedance
+# --------------------------------------------------------------------------------------
 
 # ring.add_longitudinal_impedance_node(
 #     n_macros_min=1000,
@@ -402,8 +431,8 @@ info.write("git_url: {}\n".format(git_url))
 # )
 
 
-# # Space charge
-# # --------------------------------------------------------------------------------------
+# Space charge
+# --------------------------------------------------------------------------------------
 
 # ring.add_longitudinal_space_charge_node(
 #     b_a=(10.0 / 3.0),
@@ -426,40 +455,39 @@ info.write("git_url: {}\n".format(git_url))
 # )
 
 
-# # Diagnostics
-# # --------------------------------------------------------------------------------------
+# Diagnostics
+# --------------------------------------------------------------------------------------
 
-# # ring.add_tune_diagnostics_node(
-# #     position=51.1921,
-# #     beta_x=9.19025,
-# #     alpha_x=-1.78574,
-# #     eta_x=-0.000143012,
-# #     etap_x=-2.26233e-05,
-# #     beta_y=8.66549,
-# #     alpha_y=0.538244,
-# # )
+# ring.add_tune_diagnostics_node(
+#     position=51.1921,
+#     beta_x=9.19025,
+#     alpha_x=-1.78574,
+#     eta_x=-0.000143012,
+#     etap_x=-2.26233e-05,
+#     beta_y=8.66549,
+#     alpha_y=0.538244,
+# )
 
-# # ring.add_moments_diagnostics_node(order=4, position=0.0)
-
-
-
-# # Tracking
-# # --------------------------------------------------------------------------------------
-
-# def should_dump_bunch(turn):
-#     if turn % 100 == 0:
-#         return True
-#     if turn == n_inj_turns + n_stored_turns - 1:
-#         return True
-#     return False
+# ring.add_moments_diagnostics_node(order=4, position=0.0)
 
 
-# if _mpi_rank == 0:
-#     print("Tracking.")
-# for turn in trange(n_inj_turns + n_stored_turns):
-#     ring.trackBunch(bunch, params_dict)
-#     if should_dump_bunch(turn):
-#         bunch.dumpBunch("_output/data/bunch_turn{}.dat".format(turn))
+
+# Tracking
+# --------------------------------------------------------------------------------------
+
+def should_dump_bunch(turn):
+    if turn % 100 == 0:
+        return True
+    if turn == n_inj_turns + n_stored_turns - 1:
+        return True
+    return False
 
 
-info.close()
+if _mpi_rank == 0:
+    print("Tracking.")
+for turn in trange(n_inj_turns + n_stored_turns):
+    ring.trackBunch(bunch, params_dict)
+    if should_dump_bunch(turn):
+        filename = get_filename("bunch_turn{}.dat".format(turn))
+        bunch.dumpBunch(filename)
+        print(bunch.getSizeGlobal())

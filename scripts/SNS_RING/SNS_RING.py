@@ -80,14 +80,16 @@ from pyorbit_sim.misc import get_pc
 
 
 # Global variables
-X_FOIL = 0.0486  # x foil position [m]
-Y_FOIL = 0.0460  # y foil position [m]
 
-# Maximum injection kicker angles at 1.0 GeV [mrad]
+## Injection coordinates
+X_INJ = 0.0486  # [m]
+Y_INJ = 0.0460  # [m]
+
+## Maximum injection kicker angles at 1.0 GeV [mrad]
 MIN_KICKER_ANGLES = 1.15 * np.array([0.0, 0.0, -7.13, -7.13, -7.13, -7.13, 0.0, 0.0])
 MAX_KICKER_ANGLES = 1.15 * np.array([12.84, 12.84, 0.0, 0.0, 0.0, 0.0, 12.84, 12.84])
 
-# Maximum injection-region dipole corrector angle [mrad]
+## Maximum injection-region dipole corrector angle [mrad]
 MAX_VCORRECTOR_ANGLE = 1.5
 
 
@@ -104,8 +106,6 @@ class SNS_RING(TIME_DEP_Lattice):
 
     def __init__(self):
         TIME_DEP_Lattice.__init__(self)
-        self.x_foil = X_FOIL
-        self.y_foil = Y_FOIL
         self.bunch = None
         self.sync_part = None
         self.lostbunch = None
@@ -145,125 +145,144 @@ class SNS_RING(TIME_DEP_Lattice):
 
     def add_foil_node(
         self,
-        xmin=-0.0085,  # relative to x_foil
-        xmax=+0.0085,  # relative to x_foil
-        ymin=-0.0080,  # relative to y_foil
-        ymax=+0.1000,  # relative to y_foil
+        xmin=(X_INJ - 0.0085),
+        xmax=(X_INJ + 0.0085),
+        ymin=(Y_INJ - 0.0080),
+        ymax=(Y_INJ + 0.1000),
         thickness=390.0,
-        scatter="full",  # {'full', 'simple'}
+        scatter="full",  # {"full", "simple"}
     ):
-        xmin += self.x_foil
-        xmax += self.x_foil
-        ymin += self.y_foil
-        ymax += self.y_foil
         scatter = {"full": 0, "simple": 1}[scatter]
         self.foil_node = TeapotFoilNode(xmin, xmax, ymin, ymax, thickness)
         self.foil_node.setScatterChoice(scatter)
         self.getNodes()[0].addChildNode(self.foil_node, AccNode.ENTRANCE)
         return self.foil_node
-
+    
     def add_inj_node(
         self,
         n_parts=1,
-        n_parts_max=None,
-        xmin=None,
-        xmax=None,
-        ymin=None,
-        ymax=None,
+        n_parts_max=-1,
+        xmin=(X_INJ - 0.0085),
+        xmax=(X_INJ + 0.0085),
+        ymin=(Y_INJ - 0.0080),
+        ymax=(Y_INJ + 0.1000),
+        dist_x_kind="joho",
+        dist_y_kind="joho",
+        dist_z_kind="snsespread",
         dist_x_kws=None,
         dist_y_kws=None,
         dist_z_kws=None,
-        **kws
     ):
-        return
-    #         if n_parts_max is None:
-    #             n_parts_max = -1
-    #         if xmin is None:
-    #             xmin = -np.inf
-    #         if xmax is None:
-    #             xmax = +np.inf
-    #         if ymin is None:
-    #             ymin = -np.inf
-    #         if ymax is None:
-    #             ymax = +np.inf
-    #         dist_x_kws_default = {
-    #             'centerpos': self.x_foil,
-    #             'centermom': 0.0,
-    #             'alpha': -0.924,
-    #             'beta': 3.71,
-    #             'order': 9.0,
-    #             'eps_rms': 0.467e-6,
-    #         }
-    #         dist_y_kws_default = {
-    #             'centerpos': Y_FOIL,
-    #             'centermom': 0.0,
-    #             'alpha': -0.5,
-    #             'beta': 4.86,
-    #             'order': 9.0,
-    #             'eps_rms': 0.300e-6,
-    #         }
-    #         dist_z_kws_default = {
-    #             'lattlength': self.getLength(),
-    #             'zmin': -self.nominal_bunch_length_frac * self.getLength(),
-    #             'zmax': +self.nominal_bunch_length_frac * self.getLength(),
-    #             'tailfraction': 0.0,
-    #             'sp': self.sync_part,
-    #             'emean': self.sync_part.kinEnergy(),
-    #             'esigma': 0.0005,
-    #             'etrunc': 1.0,
-    #             'emin': self.sync_part.kinEnergy() - 0.0025,
-    #             'emax': self.sync_part.kinEnergy() + 0.0025,
-    #             'ecparams': {
-    #                 'mean': 0.0,
-    #                 'sigma': 0.000000001,
-    #                 'trunc': 1.0,
-    #                 'min': -0.0035,
-    #                 'max': +0.0035,
-    #                 'drifti': 0.0,
-    #                 'driftf': 0.0,
-    #                 'drifttime': 1000.0 * self.nominal_n_inj_turns * (self.getLength() / (self.sync_part.beta() * speed_of_light)),
-    #             },
-    #             'esparams': {
-    #                 'nu': 100.0,
-    #                 'phase': 0.0,
-    #                 'max': 0.0,
-    #                 'nulltime': 0.0,
-    #             },
-    #         }
-    #         if dist_x_kws is None:
-    #             dist_x_kws = dict()
-    #         if dist_y_kws is None:
-    #             dist_y_kws = dict()
-    #         if dist_z_kws is None:
-    #             dist_z_kws = dict()
-    #         for key, value in dist_x_kws_default.items():
-    #             dist_x_kws.setdefault(key, value)
-    #         for key, value in dist_y_kws_default.items():
-    #             dist_y_kws.setdefault(key, value)
-    #         for key, value in dist_z_kws_default.items():
-    #             dist_z_kws.setdefault(key, value)
+        if xmin is None:
+            xmin = -np.inf
+        if xmax is None:
+            xmax = +np.inf
+        if ymin is None:
+            ymin = -np.inf
+        if ymax is None:
+            ymax = +np.inf
+            
+        if dist_x_kws is None:
+            dist_x_kws = dict()
+        if dist_y_kws is None:
+            dist_y_kws = dict()
+        if dist_z_kws is None:
+            dist_z_kws = dict()
+        
+        if dist_x_kind == "joho":
+            dist_x_kws_default = {
+                "centerpos": 0.0,
+                "centermom": 0.0,
+                "alpha": -0.924,
+                "beta": 3.71,
+                "order": 9.0,
+                "eps_rms": 0.467e-6,
+            }
+            dist_x_constructor = JohoTransverse
+        else:
+            raise ValueError("Invalid dist_x")
 
-    #         dist_x_kws['emitlim'] * dist_x_kws['eps_rms'] * 2.0 * (dist_x_kws['order'] + 1.0)
-    #         dist_y_kws['emitlim'] * dist_y_kws['eps_rms'] * 2.0 * (dist_y_kws['order'] + 1.0)
+        if dist_y_kind == "joho":
+            dist_y_kws_default = {
+                "centerpos": 0.0,
+                "centermom": 0.0,
+                "alpha": -0.5,
+                "beta": 4.86,
+                "order": 9.0,
+                "eps_rms": 0.300e-6,
+            }
+            dist_y_constructor = JohoTransverse
+        else:
+            raise ValueError("Invalid dist_y")
+            
+        if dist_z_kind == "snsespread":
+            nominal_n_inj_turns = 1000
+            nominal_bunch_length_frac = 50.0 / 64.0
+            dist_z_kws_default = {
+                "lattlength": self.getLength(),
+                "zmin": -nominal_bunch_length_frac * self.getLength(),
+                "zmax": +nominal_bunch_length_frac * self.getLength(),
+                "tailfraction": 0.0,
+                "sync_part": self.sync_part,
+                "emean": self.sync_part.kinEnergy(),
+                "esigma": 0.0005,
+                "etrunc": 1.0,
+                "emin": self.sync_part.kinEnergy() - 0.0025,
+                "emax": self.sync_part.kinEnergy() + 0.0025,
+                "ecparams": {
+                    "mean": 0.0,
+                    "sigma": 0.000000001,
+                    "trunc": 1.0,
+                    "min": -0.0035,
+                    "max": +0.0035,
+                    "drifti": 0.0,
+                    "driftf": 0.0,
+                    "drifttime": 1000.0 * nominal_n_inj_turns * (self.getLength() / (self.sync_part.beta() * speed_of_light)),
+                },
+                "esparams": {
+                    "nu": 100.0,
+                    "phase": 0.0,
+                    "max": 0.0,
+                    "nulltime": 0.0,
+                },
+            }
+            dist_z_constructor = SNSESpreadDist
+        elif dist_z_kind == "joho":
+            dist_z_constructor = JohoLongitudinal
+        elif dist_z_kind == "uniform":
+            dist_z_constructor = UniformLongDist
+        else:
+            raise ValueError("Invalid dist_z")
+                        
+        for key, value in dist_x_kws_default.items():
+            dist_x_kws.setdefault(key, value)
+        for key, value in dist_y_kws_default.items():
+            dist_y_kws.setdefault(key, value)
+        for key, value in dist_z_kws_default.items():
+            dist_z_kws.setdefault(key, value)
 
-    #         dist_x = JohoTransverse(**dist_x_kws)
-    #         dist_y = JohoTransverse(**dist_y_kws)
-    #         dist_z = SNSESpreadDist(**dist_z_kws)
+        dist_x_kws["emitlim"] = dist_x_kws.pop("eps_rms") * 2.0 * (dist_x_kws["order"] + 1.0)
+        dist_y_kws["emitlim"] = dist_y_kws.pop("eps_rms") * 2.0 * (dist_y_kws["order"] + 1.0)
+        dist_x_kws
 
-    #         self.inj_node = TeapotInjectionNode(
-    #             nparts=n_parts,
-    #             bunch=self.bunch,
-    #             lostbunch=self.lostbunch,
-    #             injectregion=[xmin, xmax, ymin, ymax],
-    #             xDistFunc=dist_x,
-    #             yDistFunc=dist_y,
-    #             lDistFun=dist_z,
-    #             nmaxmacroparticles=n_parts_max,
-    #             **kws
-    #         )
-    #         start_node = self.getNodes()[0]
-    #         start_node.addChildNode(self.inj_node, AccNode.ENTRANCE)
-              # return self.inj_node
+        dist_x = dist_x_constructor(**dist_x_kws)
+        dist_y = dist_y_constructor(**dist_y_kws)
+        dist_z = dist_z_constructor(**dist_z_kws)
+
+        self.inj_node = TeapotInjectionNode(
+            nparts=n_parts,
+            bunch=self.bunch,
+            lostbunch=self.lostbunch,
+            injectregion=[xmin, xmax, ymin, ymax],
+            xDistFunc=dist_x,
+            yDistFunc=dist_y,
+            lDistFun=dist_z,
+            nmaxmacroparticles=n_parts_max,
+        )
+        start_node = self.getNodes()[0]
+        start_node.addChildNode(self.inj_node, AccNode.ENTRANCE)
+        return self.inj_node
+
 
     def add_longitudinal_impedance_node(
         self,
@@ -280,7 +299,7 @@ class SNS_RING(TIME_DEP_Lattice):
             file = open(filename, "r")
             ZL[key] = []
             for line in file:
-                if line.startswith('#'):
+                if line.startswith("#"):
                     continue
                 real, imag = map(float, line.split(" "))
                 ZL[key].append(complex(real, imag))
@@ -314,7 +333,7 @@ class SNS_RING(TIME_DEP_Lattice):
         filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/HahnImpedance.dat")
         file = open(filename, "r")
         for line in file:
-            if line.startswith('#'):
+            if line.startswith("#"):
                 continue
             m, ZPR, ZPI, ZMR, ZMI = map(float, line.split())
             ZP.append(complex(ZPR, -ZPI))
@@ -389,7 +408,7 @@ class SNS_RING(TIME_DEP_Lattice):
         tune_node = TeapotTuneAnalysisNode("tune_analysis")
         tune_node.assignTwiss(beta_x, alpha_x, eta_x, etap_x, beta_y, alpha_y)
         addTeapotDiagnosticsNode(self, position, tune_node)
-        self.diagnostics_nodes['tune'] = tune_node
+        self.diagnostics_nodes["tune"] = tune_node
         return tune_node
     
     def add_moments_diagnostics_node(self, order=4, position=0.0):
@@ -487,19 +506,19 @@ class SNS_RING(TIME_DEP_Lattice):
         cdb13i = TDTeapotSimpleBumpNode(self.bunch, +mag13x, 0.0, -ycenter, 0.0, bumpwave, "mag13bumpi")
         cdb13f = TDTeapotSimpleBumpNode(self.bunch, -mag13x, 0.0, +ycenter, 0.0, bumpwave, "mag13bumpf")
 
-        node_names = ["dh_a10", "dh_a11a", "dh_a12", "dh_a13"]
+        node_names = ["dh_a10", "dh_a11", "dh_a12", "dh_a13"]
         nodes = {name: self.getNodeForName(name) for name in node_names}
         nodes["dh_a10"].addChildNode(appb10i, AccNode.ENTRANCE)
         nodes["dh_a10"].addChildNode(cdb10i, AccNode.ENTRANCE)
         nodes["dh_a10"].addChildNode(cdb10f, AccNode.EXIT)
         nodes["dh_a10"].addChildNode(appb10f, AccNode.EXIT)
-        nodes["dh_a11a"].addChildNode(appb11i, AccNode.ENTRANCE)
-        nodes["dh_a11a"].addChildNode(cdb11i, AccNode.ENTRANCE)
-        nodes["dh_a11a"].addChildNode(cdfoila, AccNode.EXIT)
-        nodes["dh_a11a"].addChildNode(appfoil, AccNode.EXIT)
-        nodes["dh_a11a"].addChildNode(cdfoilb, AccNode.ENTRANCE)
-        nodes["dh_a11a"].addChildNode(cdb11f, AccNode.EXIT)
-        nodes["dh_a11a"].addChildNode(appb11f, AccNode.EXIT)
+        nodes["dh_a11"].addChildNode(appb11i, AccNode.ENTRANCE)
+        nodes["dh_a11"].addChildNode(cdb11i, AccNode.ENTRANCE)
+        nodes["dh_a11"].addChildNode(cdfoila, AccNode.EXIT)
+        nodes["dh_a11"].addChildNode(appfoil, AccNode.EXIT)
+        nodes["dh_a11"].addChildNode(cdfoilb, AccNode.ENTRANCE)
+        nodes["dh_a11"].addChildNode(cdb11f, AccNode.EXIT)
+        nodes["dh_a11"].addChildNode(appb11f, AccNode.EXIT)
         nodes["dh_a12"].addChildNode(appb12i, AccNode.ENTRANCE)
         nodes["dh_a12"].addChildNode(cdb12i, AccNode.ENTRANCE)
         nodes["dh_a12"].addChildNode(cdb12f, AccNode.EXIT)
@@ -1040,30 +1059,30 @@ class SNS_RING(TIME_DEP_Lattice):
     ):            
         collimator_node = TeapotCollimatorNode(length, ma, density_fac, shape, a, b, c, d, angle, position, name)
         addTeapotCollimatorNode(self, position, collimator_node)        
-        if name == 'collimator_node':
+        if name == "collimator_node":
             name = "{}_{}".format(name, len(self.collimator_nodes))
         self.collimator_nodes[name] = collimator_node
         return collimator_node
 
     def add_collimator_nodes(self):
-        self.add_collimator_node(0.60000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 50.3771, 'p1')
-        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1921, 'scr1t')
-        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1966, 'scr1c')
-        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2365, 'scr2t')
-        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2410, 'scr2c')
-        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3902, 'scr3t')
-        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3947, 'scr3c')
-        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4346, 'scr4t')
-        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4391, 'scr4c')
-        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 51.6228, 'p2sh1')
-        self.add_collimator_node(1.80000, 3, 0.65, 2, 0.080, 0.048, 0.0, 0.0, 0.0, 51.9428, 'p2')
-        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 53.7428, 'p2sh2')
-        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 57.2079, 's1sh1')
-        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 58.2179, 's1')
-        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 59.4079, 's1sh2')
-        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 64.8679, 's2sh1')
-        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779, 's2')
-        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679, 's2sh2')
+        self.add_collimator_node(0.60000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 50.3771, "p1")
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1921, "scr1t")
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1966, "scr1c")
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2365, "scr2t")
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 90.0, 51.2410, "scr2c")
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3902, "scr3t")
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 45.0, 51.3947, "scr3c")
+        self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4346, "scr4t")
+        self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, -45.0, 51.4391, "scr4c")
+        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 51.6228, "p2sh1")
+        self.add_collimator_node(1.80000, 3, 0.65, 2, 0.080, 0.048, 0.0, 0.0, 0.0, 51.9428, "p2")
+        self.add_collimator_node(0.32000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 53.7428, "p2sh2")
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 57.2079, "s1sh1")
+        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 58.2179, "s1")
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 59.4079, "s1sh2")
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 64.8679, "s2sh1")
+        self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779, "s2")
+        self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679, "s2sh2")
         
     def add_rf_harmonic_nodes(self, RF1=None, RF2=None):
         z_to_phi = 2.0 * math.pi / self.getLength()
@@ -1082,40 +1101,16 @@ class SNS_RING(TIME_DEP_Lattice):
 
         self.rf_nodes = dict()
         self.rf_nodes["RF1a"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1a",
+            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1a",
         )
         self.rf_nodes["RF1b"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1b",
+            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1b",
         )
         self.rf_nodes["RF1c"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF1"]["hnum"],
-            kws["RF1"]["voltage"],
-            kws["RF1"]["phase"],
-            length,
-            name="RF1c",
+            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1c",
         )
         self.rf_nodes["RF2"] = RFNode.Harmonic_RFNode(
-            z_to_phi,
-            dE_sync,
-            kws["RF2"]["hnum"],
-            kws["RF2"]["voltage"],
-            kws["RF2"]["phase"],
-            length,
-            name="RF2",
+            z_to_phi, dE_sync, RF2["hnum"], RF2["voltage"], RF2["phase"], length, name="RF2",
         )
         RFLatticeModifications.addRFNode(self, 184.273, self.rf_nodes["RF1a"])
         RFLatticeModifications.addRFNode(self, 186.571, self.rf_nodes["RF1b"])
@@ -1215,7 +1210,7 @@ class InjectionController:
         self.bunch = Bunch()
         self.bunch.mass(mass)
         self.bunch.getSyncParticle().kinEnergy(kin_energy)
-        self.params_dict = {'lostbunch': Bunch()}  # for apertures
+        self.params_dict = {"lostbunch": Bunch()}  # for apertures
         self.bunch.addParticle(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         
     def scale_kicker_limits(self, factor=1.0):
@@ -1461,8 +1456,8 @@ class InjectionController:
         opt.least_squares(cost_func, np.zeros(2), bounds=(lb[2:], ub[2:]), **kws)
 
     def set_inj_coords_fast(self, coords, vcorrectors=False, **solver_kws):
-        solver_kws.setdefault('max_nfev', 5000)   
-        solver_kws.setdefault('verbose', 2)   
+        solver_kws.setdefault("max_nfev", 5000)   
+        solver_kws.setdefault("verbose", 2)   
         x, xp, y, yp = coords
         kicker_angles_x = np.zeros(4)
         kicker_angles_y = np.zeros(4)
@@ -1538,8 +1533,8 @@ class InjectionController:
         return self.get_kicker_angles()
 
     def set_inj_coords_vcorrectors(self, coords, **solver_kws):
-        solver_kws.setdefault('max_nfev', 5000)   
-        solver_kws.setdefault('verbose', 2)   
+        solver_kws.setdefault("max_nfev", 5000)   
+        solver_kws.setdefault("verbose", 2)   
         coords = np.array(coords)
         x, xp, y, yp = coords
         
@@ -1589,12 +1584,12 @@ class InjectionController:
             for monitor_node in self.monitor_nodes[i]:
                 coords.append(np.squeeze(monitor_node.data[-1]))
                 positions.append(monitor_node.position + position_offset)
-                names.append(monitor_node.getName().split(':')[0])
+                names.append(monitor_node.getName().split(":")[0])
                 monitor_node.clear_data()
                 monitor_node.active = False
-        coords = pd.DataFrame(coords, columns=['x', 'xp', 'y', 'yp'])
-        coords['s'] = positions
-        coords['node'] = names    
+        coords = pd.DataFrame(coords, columns=["x", "xp", "y", "yp"])
+        coords["s"] = positions
+        coords["node"] = names    
         return coords
     
     def print_inj_coords(self):
@@ -1602,10 +1597,10 @@ class InjectionController:
         self.init_part(*coords_start)
         coords_mid = self.track_part(sublattice=0)
         coords_end = self.track_part(sublattice=1)
-        for _coords, tag in zip([coords_start, coords_mid, coords_end], ['start', 'mid', 'end']):
+        for _coords, tag in zip([coords_start, coords_mid, coords_end], ["start", "mid", "end"]):
             _coords = _coords * 1000.0
-            print('Coordinates at inj_{}:'.format(tag))
-            print('  x = {:.3f} [mm]'.format(_coords[0]))
-            print('  y = {:.3f} [mm]'.format(_coords[2]))
-            print('  xp = {:.3f} [mrad]'.format(_coords[1]))
-            print('  yp = {:.3f} [mrad]'.format(_coords[3]))
+            print("Coordinates at inj_{}:".format(tag))
+            print("  x = {:.3f} [mm]".format(_coords[0]))
+            print("  y = {:.3f} [mm]".format(_coords[2]))
+            print("  xp = {:.3f} [mrad]".format(_coords[1]))
+            print("  yp = {:.3f} [mrad]".format(_coords[3]))
