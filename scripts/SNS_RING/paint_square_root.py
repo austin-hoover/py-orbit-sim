@@ -85,7 +85,7 @@ from SNS_RING import X_FOIL
 from SNS_RING import Y_FOIL
 
 sys.path.append(os.getcwd())
-import pyorbit_sim.utils
+from pyorbit_sim import utils
 
 
 # Setup
@@ -130,10 +130,9 @@ def get_filename(filename):
 shutil.copy(__file__, get_filename(".py"))
 
 # Save git info
-git_hash = pyorbit_sim.utils.git_revision_hash()
-git_url = pyorbit_sim.utils.git_url()
-message = ""
-if git_hash and git_url and pyorbit_sim.utils.is_git_clean():
+git_hash = utils.git_revision_hash()
+git_url = utils.git_url()
+if git_hash and git_url and utils.is_git_clean():
     print("Repository is clean.")
     print("Code should be available at")
     print("{}/-/tree/{}".format(git_url, git_hash))
@@ -156,6 +155,11 @@ n_macros_per_turn = int(n_macros_total / n_inj_turns)  # macroparticles per mini
 nominal_n_inj_turns = 1000.0
 nominal_intensity = 1.5e14
 nominal_bunch_length_frac=(50.0 / 64.0)
+
+
+info = open(get_filename("info.txt"), "w")
+info.write("git_hash: {}\n".format(git_hash))
+info.write("git_url: {}\n".format(git_url))
 
 
 # # Lattice setup and linear analysis
@@ -457,3 +461,6 @@ nominal_bunch_length_frac=(50.0 / 64.0)
 #     ring.trackBunch(bunch, params_dict)
 #     if should_dump_bunch(turn):
 #         bunch.dumpBunch("_output/data/bunch_turn{}.dat".format(turn))
+
+
+info.close()
