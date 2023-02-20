@@ -130,10 +130,42 @@ class SNS_RING(TIME_DEP_Lattice):
     def set_fringe_fields(self, setting):
         for node in self.getNodes():
             try:
-                node.setUsageFringeIN(setting)
-                node.setUsageFringeOUT(setting)
+                node.setUsageFringeFieldIN(setting)
+                node.setUsageFringeFieldOUT(setting)
             except:
-                pass
+                print("No fringe method for {}".format(node.getName()))
+                
+    def get_ring_twiss(self, mass=None, kin_energy=None):
+        test_bunch = Bunch()
+        test_bunch.mass(mass)
+        test_bunch.getSyncParticle().kinEnergy(kin_energy)
+        matrix_lattice = TEAPOT_MATRIX_Lattice(self, test_bunch)
+        (pos_nu_x, pos_alpha_x, pos_beta_x) = matrix_lattice.getRingTwissDataX()
+        (pos_nu_y, pos_alpha_y, pos_beta_y) = matrix_lattice.getRingTwissDataY()
+        twiss = pd.DataFrame()
+        twiss["s"] = np.array(pos_nu_x)[:, 0]
+        twiss["nu_x"] = np.array(pos_nu_x)[:, 1]
+        twiss["nu_y"] = np.array(pos_nu_y)[:, 1]
+        twiss["alpha_x"] = np.array(pos_alpha_x)[:, 1]
+        twiss["alpha_y"] = np.array(pos_alpha_y)[:, 1]
+        twiss["beta_x"] = np.array(pos_beta_x)[:, 1]
+        twiss["beta_y"] = np.array(pos_beta_y)[:, 1]
+        return twiss
+
+    def get_ring_dispersion(self, mass=None, kin_energy=None):
+        test_bunch = Bunch()
+        test_bunch.mass(mass)
+        test_bunch.getSyncParticle().kinEnergy(kin_energy)
+        matrix_lattice = TEAPOT_MATRIX_Lattice(self, test_bunch)
+        (pos_disp_x, pos_dispp_x) = matrix_lattice.getRingDispersionDataX()
+        (pos_disp_y, pos_dispp_y) = matrix_lattice.getRingDispersionDataY()
+        dispersion = pd.DataFrame()
+        dispersion["s"] = np.array(pos_disp_x)[:, 0]
+        dispersion["disp_x"] = np.array(pos_disp_x)[:, 1]
+        dispersion["disp_y"] = np.array(pos_disp_y)[:, 1]
+        dispersion["dispp_x"] = np.array(pos_dispp_x)[:, 1]
+        dispersion["dispp_y"] = np.array(pos_dispp_y)[:, 1]
+        return dispersion
         
     def get_injection_controller(self, **kws):
         kws.setdefault("mass", mass_proton)
@@ -155,7 +187,8 @@ class SNS_RING(TIME_DEP_Lattice):
         scatter = {"full": 0, "simple": 1}[scatter]
         self.foil_node = TeapotFoilNode(xmin, xmax, ymin, ymax, thickness)
         self.foil_node.setScatterChoice(scatter)
-        self.getNodes()[0].addChildNode(self.foil_node, AccNode.ENTRANCE)
+        start_node = self.getNodes()[0]
+        start_node.addChildNode(self.foil_node, AccNode.ENTRANCE)
         return self.foil_node
     
     def add_inj_node(
@@ -181,103 +214,103 @@ class SNS_RING(TIME_DEP_Lattice):
             ymin = -np.inf
         if ymax is None:
             ymax = +np.inf
-            
+                        
+        # x-px distribution
+        # ----------------------------------------------------------------
         if dist_x_kws is None:
             dist_x_kws = dict()
-        if dist_y_kws is None:
-            dist_y_kws = dict()
-        if dist_z_kws is None:
-            dist_z_kws = dict()
-        
         if dist_x_kind == "joho":
-            dist_x_kws_default = {
-                "centerpos": 0.0,
-                "centermom": 0.0,
-                "alpha": -0.924,
-                "beta": 3.71,
-                "order": 9.0,
-                "eps_rms": 0.467e-6,
-            }
             dist_x_constructor = JohoTransverse
+            dist_x_kws.setdefault("centerpos", X_INJ)
+            dist_x_kws.setdefault("centermom", 0.0)
+            dist_x_kws.setdefault("alpha", 10.056)
+            dist_x_kws.setdefault("beta", 3.71)
+            dist_x_kws.setdefault("order", 9.0)
+            dist_x_kws.setdefault("eps_rms", 0.221e-6)
         else:
             raise ValueError("Invalid dist_x")
-
+        dist_x_kws["emitlim"] = dist_x_kws.pop("eps_rms") * 2.0 * (dist_x_kws["order"] + 1.0)
+            
+        # y-py distribution
+        # ----------------------------------------------------------------
+        if dist_y_kws is None:
+            dist_y_kws = dict()
         if dist_y_kind == "joho":
-            dist_y_kws_default = {
-                "centerpos": 0.0,
-                "centermom": 0.0,
-                "alpha": -0.5,
-                "beta": 4.86,
-                "order": 9.0,
-                "eps_rms": 0.300e-6,
-            }
             dist_y_constructor = JohoTransverse
+            dist_y_kws.setdefault("centerpos", Y_INJ)
+            dist_y_kws.setdefault("centermom", 0.0)
+            dist_y_kws.setdefault("alpha", 0.063)
+            dist_y_kws.setdefault("beta", 10.815)
+            dist_y_kws.setdefault("order", 9.0)
+            dist_y_kws.setdefault("eps_rms", 0.221e-6)
         else:
             raise ValueError("Invalid dist_y")
+        dist_y_kws["emitlim"] = dist_y_kws.pop("eps_rms") * 2.0 * (dist_y_kws["order"] + 1.0)
             
+        # z-pz distribution
+        # ----------------------------------------------------------------
+        if dist_z_kws is None:
+            dist_z_kws = dict()
+            
+        n_inj_turns = 1000
+        if "n_inj_turns" in dist_z_kws:
+            n_inj_turns = dist_z_kws.pop("n_inj_turns")
+        bunch_length_frac = 50.0 / 64.0
+        if "bunch_length_frac" in dist_z_kws:
+            bunch_length_frac = dist_z_kws.pop("bunch_length_frac")
+            
+        bunch_length = bunch_length_frac * self.getLength()
+        zmin = -0.5 * bunch_length
+        zmax = +0.5 * bunch_length
+        drift_time = 1000.0 * n_inj_turns * (self.getLength() / (self.sync_part.beta() * speed_of_light))
+        
         if dist_z_kind == "snsespread":
-            nominal_n_inj_turns = 1000
-            nominal_bunch_length_frac = 50.0 / 64.0
-            dist_z_kws_default = {
-                "lattlength": self.getLength(),
-                "zmin": -nominal_bunch_length_frac * self.getLength(),
-                "zmax": +nominal_bunch_length_frac * self.getLength(),
-                "tailfraction": 0.0,
-                "sync_part": self.sync_part,
-                "emean": self.sync_part.kinEnergy(),
-                "esigma": 0.0005,
-                "etrunc": 1.0,
-                "emin": self.sync_part.kinEnergy() - 0.0025,
-                "emax": self.sync_part.kinEnergy() + 0.0025,
-                "ecparams": {
-                    "mean": 0.0,
-                    "sigma": 0.000000001,
-                    "trunc": 1.0,
-                    "min": -0.0035,
-                    "max": +0.0035,
-                    "drifti": 0.0,
-                    "driftf": 0.0,
-                    "drifttime": 1000.0 * nominal_n_inj_turns * (self.getLength() / (self.sync_part.beta() * speed_of_light)),
-                },
-                "esparams": {
-                    "nu": 100.0,
-                    "phase": 0.0,
-                    "max": 0.0,
-                    "nulltime": 0.0,
-                },
-            }
-            dist_z_constructor = SNSESpreadDist
+            dist_z_constructor = SNSESpreadDist    
+            dist_z_kws.setdefault("lattlength", self.getLength())
+            dist_z_kws.setdefault("zmin", zmin)
+            dist_z_kws.setdefault("zmax", zmax)
+            dist_z_kws.setdefault("tailfraction", 0.0)
+            dist_z_kws.setdefault("sync_part", self.sync_part)
+            dist_z_kws.setdefault("emean", self.sync_part.kinEnergy())
+            dist_z_kws.setdefault("esigma", 0.0005)
+            dist_z_kws.setdefault("etrunc", 1.0)
+            dist_z_kws.setdefault("emin", self.sync_part.kinEnergy() - 0.0025)
+            dist_z_kws.setdefault("emax", self.sync_part.kinEnergy() + 0.0025)
+            dist_z_kws.setdefault("ecparams", dict())
+            dist_z_kws["ecparams"].setdefault("mean", 0.0)
+            dist_z_kws["ecparams"].setdefault("sigma", 0.000000001)
+            dist_z_kws["ecparams"].setdefault("trunc", 1.0)
+            dist_z_kws["ecparams"].setdefault("min", -0.0035)
+            dist_z_kws["ecparams"].setdefault("max", +0.0035)
+            dist_z_kws["ecparams"].setdefault("drifti", 0.0)
+            dist_z_kws["ecparams"].setdefault("driftf", 0.0)
+            dist_z_kws["ecparams"].setdefault("drifttime", drift_time)
+            dist_z_kws.setdefault("esparams", dict())
+            dist_z_kws["esparams"].setdefault("nu", 100.0)
+            dist_z_kws["esparams"].setdefault("phase", 0.0)
+            dist_z_kws["esparams"].setdefault("max", 0.0)
+            dist_z_kws["esparams"].setdefault("nulltime", 0.0)
         elif dist_z_kind == "joho":
             dist_z_constructor = JohoLongitudinal
         elif dist_z_kind == "uniform":
             dist_z_constructor = UniformLongDist
+            dist_z_kws.setdefault("zmin", zmin)
+            dist_z_kws.setdefault("zmax", zmax)
+            dist_z_kws.setdefault("sync_part", self.sync_part)
+            dist_z_kws.setdefault("eoffset", 0.0)
+            dist_z_kws.setdefault("deltaEfrac", 0.0)
         else:
             raise ValueError("Invalid dist_z")
-                        
-        for key, value in dist_x_kws_default.items():
-            dist_x_kws.setdefault(key, value)
-        for key, value in dist_y_kws_default.items():
-            dist_y_kws.setdefault(key, value)
-        for key, value in dist_z_kws_default.items():
-            dist_z_kws.setdefault(key, value)
-
-        dist_x_kws["emitlim"] = dist_x_kws.pop("eps_rms") * 2.0 * (dist_x_kws["order"] + 1.0)
-        dist_y_kws["emitlim"] = dist_y_kws.pop("eps_rms") * 2.0 * (dist_y_kws["order"] + 1.0)
-        dist_x_kws
-
-        dist_x = dist_x_constructor(**dist_x_kws)
-        dist_y = dist_y_constructor(**dist_y_kws)
-        dist_z = dist_z_constructor(**dist_z_kws)
-
+            
         self.inj_node = TeapotInjectionNode(
-            nparts=n_parts,
-            bunch=self.bunch,
-            lostbunch=self.lostbunch,
-            injectregion=[xmin, xmax, ymin, ymax],
-            xDistFunc=dist_x,
-            yDistFunc=dist_y,
-            lDistFun=dist_z,
-            nmaxmacroparticles=n_parts_max,
+            n_parts, 
+            self.bunch, 
+            self.lostbunch, 
+            [xmin, xmax, ymin, ymax],
+            dist_x_constructor(**dist_x_kws),
+            dist_y_constructor(**dist_y_kws),
+            dist_z_constructor(**dist_z_kws),
+            n_parts_max,
         )
         start_node = self.getNodes()[0]
         start_node.addChildNode(self.inj_node, AccNode.ENTRANCE)
@@ -397,22 +430,23 @@ class SNS_RING(TIME_DEP_Lattice):
             
     def add_tune_diagnostics_node(
         self,
+        filename="tunes.dat",
         position=51.1921,
-        beta_x=9.19025, 
         alpha_x=-1.78574, 
+        alpha_y=0.538244,
+        beta_x=9.19025, 
+        beta_y=8.66549, 
         eta_x=-0.000143012, 
         etap_x=-2.26233e-05, 
-        beta_y=8.66549, 
-        alpha_y=0.538244,
     ):        
-        tune_node = TeapotTuneAnalysisNode("tune_analysis")
+        tune_node = TeapotTuneAnalysisNode(filename)
         tune_node.assignTwiss(beta_x, alpha_x, eta_x, etap_x, beta_y, alpha_y)
         addTeapotDiagnosticsNode(self, position, tune_node)
         self.diagnostics_nodes["tune"] = tune_node
         return tune_node
     
-    def add_moments_diagnostics_node(self, order=4, position=0.0):
-        moments_node = TeapotMomentsNode("moments", order)
+    def add_moments_diagnostics_node(self, filename="moments.dat", order=4, position=0.0):
+        moments_node = TeapotMomentsNode(filename, order)
         start_node = self.getNodes()[0]
         start_node.addChildNode(moments_node, AccNode.ENTRANCE)
         self.diagnostics_nodes["moments"] = moments_node

@@ -1,7 +1,9 @@
+# encoding=utf8  
 from __future__ import print_function
 import math
 import os
 import pathlib
+import pickle
 from pprint import pprint
 import shutil
 import sys
@@ -138,31 +140,40 @@ if git_hash and git_url and utils.is_git_clean():
     print("Repository is clean.")
     print("Code should be available at {}".format(git_url))
 else:
-    print("Unknown code revision.")
+    print("Unknown git revision.")
+    
+info = open(get_filename("info.txt"), "w")
+info.write("git_hash: {}\n".format(git_hash))
+info.write("git_url: {}\n".format(git_url))
+info.close()
 
 
 # Simulation parameters
 madx_file = "_input/SNS_RING_nux6.18_nuy6.18.lat"
 madx_seq = "rnginj"
 mass = mass_proton  # [GeV / c^2]
-kin_energy = 0.600  # [GeV]
-n_inj_turns = 501  # number of turns to inject
+kin_energy = 0.800  # [GeV]
+n_inj_turns = 301  # number of turns to inject
 n_stored_turns = 0  # number of turns to store the beam after injection
 kin_energy = 0.800  # synchronous particle energy [GeV]
 mass = consts.mass_proton  # particle mass [GeV / c^2]
-bunch_length_frac = 43.0 / 64.0  # macropulse length relative to ring length
-n_macros_total = int(1.0e5)  # final number of macroparticles
+# bunch_length_frac = 43.0 / 64.0  # macropulse length relative to ring length
+bunch_length_frac = 64.0 / 64.0
+n_macros_total = int(1.0e4)  # final number of macroparticles
 n_macros_per_turn = int(n_macros_total / n_inj_turns)  # macroparticles per minipulse
-nominal_n_inj_turns = 1000.0
+nominal_n_inj_turns = 1000
 nominal_intensity = 1.5e14
 nominal_bunch_length_frac=(50.0 / 64.0)
-
-
-info = open(get_filename("info.txt"), "w")
-info.write("git_hash: {}\n".format(git_hash))
-info.write("git_url: {}\n".format(git_url))
-info.close()
-
+switches = {
+    "apertures": False,
+    "impedance_transverse": False,
+    "impedance_longitudinal": False,
+    "foil": False,
+    "fringe": False,
+    "RF": False,
+    "space_charge_transverse": False,
+    "space_charge_longitudinal": False,
+}
 
 
 # Lattice setup and linear analysis
@@ -193,30 +204,19 @@ tmat_params = matrix_lattice.getRingParametersDict()
 if _mpi_rank == 0:
     print("Transfer matrix parameters (uncoupled):")
     pprint(tmat_params)
+file = open(get_filename("lattice_params_uncoupled.pkl"), "wb")
+pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+file.close()
 
 ## Save parameters throughout the ring.
-(pos_nu_x, pos_alpha_x, pos_beta_x) = matrix_lattice.getRingTwissDataX()
-(pos_nu_y, pos_alpha_y, pos_beta_y) = matrix_lattice.getRingTwissDataY()
-twiss = pd.DataFrame()
-twiss["s"] = np.array(pos_nu_x)[:, 0]
-twiss["nu_x"] = np.array(pos_nu_x)[:, 1]
-twiss["nu_y"] = np.array(pos_nu_y)[:, 1]
-twiss["alpha_x"] = np.array(pos_alpha_x)[:, 1]
-twiss["alpha_y"] = np.array(pos_alpha_y)[:, 1]
-twiss["beta_x"] = np.array(pos_beta_x)[:, 1]
-twiss["beta_y"] = np.array(pos_beta_y)[:, 1]
+twiss = ring.get_ring_twiss(mass=mass, kin_energy=kin_energy)
+dispersion = ring.get_ring_dispersion(mass=mass, kin_energy=kin_energy)
 if _mpi_rank == 0:
+    print("Twiss:")
+    print(twiss)
     twiss.to_csv(get_filename("lattice_twiss.dat"), sep=" ")
-
-(pos_disp_x, pos_disp_p_x) = matrix_lattice.getRingDispersionDataX()
-(pos_disp_y, pos_disp_p_y) = matrix_lattice.getRingDispersionDataY()
-dispersion = pd.DataFrame()
-dispersion["s"] = np.array(pos_disp_x)[:, 0]
-dispersion["disp_x"] = np.array(pos_disp_x)[:, 1]
-dispersion["disp_y"] = np.array(pos_disp_y)[:, 1]
-dispersion["disp_p_x"] = np.array(pos_disp_p_x)[:, 1]
-dispersion["disp_p_y"] = np.array(pos_disp_p_y)[:, 1]
-if _mpi_rank == 0:
+    print("Dispersion:")
+    print(dispersion)
     dispersion.to_csv(get_filename("lattice_dispersion.dat"), sep=" ")
 
 
@@ -228,12 +228,15 @@ tmat_params = matrix_lattice.getRingParametersDict()
 if _mpi_rank == 0:
     print("Transfer matrix parameters (coupled):")
     pprint(tmat_params)
-            
+file = open(get_filename("lattice_params_coupled.pkl"), "wb")
+pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+file.close()
+
 ## Compute Twiss parameters throughout the ring.
 ## [...]
 
-## Turn off fringe fields. (See previous comment.)
-ring.set_fringe_fields(True)
+## Turn on fringe fields. (See previous comment.)
+ring.set_fringe_fields(switches["fringe"])
 
 
 # Bunch setup
@@ -267,9 +270,6 @@ bunch.macroSize(macro_size)
 x_inj = X_INJ
 y_inj = Y_INJ
 
-# Fringe fields complicate things. Turn them off for now.
-ring.set_fringe_fields(False)
-
 # Initial coordinates of closed orbit at injection point [x, x', y, y'].
 inj_coords_t0 = np.zeros(4)
 inj_coords_t0[0] = x_inj
@@ -283,6 +283,9 @@ inj_coords_t1[0] = x_inj- 0.035
 inj_coords_t1[1] = 0.0
 inj_coords_t1[2] = y_inj
 inj_coords_t1[3] = -0.0015
+
+# Fringe fields complicate things. Turn them off for now.
+ring.set_fringe_fields(False)
 
 
 def plot_traj(trajectory, figname="fig.png"):
@@ -300,41 +303,23 @@ inj_controller = ring.get_injection_controller(
     inj_start="bpm_a09", 
     inj_end="bpm_b01",
 )
+inj_controller.scale_kicker_limits(100.0)
 
-if _mpi_rank == 0:
-    ## (This is just stalling when I run with more than one MPI node; not sure why.)
-    
-    ## Remove kicker limits.
-    inj_controller.scale_kicker_limits(100.0)
+## Bias the vertical orbit using vkickers.
+solver_kws = dict(max_nfev=2500, verbose=2, ftol=1.0e-12, xtol=1.0e-12)
+# inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
+inj_controller.print_inj_coords()
+plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_bias.png"))
 
-    ## Bias the vertical orbit using vkickers.
-    # inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
-    inj_controller.print_inj_coords()
-    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_bias.png"))
+## Set the initial phase space coordinates at the injection point.
+kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
+inj_controller.print_inj_coords()
+plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t0.png"))
 
-    ## Set the initial phase space coordinates at the injection point.
-    solver_kws = dict(max_nfev=2500, verbose=2, ftol=1.0e-12, xtol=1.0e-12)
-    kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
-    inj_controller.print_inj_coords()
-    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t0.png"))
-
-    ## Set the final phase space coordinates at the injection point.
-    kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
-    inj_controller.print_inj_coords()
-    plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t1.png"))
-
-    ## Convert to list for MPI_Bcast
-    kicker_angles_t0 = kicker_angles_t0.tolist()
-    kicker_angles_t1 = kicker_angles_t1.tolist()
-
-# Get the kicker angles from rank 0.
-kicker_angles_t0 = orbit_mpi.MPI_Bcast(kicker_angles_t0, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
-kicker_angles_t1 = orbit_mpi.MPI_Bcast(kicker_angles_t1, orbit_mpi.mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)
-kicker_angles_t0 = np.array(kicker_angles_t0)
-kicker_angles_t1 = np.array(kicker_angles_t1)
-
-# Initialize the kickers.
-inj_controller.set_kicker_angles(kicker_angles_t0)
+## Set the final phase space coordinates at the injection point.
+kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
+inj_controller.print_inj_coords()
+plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t1.png"))
 
 # Assign sqrt(t) kicker waveforms.
 seconds_per_turn = ring.getLength() / (sync_part.beta() * consts.speed_of_light)
@@ -347,8 +332,11 @@ for node, s0, s1 in zip(inj_controller.kicker_nodes, strengths_t0, strengths_t1)
     waveform = SquareRootWaveform(t0=t0, t1=t1, s0=s0, s1=s1, sync_part=sync_part)
     ring.setTimeDepNode(node.getParam("TPName"), waveform)
 
-    
-ring.set_fringe_fields(False)
+# Set kickers to t0 state.
+inj_controller.set_kicker_angles(kicker_angles_t0)
+
+# Toggle fringe fields (see previous above).
+ring.set_fringe_fields(switches["fringe"])
 
     
 # Injection
@@ -368,108 +356,125 @@ ring.add_inj_node(
     ymax=ymax,
     dist_x_kind="joho",
     dist_y_kind="joho",
-    dist_z_kind="snsespread",
-    dist_x_kws=None,
-    dist_y_kws=None,
-    dist_z_kws=None,
+    dist_z_kind="uniform",  # {"snsespread", "uniform"}
+    dist_x_kws={
+        "centerpos": x_inj,
+        "centermom": 0.0,
+        "eps_rms": 0.001e-6,
+    },
+    dist_y_kws={
+        "centerpos": x_inj,
+        "centermom": 0.0,
+        "eps_rms": 0.001e-6,
+    },
+    dist_z_kws={
+        "n_inj_turns": n_inj_turns,
+        "bunch_length_frac": bunch_length_frac,
+    }
 )
 
-ring.add_foil_node(
-    xmin=xmin,
-    xmax=xmax,
-    ymin=ymin,
-    ymax=ymax,
-    thickness=390.0,
-    scatter="full",
-)
+if switches["foil"]:
+    ring.add_foil_node(
+        xmin=xmin,
+        xmax=xmax,
+        ymin=ymin,
+        ymax=ymax,
+        thickness=390.0,
+        scatter="full",
+    )
 
 
 # Apertures, collimators, and displacements
 # --------------------------------------------------------------------------------------
 
-ring.add_inj_chicane_aperture_displacement_nodes()
-ring.add_collimator_nodes()
-
-## Aperture nodes need to be added as child nodes, but Jeff's benchmarks script selects
-## the parent nodes by index; does not work with standard MADX output lattice.
-
-# ring.add_aperture_nodes()
+if switches["apertures"]:
+    ring.add_inj_chicane_aperture_displacement_nodes()
+    ring.add_collimator_nodes()
+    # ring.add_aperture_nodes()
 
 
 # RF cavities
 # --------------------------------------------------------------------------------------
 
-ring.add_rf_harmonic_nodes(
-    RF1=dict(phase=0.0, hnum=1.0, voltage=+2.0e-6),
-    RF2=dict(phase=0.0, hnum=2.0, voltage=-4.0e-6),
-)
+if switches["RF"]:
+    ring.add_rf_harmonic_nodes(
+        RF1=dict(phase=0.0, hnum=1.0, voltage=+2.0e-6),
+        RF2=dict(phase=0.0, hnum=2.0, voltage=-4.0e-6),
+    )
 
 
 # Impedance
 # --------------------------------------------------------------------------------------
 
-# ring.add_longitudinal_impedance_node(
-#     n_macros_min=1000,
-#     n_bins=128,
-#     position=124.0,
-#     ZL_Ekicker=None,  # read from file
-#     ZL_RF=None,  # read from file
-# )
+if switches["impedance_longitudinal"]:
+    ring.add_longitudinal_impedance_node(
+        n_macros_min=1000,
+        n_bins=128,
+        position=124.0,
+        ZL_Ekicker=None,  # read from file
+        ZL_RF=None,  # read from file
+    )
 
-# ring.add_transverse_impedance_node(
-#     n_macros_min=1000,
-#     n_bins=64,
-#     use_x=0,
-#     use_y=1,
-#     position=124.0,
-#     alpha_x=0.0,
-#     alpha_y=-0.004,
-#     beta_x=10.191,
-#     beta_y=10.447,
-#     q_x=6.21991,
-#     q_y=6.20936,
-# )
+if switches["impedance_transverse"]:
+    ring.add_transverse_impedance_node(
+        n_macros_min=1000,
+        n_bins=64,
+        use_x=0,
+        use_y=1,
+        position=124.0,
+        alpha_x=0.0,
+        alpha_y=-0.004,
+        beta_x=10.191,
+        beta_y=10.447,
+        q_x=6.21991,
+        q_y=6.20936,
+    )
 
 
 # Space charge
 # --------------------------------------------------------------------------------------
 
-# ring.add_longitudinal_space_charge_node(
-#     b_a=(10.0 / 3.0),
-#     n_macros_min=1000,
-#     use=1,
-#     n_bins=64,
-#     position=124.0,
-# )
+if switches["space_charge_longitudinal"]:
+    ring.add_longitudinal_space_charge_node(
+        b_a=(10.0 / 3.0),
+        n_macros_min=1000,
+        use=1,
+        n_bins=64,
+        position=124.0,
+    )
 
-# ring.add_transverse_space_charge_nodes(
-#     n_macros_min=1000,
-#     size_x=128,
-#     size_y=128,
-#     size_z=64,
-#     path_length_min=1.0e-8,
-#     n_boundary_points=128,
-#     n_free_space_modes=32,
-#     r_boundary=0.220,
-#     kind="slicebyslice",
-# )
+if switches["space_charge_transverse"]:
+    ring.add_transverse_space_charge_nodes(
+        n_macros_min=1000,
+        size_x=128,
+        size_y=128,
+        size_z=64,
+        path_length_min=1.0e-8,
+        n_boundary_points=128,
+        n_free_space_modes=32,
+        r_boundary=0.220,
+        kind="slicebyslice",
+    )
 
 
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
-# ring.add_tune_diagnostics_node(
-#     position=51.1921,
-#     beta_x=9.19025,
-#     alpha_x=-1.78574,
-#     eta_x=-0.000143012,
-#     etap_x=-2.26233e-05,
-#     beta_y=8.66549,
-#     alpha_y=0.538244,
-# )
+# There is not much dispersion at the injection point...
+index = 0
+ring.add_tune_diagnostics_node(
+    filename=get_filename("tunes.dat"),
+    position=twiss.loc[index, "s"],
+    beta_x=twiss.loc[index, "beta_x"],
+    beta_y=twiss.loc[index, "beta_y"],
+    alpha_x=twiss.loc[index, "alpha_x"],
+    alpha_y=twiss.loc[index, "alpha_y"],
+    eta_x=dispersion.loc[index, "disp_x"],
+    etap_x=dispersion.loc[index, "dispp_x"],
+)
 
-# ring.add_moments_diagnostics_node(order=4, position=0.0)
-
+# Second-order moments node
+# [...]
 
 
 # Tracking
@@ -485,9 +490,9 @@ def should_dump_bunch(turn):
 
 if _mpi_rank == 0:
     print("Tracking.")
-for turn in trange(n_inj_turns + n_stored_turns):
+for turn in range(n_inj_turns + n_stored_turns):
     ring.trackBunch(bunch, params_dict)
+    print(inj_controller.get_kicker_angles())
     if should_dump_bunch(turn):
         filename = get_filename("bunch_turn{}.dat".format(turn))
         bunch.dumpBunch(filename)
-        print(bunch.getSizeGlobal())
