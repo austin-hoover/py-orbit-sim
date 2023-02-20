@@ -102,20 +102,12 @@ class SNS_RING(TIME_DEP_Lattice):
     TEAPOT_Lattice.
     """
 
-    def __init__(
-        self,
-        nominal_n_inj_turns=1000,
-        nominal_intensity=1.5e14,
-        nominal_bunch_length_frac=(50.0 / 64.0),
-    ):
+    def __init__(self):
         TIME_DEP_Lattice.__init__(self)
-        self.nominal_n_inj_turns = nominal_n_inj_turns
-        self.nominal_intensity = nominal_intensity
-        self.nominal_bunch_length_frac = nominal_bunch_length_frac
-        self.n_inj_turns = nominal_n_inj_turns
-        self.bunch_length_frac = nominal_bunch_length_frac
+        self.x_foil = X_FOIL
+        self.y_foil = Y_FOIL
         self.bunch = None
-        self.sync_parts = None
+        self.sync_part = None
         self.lostbunch = None
         self.params_dict = None
         self.foil_node = None
@@ -129,31 +121,19 @@ class SNS_RING(TIME_DEP_Lattice):
         self.aperture_nodes = dict()
         self.collimator_nodes = dict()
         
+    def set_bunch(self, bunch=None, lostbunch=None, params_dict=None):
+        self.bunch = bunch
+        self.sync_part = bunch.getSyncParticle()
+        self.lostbunch = lostbunch
+        self.params_dict = params_dict
+        
     def set_fringe_fields(self, setting):
         for node in self.getNodes():
             try:
-                node.setUsageFringeFieldIN(setting)
-                node.setUsageFringeFieldOUT(setting)
+                node.setUsageFringeIN(setting)
+                node.setUsageFringeOUT(setting)
             except:
                 pass
-    
-    def fringe_fields_are_off(self):
-        for node in self.getNodes():
-            try:
-                if node.getUsageFringeFieldIN() or node.getUsageFringeFieldOUT():
-                    return False
-            except:
-                pass
-        return True
-
-    def init_bunch(self, mass=0.938, kin_energy=1.0):
-        self.bunch = Bunch()
-        self.bunch.mass(mass)
-        self.sync_part = self.bunch.getSyncParticle()
-        self.sync_part.kinEnergy(kin_energy)
-        self.lostbunch = Bunch()
-        self.lostbunch.addPartAttr("LostParticleAttributes")
-        self.params_dict = {"bunch": self.bunch, "lostbunch": self.lostbunch}
         
     def get_injection_controller(self, **kws):
         kws.setdefault("mass", mass_proton)
@@ -165,18 +145,17 @@ class SNS_RING(TIME_DEP_Lattice):
 
     def add_foil_node(
         self,
-        xmin=-0.0085,  # relative to X_FOIL
-        xmax=+0.0085,  # relative to X_FOIL
-        ymin=-0.0080,  # relative to Y_FOIL
-        ymax=+0.1000,  # relative to Y_FOIL
+        xmin=-0.0085,  # relative to x_foil
+        xmax=+0.0085,  # relative to x_foil
+        ymin=-0.0080,  # relative to y_foil
+        ymax=+0.1000,  # relative to y_foil
         thickness=390.0,
         scatter="full",  # {'full', 'simple'}
     ):
-        """Add foil scattering node."""
-        xmin += X_FOIL
-        xmax += X_FOIL
-        ymin += Y_FOIL
-        ymax += Y_FOIL
+        xmin += self.x_foil
+        xmax += self.x_foil
+        ymin += self.y_foil
+        ymax += self.y_foil
         scatter = {"full": 0, "simple": 1}[scatter]
         self.foil_node = TeapotFoilNode(xmin, xmax, ymin, ymax, thickness)
         self.foil_node.setScatterChoice(scatter)
@@ -196,7 +175,6 @@ class SNS_RING(TIME_DEP_Lattice):
         dist_z_kws=None,
         **kws
     ):
-        """Add injection node."""
         return
     #         if n_parts_max is None:
     #             n_parts_max = -1
@@ -209,7 +187,7 @@ class SNS_RING(TIME_DEP_Lattice):
     #         if ymax is None:
     #             ymax = +np.inf
     #         dist_x_kws_default = {
-    #             'centerpos': X_FOIL,
+    #             'centerpos': self.x_foil,
     #             'centermom': 0.0,
     #             'alpha': -0.924,
     #             'beta': 3.71,
@@ -295,7 +273,6 @@ class SNS_RING(TIME_DEP_Lattice):
         ZL_Ekicker=None,
         ZL_RF=None,
     ):
-        """Add longitudinal impedance node at lattice midpoint."""    
         ZL = dict()
         for key in ["Ekicker", "RF"]:
             filename = "data/ZL_{}.dat".format(key)
@@ -1069,7 +1046,6 @@ class SNS_RING(TIME_DEP_Lattice):
         return collimator_node
 
     def add_collimator_nodes(self):
-        """Add collimators throughout the ring."""
         self.add_collimator_node(0.60000, 3, 1.00, 2, 0.100, 0.100, 0.0, 0.0, 0.0, 50.3771, 'p1')
         self.add_collimator_node(0.00450, 5, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1921, 'scr1t')
         self.add_collimator_node(0.01455, 4, 1.00, 3, 0.100, 0.000, 0.0, 0.0, 0.0, 51.1966, 'scr1c')
@@ -1089,18 +1065,20 @@ class SNS_RING(TIME_DEP_Lattice):
         self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779, 's2')
         self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679, 's2sh2')
         
-    def add_rf_harmonic_nodes(self, **kws):
-        """Add RF harmonic cavity nodes.
-
-        **kws
-            Dictionary with keys {'RF1', 'RF2'}. Each value is a dictionary with
-            keys {'phase', 'hnum', 'voltage'}.
-        """
+    def add_rf_harmonic_nodes(self, RF1=None, RF2=None):
         z_to_phi = 2.0 * math.pi / self.getLength()
         dE_sync = 0.0
         length = 0.0
-        kws.setdefault("RF1", dict(phase=0.0, hnum=1.0, voltage=+2.0e-6))
-        kws.setdefault("RF2", dict(phase=0.0, hnum=2.0, voltage=-4.0e-6))  
+        if RF1 is None:
+            RF1 = dict()
+        if RF2 is None:
+            RF2 = dict()
+        RF1.setdefault("phase", 0.0)
+        RF1.setdefault("hnum", 1.0)
+        RF1.setdefault("voltage", +2.0e-6)
+        RF2.setdefault("phase", 0.0)
+        RF2.setdefault("hnum", 2.0)
+        RF2.setdefault("voltage", -4.0e-6)
 
         self.rf_nodes = dict()
         self.rf_nodes["RF1a"] = RFNode.Harmonic_RFNode(
@@ -1139,7 +1117,6 @@ class SNS_RING(TIME_DEP_Lattice):
             length,
             name="RF2",
         )
-        
         RFLatticeModifications.addRFNode(self, 184.273, self.rf_nodes["RF1a"])
         RFLatticeModifications.addRFNode(self, 186.571, self.rf_nodes["RF1b"])
         RFLatticeModifications.addRFNode(self, 188.868, self.rf_nodes["RF1c"])
@@ -1147,9 +1124,7 @@ class SNS_RING(TIME_DEP_Lattice):
         return self.rf_nodes
 
 
-class InjectionController:
-    """Control the closed orbit in the injection region."""
-    
+class InjectionController:    
     def __init__(
         self,
         ring=None,
@@ -1252,19 +1227,15 @@ class InjectionController:
         self.max_kicker_angles_y = self.max_kicker_angles[self.kicker_idx_y]
         
     def get_nodes(self):
-        """Return all nodes in order."""
         return self.sublattice1.getNodes() + self.sublattice2.getNodes()
 
     def get_kicker_angles_x(self):
-        """Set the four horizontal kicker angles."""
         return np.array([node.getParam("kx") for node in self.kicker_nodes_x])
 
     def get_kicker_angles_y(self):
-        """Return the four vertical kicker angles."""
         return np.array([node.getParam("ky") for node in self.kicker_nodes_y])
 
     def get_kicker_angles(self):
-        """Return the eight kicker angles."""
         angles = []
         for node in self.kicker_nodes:
             if node in self.kicker_nodes_x:
@@ -1274,45 +1245,37 @@ class InjectionController:
         return np.array(angles)
 
     def set_kicker_angles_x(self, angles=None):
-        """Set the four horizontal kicker angles."""
         if angles is not None:
             for angle, node in zip(angles, self.kicker_nodes_x):
                 node.setParam("kx", angle)
 
     def set_kicker_angles_y(self, angles=None):
-        """Set the four vertical kicker angles."""
         if angles is not None:
             for angle, node in zip(angles, self.kicker_nodes_y):
                 node.setParam("ky", angle)
                 
     def set_kicker_angles(self, angles):
-        """Set the eight kicker angles."""
         angles_x = [angles[i] for i in self.kicker_idx_x]
         angles_y = [angles[i] for i in self.kicker_idx_y]
         self.set_kicker_angles_x(angles_x)
         self.set_kicker_angles_y(angles_y)
         
     def get_vcorrector_angles(self):
-        """Return the four vcorrector angles."""
         return np.array([node.getParam("ky") for node in self.vcorrector_nodes])
 
     def set_vcorrector_angles(self, angles):
-        """Set the four vcorrector angles."""
         for angle, node in zip(angles, self.vcorrector_nodes):
             node.setParam("ky", angle)
         
     def init_part(self, x=0.0, xp=0.0, y=0.0, yp=0.0):
-        """Set the test particle coordinates."""
         self.bunch.deleteParticle(0)
         self.bunch.addParticle(x, xp, y, yp, 0.0, 0.0)
         
     def track_part(self, sublattice=0):
-        """Track the particle through either sublattice and return coordinates."""
         self.sublattices[sublattice].trackBunch(self.bunch, self.params_dict)
         return np.array([self.bunch.x(0), self.bunch.xp(0), self.bunch.y(0), self.bunch.yp(0)])
                             
     def set_inj_coords(self, coords, guess=None, **kws):
-        """Set the closed orbit coordinates using the eight kickers."""
         coords = np.array(coords)
         if guess is None:
             guess = np.zeros(8)
@@ -1345,7 +1308,6 @@ class InjectionController:
         return self.get_kicker_angles()
     
     def set_inj_coords_x(self, coords, **kws):
-        """Set the x closed orbit coordinates using the four x kickers."""
         coords = np.array(coords)
         
         def magnitude(_coords):
@@ -1374,7 +1336,6 @@ class InjectionController:
         opt.least_squares(cost_func, np.zeros(4), bounds=bounds, **kws)
 
     def set_inj_coords_y(self, coords, **kws):
-        """Set the y closed orbit coordinates using the four y kickers."""
         coords = np.array(coords)
         
         def magnitude(_coords):
@@ -1500,17 +1461,6 @@ class InjectionController:
         opt.least_squares(cost_func, np.zeros(2), bounds=(lb[2:], ub[2:]), **kws)
 
     def set_inj_coords_fast(self, coords, vcorrectors=False, **solver_kws):
-        """Set the closed orbit coordinates using the eight kickers.
-        
-        This is done in four separate steps:
-        
-        (1) Optimize x orbit in first half (two kickers).
-        (2) Optimize x orbit in first half (two kickers).
-        (3) Optimize x orbit in second half (two kickers).
-        (4) Optimize x orbit in second half (two kickers).
-        
-        This may not work when fringe fields are turned on.
-        """        
         solver_kws.setdefault('max_nfev', 5000)   
         solver_kws.setdefault('verbose', 2)   
         x, xp, y, yp = coords
@@ -1520,8 +1470,9 @@ class InjectionController:
         def _evaluate(_coords):
             return 1.0e6 * np.sum(_coords**2)
         
+        
         # First half of injection region   
-        # ----------------------------------------------------------------------
+
         self.sublattices[0].reverseOrder()
         
         def _track():
@@ -1554,8 +1505,9 @@ class InjectionController:
         
         self.sublattices[0].reverseOrder()
     
+    
         # Second half of injection region 
-        # ----------------------------------------------------------------------
+
         def _track():
             self.init_part(x, +xp, y, +yp)
             return self.track_part(sublattice=1)
@@ -1586,7 +1538,6 @@ class InjectionController:
         return self.get_kicker_angles()
 
     def set_inj_coords_vcorrectors(self, coords, **solver_kws):
-        """Set the closed orbit coordinates using the four vcorrectors."""
         solver_kws.setdefault('max_nfev', 5000)   
         solver_kws.setdefault('verbose', 2)   
         coords = np.array(coords)
@@ -1626,8 +1577,6 @@ class InjectionController:
         return self.get_vcorrector_angles()
     
     def get_trajectory(self):
-        """Track starting from (0, 0, 0, 0) at injection start, saving coordinates at
-        each node."""
         self.init_part(0.0, 0.0, 0.0, 0.0)
         coords, positions, names = [], [], []
         position_offset = 0.0
@@ -1643,14 +1592,12 @@ class InjectionController:
                 names.append(monitor_node.getName().split(':')[0])
                 monitor_node.clear_data()
                 monitor_node.active = False
-
         coords = pd.DataFrame(coords, columns=['x', 'xp', 'y', 'yp'])
         coords['s'] = positions
         coords['node'] = names    
         return coords
     
     def print_inj_coords(self):
-        """Print coordinates at start, inj, end."""
         coords_start = np.zeros(4)
         self.init_part(*coords_start)
         coords_mid = self.track_part(sublattice=0)
