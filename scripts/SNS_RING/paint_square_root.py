@@ -131,11 +131,10 @@ shutil.copy(__file__, get_filename(".py"))
 
 # Save git info
 git_hash = utils.git_revision_hash()
-git_url = utils.git_url()
+git_url = "{}/-/commit/{}".format(utils.git_url(), git_hash)
 if git_hash and git_url and utils.is_git_clean():
     print("Repository is clean.")
-    print("Code should be available at")
-    print("{}/-/tree/{}".format(git_url, git_hash))
+    print("Code should be available at {}".format(git_url))
 else:
     print("Unknown code revision.")
 
