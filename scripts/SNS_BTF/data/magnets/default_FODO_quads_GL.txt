@@ -1,0 +1,7 @@
+#FODO_Quads_Integrated_Gradients (Unit:T)
+QV10, -0.6011328
+QH11, 1.5292916
+QV12, -1.1791252
+QH13, 1.8118162
+QH33, 1.314
+QV34, -0.876

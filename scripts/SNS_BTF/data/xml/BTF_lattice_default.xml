@@ -1,0 +1,198 @@
+<?xml version="1.0" ?>
+<BTF_Lattice>
+ <MEBT1 bpmFrequency="8.05E8" length="2.863" name="MEBT1" rfFrequency="4.025E8">
+  <accElement length="0.061" name="MEBT:QH01" pos="0.1306" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-26"/>
+  </accElement>
+  <accElement length="0.066" name="MEBT:QV02" pos="0.3139" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:Atten02" pos="0.4267" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.097" name="MEBT:QH03" pos="0.5751" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-8.2109"/>
+  </accElement>
+  <accElement length="0.097" name="MEBT:QV04" pos="0.7709" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="5.8143"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:BPM04" pos="1.0911" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:HZ04" pos="1.3622" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VT04" pos="1.3945" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.106" name="MEBT:QH05" pos="1.6421" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-6.8156"/>
+  </accElement>
+  <accElement length="0.106" name="MEBT:QV06" pos="1.8517" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="6.0584"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:HZ06" pos="2.3089" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VT06" pos="2.3406" type="MARKER">
+   <parameters/>
+  </accElement>
+ </MEBT1>
+	
+<MEBT2 bpmFrequency="8.05E8" length="2.309" name="MEBT2" rfFrequency="4.025E8">
+  <accElement length="0.558575174" name="MEBT:DH1" pos="0.324" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="1.57079633"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VS06" pos="0.732" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.097" name="MEBT:QV07" pos="0.789" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="5.49162"/>
+    </accElement>
+  <accElement length="0.162" name="MEBT:QH08" pos="1.075" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-8.1"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:BSM" pos="1.297" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.097" name="MEBT:QV09" pos="1.519" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="1.14258"/>
+  </accElement>
+  <accElement length="0.558575174" name="MEBT:DH2" pos="1.985" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="1.57079633"/>
+  </accElement>
+ </MEBT2>
+	
+ <MEBT3 bpmFrequency="8.05E8" length="8.504" name="MEBT3" rfFrequency="4.025E8">
+  <accElement length="0.097" name="MEBT:QV10" pos="0.13972" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="6.818"/>
+  </accElement>
+  <accElement length="0.162" name="MEBT:QH11" pos="0.46789" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-13.8919"/>
+  </accElement>
+  <accElement length="0.162" name="MEBT:QV12" pos="0.67388" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="10.9244"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:FC12" pos="0.8380" type="MARKER">
+   <parameters aperture="0.040" aprt_type="1" field="1.14258"/>
+  </accElement>
+  <accElement length="0.162" name="MEBT:QH13" pos="1.00180" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-10.3097"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ14" pos="1.27180" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.32"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VS14" pos="1.3861" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ15" pos="1.50040" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.2"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:FLANGE15" pos="1.6147" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ16" pos="1.72900" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.2"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:MARK16" pos="1.843301" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ17" pos="1.95760" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ18" pos="2.18620" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ19" pos="2.41480" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.227"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ20" pos="2.64340" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ21" pos="2.87200" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.227"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ22" pos="3.10060" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.253"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VS22" pos="3.2149" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ23" pos="3.32920" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.213"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:FLANGE23" pos="3.4435" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ24" pos="3.55780" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.227"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ25" pos="3.78640" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ26" pos="4.01500" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.240"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ27" pos="4.24360" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ28" pos="4.47220" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.200"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ29" pos="4.70080" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.213"/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ30" pos="4.92940" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.227"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VS30" pos="5.0437" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ31" pos="5.15800" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-24.253"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:FLANGE31" pos="5.2723" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.075" name="MEBT:FQ32" pos="5.38660" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="24.307"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:MARK32" pos="5.5" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.162" name="MEBT:QH33" pos="5.65457" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="-9.0"/>
+  </accElement>
+  <accElement length="0.097" name="MEBT:QV34" pos="5.89562" type="QUAD">
+   <parameters aperture="0.040" aprt_type="1" field="5.5"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:HZ34a" pos="6.13006" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VT34a" pos="6.16232" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:HZ34b" pos="6.90450" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VT34b" pos="6.93676" type="MARKER">
+   <parameters/>
+  </accElement>
+  <accElement length="0.558575174" name="MEBT:DH3" pos="7.49503" type="BEND">
+   <parameters aperture_x="0.04" aperture_y="0.04" aprt_type="3" ea1="0.0" ea2="0.0" kls="0.0" poles="1.0" skews="0.0" theta="-1.57079633"/>
+  </accElement>
+  <accElement length="0.0" name="MEBT:VS34" pos="8.0036" type="MARKER">
+   <parameters/>
+  </accElement>
+    <accElement length="0.0" name="MEBT:BS34" pos="8.5036" type="MARKER">
+   <parameters/>
+  </accElement>
+ </MEBT3>
+	
+ <toBS04 bpmFrequency="8.05E8" length="0.7" name="toBS04" rfFrequency="4.025E8">
+  <accElement length="0.0" name="MEBT:BS04" pos="0.7" type="MARKER">
+   <parameters/>
+  </accElement>
+ </toBS04>	
+	
+</BTF_Lattice>
