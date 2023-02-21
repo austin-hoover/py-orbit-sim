@@ -72,9 +72,8 @@ from orbit.teapot import TEAPOT_MATRIX_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice_Coupled
 from orbit.teapot import TEAPOT_Lattice
 from orbit.teapot import TEAPOT_Ring
-from orbit.time_dep import TIME_DEP_Lattice
 from orbit.time_dep.waveform import ConstantWaveform
-from orbit.time_dep.waveform import SquareRootWaveform
+from orbit.time_dep.waveform import NthRootWaveform
 from orbit.utils import consts
 from orbit.utils.consts import mass_proton
 from orbit.utils.consts import speed_of_light
@@ -148,22 +147,21 @@ info.write("git_url: {}\n".format(git_url))
 info.close()
 
 
-# Simulation parameters
-madx_file = "_input/SNS_RING_nux6.18_nuy6.18.lat"
+# Run parameters
+madx_file = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), 
+    "data/SNS_RING_nux6.18_nuy6.18_sol.lat",
+)
 madx_seq = "rnginj"
-mass = mass_proton  # [GeV / c^2]
-kin_energy = 0.800  # [GeV]
-n_inj_turns = 301  # number of turns to inject
-n_stored_turns = 0  # number of turns to store the beam after injection
+mass = mass_proton  # particle mass [GeV / c^2]
 kin_energy = 0.800  # synchronous particle energy [GeV]
-mass = consts.mass_proton  # particle mass [GeV / c^2]
-# bunch_length_frac = 43.0 / 64.0  # macropulse length relative to ring length
-bunch_length_frac = 64.0 / 64.0
+n_inj_turns = 1  # number of injected turns
+n_turns_track = 100  # number of turns to simulate
+dump_bunch_every = 1  # dump the bunch coordinates after this many turns
 n_macros_total = int(1.0e4)  # final number of macroparticles
 n_macros_per_turn = int(n_macros_total / n_inj_turns)  # macroparticles per minipulse
-nominal_n_inj_turns = 1000
-nominal_intensity = 1.5e14
-nominal_bunch_length_frac=(50.0 / 64.0)
+bunch_length_frac = 64.0 / 64.0  # bunch length as fraction of ring
+
 switches = {
     "apertures": False,
     "impedance_transverse": False,
@@ -181,10 +179,7 @@ switches = {
 
 # Create time-dependent lattice.
 ring = SNS_RING()
-ring.readMADX(
-    "/home/46h/repo/accelerator-models/SNS/RING/SNS_RING_nux6.18_nuy6.18.lat",
-    "rnginj",
-)
+ring.readMADX(madx_file, madx_seq)
 ring.initialize()
 
 
@@ -207,6 +202,7 @@ if _mpi_rank == 0:
 file = open(get_filename("lattice_params_uncoupled.pkl"), "wb")
 pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 file.close()
+
 
 ## Save parameters throughout the ring.
 twiss = ring.get_ring_twiss(mass=mass, kin_energy=kin_energy)
@@ -254,6 +250,8 @@ ring.set_bunch(bunch, lostbunch, params_dict)
 
 # Compute the macroparticle size from the minipulse width, intensity, and number
 # of macroparticles.
+nominal_n_inj_turns = 1000.0
+nominal_intensity = 1.5e14
 nominal_minipulse_intensity = nominal_intensity / nominal_n_inj_turns
 nominal_bunch_length_frac = 50.0 / 64.0
 bunch_length_factor = bunch_length_frac / nominal_bunch_length_frac
@@ -279,21 +277,13 @@ inj_coords_t0[3] = 0.0
 
 # Final coordinates of closed orbit at injection point  [x, x', y, y'].
 inj_coords_t1 = np.zeros(4)
-inj_coords_t1[0] = x_inj- 0.035
-inj_coords_t1[1] = 0.0
-inj_coords_t1[2] = y_inj
-inj_coords_t1[3] = -0.0015
+inj_coords_t1[0] = x_inj- 0.025
+inj_coords_t1[1] = 0.000
+inj_coords_t1[2] = y_inj - 0.25
+inj_coords_t1[3] = 0.000
 
 # Fringe fields complicate things. Turn them off for now.
 ring.set_fringe_fields(False)
-
-
-def plot_traj(trajectory, figname="fig.png"):
-    fig, ax = plt.subplots()
-    ax.plot(trajectory["s"], 1000.0 * trajectory["x"], marker=".")
-    ax.plot(trajectory["s"], 1000.0 * trajectory["y"], marker=".")
-    ax.set_ylim(-1.0, 65.0)
-    fig.savefig(os.path.join(os.path.dirname(os.path.realpath(__file__)), figname))
 
 
 inj_controller = ring.get_injection_controller(
@@ -304,33 +294,40 @@ inj_controller = ring.get_injection_controller(
     inj_end="bpm_b01",
 )
 inj_controller.scale_kicker_limits(100.0)
+solver_kws = dict(max_nfev=2500, verbose=1, ftol=1.0e-12, xtol=1.0e-12)
 
-## Bias the vertical orbit using vkickers.
-solver_kws = dict(max_nfev=2500, verbose=2, ftol=1.0e-12, xtol=1.0e-12)
-# inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
-inj_controller.print_inj_coords()
-plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_bias.png"))
+## Bias the vertical orbit using the vkickers.
+bias = False
+if bias:
+    print("Biasing vertical orbit using vkickers")
+    inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
+    inj_controller.print_inj_coords()
+traj = inj_controller.get_trajectory()
+traj.to_csv(get_filename("inj_orbit_bias.dat"), sep=" ")
 
 ## Set the initial phase space coordinates at the injection point.
+print("Optimizing kickers (t=0)")
 kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
 inj_controller.print_inj_coords()
-plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t0.png"))
+traj = inj_controller.get_trajectory()
+traj.to_csv(get_filename("inj_orbit_t0.dat"), sep=" ")
 
 ## Set the final phase space coordinates at the injection point.
+print("Optimizing kickers (t=1)")
 kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
 inj_controller.print_inj_coords()
-plot_traj(inj_controller.get_trajectory(), figname=get_filename("fig_inj_orbit_t1.png"))
+traj = inj_controller.get_trajectory()
+traj.to_csv(get_filename("inj_orbit_t1.dat"), sep=" ")
 
-# Assign sqrt(t) kicker waveforms.
+# Set kicker waveforms.
 seconds_per_turn = ring.getLength() / (sync_part.beta() * consts.speed_of_light)
 t0 = 0.0
 t1 = n_inj_turns * seconds_per_turn
 strengths_t0 = np.ones(8)
 strengths_t1 = np.abs(kicker_angles_t1 / kicker_angles_t0)
-ring.setLatticeOrder()
 for node, s0, s1 in zip(inj_controller.kicker_nodes, strengths_t0, strengths_t1):
-    waveform = SquareRootWaveform(t0=t0, t1=t1, s0=s0, s1=s1, sync_part=sync_part)
-    ring.setTimeDepNode(node.getParam("TPName"), waveform)
+    waveform = NthRootWaveform(n=2.0, t0=t0, t1=t1, s0=s0, s1=s1, sync_part=sync_part)
+    # node.setWaveform(waveform)
 
 # Set kickers to t0 state.
 inj_controller.set_kicker_angles(kicker_angles_t0)
@@ -342,11 +339,13 @@ ring.set_fringe_fields(switches["fringe"])
 # Injection
 # --------------------------------------------------------------------------------------
 
+# Set absolute limits on injected coordinates (foil boundaries)
 xmin = x_inj - 0.0085
 xmax = x_inj + 0.0085
 ymin = y_inj - 0.0080
 ymax = y_inj + 0.1000
 
+# Add injection node at lattice entrance.
 ring.add_inj_node(
     n_parts=n_macros_per_turn,
     n_parts_max=n_macros_total,
@@ -360,12 +359,12 @@ ring.add_inj_node(
     dist_x_kws={
         "centerpos": x_inj,
         "centermom": 0.0,
-        "eps_rms": 0.001e-6,
+        "eps_rms": 0.221e-6,
     },
     dist_y_kws={
-        "centerpos": x_inj,
+        "centerpos": y_inj,
         "centermom": 0.0,
-        "eps_rms": 0.001e-6,
+        "eps_rms": 0.221e-6,
     },
     dist_z_kws={
         "n_inj_turns": n_inj_turns,
@@ -473,7 +472,7 @@ ring.add_tune_diagnostics_node(
     etap_x=dispersion.loc[index, "dispp_x"],
 )
 
-# Second-order moments node
+## Second-order moments node
 # [...]
 
 
@@ -481,18 +480,25 @@ ring.add_tune_diagnostics_node(
 # --------------------------------------------------------------------------------------
 
 def should_dump_bunch(turn):
-    if turn % 100 == 0:
+    if turn == 1 or turn == n_turns_track:
         return True
-    if turn == n_inj_turns + n_stored_turns - 1:
+    if turn % dump_bunch_every == 0:
         return True
     return False
 
 
 if _mpi_rank == 0:
     print("Tracking.")
-for turn in range(n_inj_turns + n_stored_turns):
-    ring.trackBunch(bunch, params_dict)
-    print(inj_controller.get_kicker_angles())
+    
+# Flat-top the kickers
+inj_controller.set_kicker_angles(kicker_angles_t1)
+        
+for turn in trange(1, n_turns_track + 1):
+    ring.trackBunch(bunch, params_dict)    
     if should_dump_bunch(turn):
         filename = get_filename("bunch_turn{}.dat".format(turn))
         bunch.dumpBunch(filename)
+        
+if _mpi_rank == 0:
+    print("output directory: {}".format(outdir))
+    print("timestamp: {}".format(timestamp))

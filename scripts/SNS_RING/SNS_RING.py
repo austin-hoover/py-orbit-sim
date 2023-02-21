@@ -63,9 +63,7 @@ from orbit.teapot import TEAPOT_MATRIX_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice_Coupled
 from orbit.teapot import TEAPOT_Lattice
 from orbit.teapot import TEAPOT_Ring
-from orbit.time_dep import TIME_DEP_Lattice
 from orbit.time_dep.waveform import ConstantWaveform
-from orbit.time_dep.waveform import SquareRootWaveform
 from orbit.utils import consts
 from orbit.utils.consts import mass_proton
 from orbit.utils.consts import speed_of_light
@@ -93,19 +91,17 @@ MAX_KICKER_ANGLES = 1.15 * np.array([12.84, 12.84, 0.0, 0.0, 0.0, 0.0, 12.84, 12
 MAX_VCORRECTOR_ANGLE = 1.5
 
 
-class SNS_RING(TIME_DEP_Lattice):
+class SNS_RING(TEAPOT_Ring):
     """Class for SNS ring simulations.
     
     The default parameters in this class are based on the nominal SNS production settings
     as of 2023-01-01.
 
-    Note that TEAPOT_Ring has been changed: children are added on instantiation.
-    This means that the nodes cannot be split. This is not a problem for
-    TEAPOT_Lattice.
+    Note that TEAPOT_Ring adds children on instantiation. This means that the nodes cannot
+    be split into parts.
     """
-
     def __init__(self):
-        TIME_DEP_Lattice.__init__(self)
+        TEAPOT_Ring.__init__(self)
         self.bunch = None
         self.sync_part = None
         self.lostbunch = None
@@ -129,11 +125,9 @@ class SNS_RING(TIME_DEP_Lattice):
         
     def set_fringe_fields(self, setting):
         for node in self.getNodes():
-            try:
+            if node.getType() != "turn counter":
                 node.setUsageFringeFieldIN(setting)
                 node.setUsageFringeFieldOUT(setting)
-            except:
-                print("No fringe method for {}".format(node.getName()))
                 
     def get_ring_twiss(self, mass=None, kin_energy=None):
         test_bunch = Bunch()
@@ -223,8 +217,8 @@ class SNS_RING(TIME_DEP_Lattice):
             dist_x_constructor = JohoTransverse
             dist_x_kws.setdefault("centerpos", X_INJ)
             dist_x_kws.setdefault("centermom", 0.0)
-            dist_x_kws.setdefault("alpha", 10.056)
-            dist_x_kws.setdefault("beta", 3.71)
+            dist_x_kws.setdefault("alpha", 0.064)
+            dist_x_kws.setdefault("beta", 10.056)
             dist_x_kws.setdefault("order", 9.0)
             dist_x_kws.setdefault("eps_rms", 0.221e-6)
         else:
