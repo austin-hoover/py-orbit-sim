@@ -1,0 +1,211 @@
+  Title, "SNS Linac Accumulator Ring";  
+!------------------------------------------------------------
+! Note: BEAM statement is excluded until after HARMON performed
+! because the ENERGY definition leads to an error in the routine.
+!------------------------------------------------------------  
+!------------Physical costants-------------------------------  
+
+  C     := 2.99792458e8;  !speed of light [m/sec]  
+  PI    := 3.141592654;  
+  DTR   := PI/180;  
+  E0    := 0.938272310;   !proton mass [GeV]  
+  EK    := 1.00;          ![GeV] injection kinetic Energy  
+  
+  PC    := sqrt(EK*(EK+2*E0));       !  Value PC  
+  Brho  := 1e9*(PC/C);                !  Value BRHO  
+  GAMMA := 1+EK/E0;                  !  Value GAMMA      
+  BETA  := sqrt(1-1/(GAMMA*GAMMA));  !  Value BETA  
+!--------------Select Nominal Tunes--------------------------  
+
+QH:=6.18435246252;
+QV:=6.19265241547;
+  MUH:=QH/4.0;  
+  MUV:=QV/4.0;  
+
+  BEAM, PARTICLE=PROTON, ENERGY=EK+E0; 
+
+  CMUX=0.252;  
+  CMUY=0.272; 
+  SCMUH=MUH-4.0*CMUX;  
+  SCMUV=MUV-4.0*CMUY;  
+  BHMAX=27.0;
+
+!--------------Call the Lattice file------------------------- 
+
+CALL, file = 'SNS_RING_dual_solenoid.lat',clear;
+
+!------------------------------------------------------------
+! Set up the beam parameters
+!------------------------------------------------------------
+!------------------------------------------------------------  
+
+USE, period=AC; 
+KF = 2.529636E+00;
+KD = -3.102721E+00; 
+Match, sequence=AC;    
+Constraint, sequence=AC, Range=#E, MUX=CMUX, MUY=CMUY;  
+Vary, name=KF, step=.00001, lower=0.0, upper=6.0;  
+Vary, name=KD, step=.00001, lower=-6.0, upper=0.0;  
+Simplex, calls=2000, Tolerance=1.0E-10;  
+Endmatch;  
+
+!----------------------------------------------------------
+USE, period=SP;  
+Match, sequence=SP;
+Vary, name=KDE, step=0.00001, lower=-8.0, upper=0.0;  
+Vary, name=KFC, step=0.00001, lower=0.0, upper=8.0;  
+Vary, name=KDC, step=0.00001, lower=-8.0, upper=0.0;  
+Vary, name=KF, step=0.00001, lower=0.0, upper=6.0;  
+Vary, name=KD, step=0.00001, lower=-6.0, upper=0.0;  
+  
+WEIGHT, DX = 0.0, DPX = 0.0, DY = 0.0, DPY = 0.0;  
+WEIGHT, MUX = 10.0, MUY = 10.0, T = 0.0, PT = 0.0;  
+  
+WEIGHT, DX = 1.0, DPX = 10.0;  
+Constraint, Range=QFC[1], DX = 0.0, DPX = 0.0;  
+Constraint, Range=#E, MUX=MUH, MUY=MUV;
+Constraint, Range=QD[1], BETY<14;
+Constraint, Range=QD[2], BETY<14;
+Constraint, Range=QD[3], BETY<14;
+ 
+Simplex, calls=2000, Tolerance=1.0E-10;  
+Lmdif, calls=2000, Tolerance=1.0E-10;  
+Simplex, calls=2000, Tolerance=1.0E-10;  
+Lmdif, calls=2000, Tolerance=1.0E-10 ; 
+Endmatch;  
+
+!------------------------------------------------------------  
+
+Use, period=SP;  
+Match, sequence=SP; 
+Vary, name=KF, step=.00001, lower=0.0, upper=6.0;  
+Vary, name=KD, step=.00001, lower=-6.0, upper=0.0;  
+Vary, name=KFC, step=0.00001, lower=0.0, upper=8.0;  
+Constraint, Range=QFC[1], DX = 0.0, DPX = 0.0;  
+Constraint, Range=#E, MUX=MUH, MUY=MUV;  
+Lmdif, calls=2000, Tolerance=1.0E-10;  
+Endmatch;
+  
+!-----------------------------------------------------------
+
+Use, period=RING; 
+Match, sequence=RING;
+Vary, name=KDEE, step=.00001, lower=-8.0, upper=0.0;
+Vary, name=KFC, step=.00001, lower=0.0, upper=8.0;
+Vary, name=KDC, step=.00001, lower=-8.0, upper=0.0;
+Constraint, Range=#E, MUX=QH, MUY=QV;
+Constraint, Range=#E, MUY=QV;
+Constraint, Range=QDEE, BETY<13.0;
+Constraint, Range=QD, BETY<13.0;
+Simplex, calls=2000, Tolerance=1.0E-10;
+Endmatch;
+
+!------------------------------------------------------------
+! Alternatively one can just enter the right quad values
+!------------------------------------------------------------
+!KD:=-4.451524E+00;
+!KF:= 3.951462E+00;
+!KF26:=3.651998164883;
+!KDEE:=-2.973303170546;
+!KDC:=-3.832243E+00;
+!KFC:= 3.628386E+00; 
+!------------------ Chromaticity correction ------------------  
+! Uncomment the following section to perform chromaticity 
+! correction.
+!-------------------------------------------------------------
+
+!use, sequence=RNG;
+!twiss,deltap=-.001:.001:.0005;
+!write,table=summ,file=summ.madx-nat-chrom.data;
+
+!use, sequence=RNG;
+!Match, sequence=RNG;
+!  VARY, NAME=CHRM3,STEP=0.001;  
+!  VARY, NAME=CHRM4,STEP=0.001;  
+!  VARY, NAME=CHRM5,STEP=0.001;  
+!  VARY, NAME=CHRM6,STEP=0.001;  ;
+
+!  global, sequence=RNG, DQ1=0, DQ2=0;
+!  global, sequence=RNG, DDQ1=0, DDQ2=0;
+!  Simplex, calls=2000, Tolerance=1.0E-10;
+!Lmdif, calls=2000, Tolerance=1.0E-10;  ; 
+!Endmatch;  
+  
+!Use, period=RNG;
+!madchrom: macro={
+!  twiss;
+!  qx0=table(summ,q1);
+!  qx1=table(summ,dq1);
+!  qy0=table(summ,q2);
+!  qy1=table(summ,dq2);
+!  dpp=.001;
+!  twiss,deltap=dpp;
+!  qxpp=table(summ,q1);
+!  qypp=table(summ,q2);
+!  twiss,deltap=-dpp;
+!  qxmp=table(summ,q1);
+!  qymp=table(summ,q2);
+!  qx2=0.001*(qxpp-2*qx0+qxmp)/dpp^2;
+!  qy2=0.001*(qypp-2*qy0+qymp)/dpp^2;
+!};
+
+!use, sequence=RNG;
+!Match, use_macro;
+!  VARY, NAME=CHRM3,STEP=0.0001;  
+!  VARY, NAME=CHRM4,STEP=0.0001;  
+!  VARY, NAME=CHRM5,STEP=0.0001;  
+!  VARY, NAME=CHRM6,STEP=0.0001;  
+!   use_macro, name=madchrom;
+!   constraint, expr= qx1=0;
+!   constraint, expr= qy1=0;
+!   constraint, expr= qx2=0;
+!   constraint, expr= qy2=0;
+!  lmdif,calls=2000;
+!Endmatch;  
+
+!twiss,deltap=-.001:.001:.0005;
+!write,table=summ,file=summ.madx-corr-chrom.data;
+
+!------------------------------------------------------------
+! Print the final output.  Put the BEAM statement in here
+! to generate the correct lattices.
+!------------------------------------------------------------
+
+USE, period=RNGINJ;  
+
+SAVE,sequence=RNGINJ, FILE='LATTICE.lat',clear;
+
+TWISS,sequence=RNGINJ,file='optics';
+
+SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+TWISS,sequence=RNGINJ, FILE='twiss';
+
+ setplot;
+ PLOT, HAXIS=S, VAXIS1=BETX,BETY, RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=BETX, RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=BETY, RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=DX,DY,   RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=DX,   RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=DY,   RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=X,Y,   RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=X,   RANGE=#S/#E, STYLE=100;
+ PLOT, HAXIS=S, VAXIS1=Y,   RANGE=#S/#E, STYLE=100;
+
+
+VALUE, QTV_A01->L;
+VALUE, QTV_A01->K1*Brho;
+VALUE, QD->K1 * Brho;
+VALUE, QF->K1 * Brho;
+VALUE, QF26->K1 * Brho;
+VALUE, QDEE->K1 * Brho;
+VALUE, QDC->K1 * Brho;
+VALUE, QFC->K1 * Brho;
+
+!
+! Generate Twiss output for G4BL 
+!
+! SELECT, FLAG=TWISS   , CLEAR;  ! Get rid of old select to start new one.
+SELECT, FLAG=TWISS   , COLUMN=NAME,KEYWORD,S,L,K1L,K0L,ANGLE,HKICK,VKICK,TILT;
+TWISS , sequence=RNGINJ, FILE="optics_for_G4BL";
+
+stop; 
