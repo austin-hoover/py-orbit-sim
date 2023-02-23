@@ -114,57 +114,57 @@ Endmatch;
 ! correction.
 !-------------------------------------------------------------
 
-!use, sequence=RNG;
-!twiss,deltap=-.001:.001:.0005;
-!write,table=summ,file=summ.madx-nat-chrom.data;
+use, sequence=RNG;
+twiss,deltap=-.001:.001:.0005;
+write,table=summ,file=summ.madx-nat-chrom.data;
 
-!use, sequence=RNG;
-!Match, sequence=RNG;
-!  VARY, NAME=CHRM3,STEP=0.001;  
-!  VARY, NAME=CHRM4,STEP=0.001;  
-!  VARY, NAME=CHRM5,STEP=0.001;  
-!  VARY, NAME=CHRM6,STEP=0.001;  ;
+use, sequence=RNG;
+Match, sequence=RNG;
+  VARY, NAME=CHRM3,STEP=0.001;  
+  VARY, NAME=CHRM4,STEP=0.001;  
+  VARY, NAME=CHRM5,STEP=0.001;  
+  VARY, NAME=CHRM6,STEP=0.001;  ;
 
-!  global, sequence=RNG, DQ1=0, DQ2=0;
-!  global, sequence=RNG, DDQ1=0, DDQ2=0;
-!  Simplex, calls=2000, Tolerance=1.0E-10;
-!Lmdif, calls=2000, Tolerance=1.0E-10;  ; 
-!Endmatch;  
+  global, sequence=RNG, DQ1=0, DQ2=0;
+  global, sequence=RNG, DDQ1=0, DDQ2=0;
+  Simplex, calls=2000, Tolerance=1.0E-10;
+Lmdif, calls=2000, Tolerance=1.0E-10;  ; 
+Endmatch;  
   
-!Use, period=RNG;
-!madchrom: macro={
-!  twiss;
-!  qx0=table(summ,q1);
-!  qx1=table(summ,dq1);
-!  qy0=table(summ,q2);
-!  qy1=table(summ,dq2);
-!  dpp=.001;
-!  twiss,deltap=dpp;
-!  qxpp=table(summ,q1);
-!  qypp=table(summ,q2);
-!  twiss,deltap=-dpp;
-!  qxmp=table(summ,q1);
-!  qymp=table(summ,q2);
-!  qx2=0.001*(qxpp-2*qx0+qxmp)/dpp^2;
-!  qy2=0.001*(qypp-2*qy0+qymp)/dpp^2;
-!};
+Use, period=RNG;
+madchrom: macro={
+  twiss;
+  qx0=table(summ,q1);
+  qx1=table(summ,dq1);
+  qy0=table(summ,q2);
+  qy1=table(summ,dq2);
+  dpp=.001;
+  twiss,deltap=dpp;
+  qxpp=table(summ,q1);
+  qypp=table(summ,q2);
+  twiss,deltap=-dpp;
+  qxmp=table(summ,q1);
+  qymp=table(summ,q2);
+  qx2=0.001*(qxpp-2*qx0+qxmp)/dpp^2;
+  qy2=0.001*(qypp-2*qy0+qymp)/dpp^2;
+};
 
-!use, sequence=RNG;
-!Match, use_macro;
-!  VARY, NAME=CHRM3,STEP=0.0001;  
-!  VARY, NAME=CHRM4,STEP=0.0001;  
-!  VARY, NAME=CHRM5,STEP=0.0001;  
-!  VARY, NAME=CHRM6,STEP=0.0001;  
-!   use_macro, name=madchrom;
-!   constraint, expr= qx1=0;
-!   constraint, expr= qy1=0;
-!   constraint, expr= qx2=0;
-!   constraint, expr= qy2=0;
-!  lmdif,calls=2000;
-!Endmatch;  
+use, sequence=RNG;
+Match, use_macro;
+  VARY, NAME=CHRM3,STEP=0.0001;  
+  VARY, NAME=CHRM4,STEP=0.0001;  
+  VARY, NAME=CHRM5,STEP=0.0001;  
+  VARY, NAME=CHRM6,STEP=0.0001;  
+   use_macro, name=madchrom;
+   constraint, expr= qx1=0;
+   constraint, expr= qy1=0;
+   constraint, expr= qx2=0;
+   constraint, expr= qy2=0;
+  lmdif,calls=2000;
+Endmatch;  
 
-!twiss,deltap=-.001:.001:.0005;
-!write,table=summ,file=summ.madx-corr-chrom.data;
+twiss,deltap=-.001:.001:.0005;
+write,table=summ,file=summ.madx-corr-chrom.data;
 
 !------------------------------------------------------------
 ! Print the final output.  Put the BEAM statement in here

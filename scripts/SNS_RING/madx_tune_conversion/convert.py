@@ -34,7 +34,7 @@ def set_madx_file_tunes(script_name, nux_madx=1.0, nuy_madx=1.0):
         
 def set_input_file(script_name, latfile):
     prefix = "CALL, file = "
-    new_line = "".join([prefix, "'{}',clear;\n".format(latfile)])
+    new_line = "".join([prefix, "'{}';\n".format(latfile)])
     for line in fileinput.input([script_name], inplace=True):
         if line.strip().startswith(prefix):
             line = new_line
@@ -139,10 +139,10 @@ if __name__ == '__main__':
     nux = 6.180  # desired nux
     nuy = 6.180  # desired nux
     atol = 1.0e-5  # absolute tolerance
-    madx_script = 'SNS_RING.mad'
+    madx_script = 'SNS_RING_chromaticity.mad'
     input_file = "SNS_RING_dual_solenoid.lat"
     latfile = "LATTICE.lat"
-    latseq = 'rnginj'
+    latseq = 'rnginjsol'
     fringe = False
 
     # Remove old output
@@ -157,8 +157,6 @@ if __name__ == '__main__':
     print('Done.')
     print 'error_x = {:.5f}'.format(error_x)
     print 'error_y = {:.5f}'.format(error_y)
-    print 'nux_madx = {:.5f}'.format(nux_madx)
-    print 'nuy_madx = {:.5f}'.format(nuy_madx)
 
     # Save lattice file and correct inputs
     file = open('./_output/madx_to_pyorbit.dat', 'w')
