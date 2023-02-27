@@ -1,69 +1,76 @@
 """Compute transfer matrix parameters."""
 from __future__ import print_function
 import os
+import pathlib
 from pprint import pprint 
 import sys
 
 import numpy as np
+import pandas as pd
 
 from bunch import Bunch 
 from orbit.teapot import TEAPOT_Lattice
+from orbit.teapot import TEAPOT_Ring
 from orbit.teapot import TEAPOT_MATRIX_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice_Coupled
 from orbit.utils.consts import mass_proton
 
+sys.path.append(os.getcwd())
+from pyorbit_sim.utils import ScriptManager
 
-kin_energy = 1.0  # [GeV]
-mass = mass_proton  # [GeV / c^2]
-lattice_filename = '/home/46h/repo/accelerator-models/SNS/RING/SNS_ring_nux6.18_nuy6.18.lat'
-lattice_seq = 'rnginj'
+
+# Setup
+man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
+man.save_info()
+man.save_script_copy()
+pprint(man.get_info())
+
+
+mass = mass_proton  # particle mass [GeV / c^2]
+kin_energy = 0.800  # synchronous particle energy [GeV]
+madx_file = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)), 
+    "SNS_RING_nux6.18_nuy6.18_dual_solenoid.lat",
+)
+madx_seq = "rnginjsol"
 
 lattice = TEAPOT_Lattice()
-lattice.readMADX(lattice_filename, lattice_seq)
+lattice.readMADX(madx_file, madx_seq)
 for node in lattice.getNodes():
-    node.setUsageFringeFieldIN(False)
-    node.setUsageFringeFieldOUT(False)  
-    if node.getName() == 'scbdsol':
-        print('Found solenoid node:')
-        print('    name = {}'.format(node.getName()))
-        print('    type = {}'.format(node.getType()))
-        print('    B = {} [1 / m]'.format(node.getParam('B')))
+    if node.getType() != "turn counter":
+        node.setUsageFringeFieldIN(False)
+        node.setUsageFringeFieldOUT(False)  
+for name in ["scbdsol_c13a", "scbdsol_c13b"]:
+    node = lattice.getNodeForName(name)
+    B =  0.6 / (2.0 * node.getLength())
+    # node.setParam("B", B)
+    print("{}: B={:.2f}, L={:.2f}".format(node.getName(), node.getParam("B"), node.getLength()))
         
-test_bunch = Bunch()
-test_bunch.mass(mass)
-test_bunch.getSyncParticle().kinEnergy(kin_energy)
+bunch = Bunch()
+bunch.mass(mass)
+bunch.getSyncParticle().kinEnergy(kin_energy)
 
 print()
-print('Courant-Snyder parameters (from MATRIX_Lattice:')
-print('-----------------------------------------------')
-matrix_lattice = TEAPOT_MATRIX_Lattice(lattice, test_bunch)
+print("Courant-Snyder parameters (MATRIX_Lattice):")
+print("-------------------------------------------")
+matrix_lattice = TEAPOT_MATRIX_Lattice(lattice, bunch)
 params = matrix_lattice.getRingParametersDict()
 pprint(params)
 
 print()
-print('Lebedev-Bogacz parameters (from MATRIX_Lattice_Coupled):')
-print('--------------------------------------------------------`')
-matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(lattice, test_bunch, parameterization='LB')
+print("Lebedev-Bogacz parameters (MATRIX_Lattice_Coupled):")
+print("----------------------------------------------------`")
+matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(lattice, bunch, parameterization="LB")
 params = matrix_lattice.getRingParametersDict()
 pprint(params)
 
 print()
-print('4x4 transfer matrix:')
-M = np.zeros((4, 4))
-for i in range(4):
-    for j in range(4):
-        M[i, j] = matrix_lattice.oneTurnMatrix.get(i, j)
-print(M)
+print("Tracked Twiss parameters (MATRIX_Lattice_Coupled):")
+print("--------------------------------------------------")
+data = matrix_lattice.getRingTwissData()
+df = pd.DataFrame()
+for key in data:
+    df[key] = data[key]
+print(df)
 
-
-# Print painting path Re[v * exp(-i * mu)]
-print()
-print('Painting path:')
-phase = np.radians(0.0)
-v1, _, v2, _ = params['eigvecs'].T
-for mode in [1, 2]:
-    v = [v1, v2][mode - 1]
-    print('mode = {}'.format(mode))
-    print('phase = {}'.format(phase))
-    print('Re[v * exp(-1j * phase)] = {}'.format(np.real(v * np.exp(-1.0j * phase))))
-    print()
+df.to_csv(man.get_filename("twiss.csv"))
