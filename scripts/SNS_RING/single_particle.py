@@ -27,45 +27,6 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-# # Create output directory.
-# outdir = "/home/46h/sim_data/"
-# path = pathlib.Path(__file__)
-# script_name = path.stem
-# outdir = os.path.join(
-#     outdir, 
-#     path.as_posix().split("scripts/")[1].split(".py")[0], 
-#     time.strftime("%Y-%m-%d"),
-# )
-# if not os.path.isdir(outdir):
-#     os.makedirs(outdir)
-# print("Output directory: {}".format(outdir))
-
-# # Get timestamped output file prefix.
-# timestamp = time.strftime("%y%m%d%H%M%S")
-# prefix = "{}-{}".format(timestamp, script_name)
-# print(prefix)
-
-# def get_filename(filename):
-#     """Add output directory path and timestamp prefix to filename."""
-#     return os.path.join(outdir, "{}_{}".format(prefix, filename))
-
-
-# # Save a timestamped copy of this file.
-# shutil.copy(__file__, get_filename(".py"))
-
-# # Save git hash
-# git_hash = utils.git_revision_hash()
-# git_url = "{}/commit/{}".format(utils.git_url(), git_hash)
-# if git_hash and git_url and utils.is_git_clean():
-#     print("Repository is clean.")
-#     print("Code should be available at {}".format(git_url))
-# else:
-#     print("Unknown git revision.")
-# info = open(get_filename("info.txt"), "w")
-# info.write("git_hash: {}\n".format(git_hash))
-# info.write("git_url: {}\n".format(git_url))
-# info.close()
-
 man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
 man.save_info()
 man.save_script_copy()
