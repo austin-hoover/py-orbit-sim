@@ -1,59 +1,72 @@
 from __future__ import print_function
+import math
 import os
+import pathlib
+import pickle
+from pprint import pprint
+import shutil
 import sys
 import time
-from pathlib import Path
+
+import numpy as np
 
 from bunch import Bunch
+from orbit.bunch_generators import TwissContainer
+from orbit.bunch_generators import WaterBagDist2D
+from orbit.bunch_generators import WaterBagDist3D
+from orbit.diagnostics import diagnostics
 from orbit.lattice import AccActionsContainer
 from orbit.py_linac.lattice import LinacAccLattice
 from orbit.py_linac.lattice import LinacAccNodes
 from orbit.utils import consts
 import orbit_mpi
 
-from SNS_BTF import BTFLatticeGenerator
+from SNS_BTF import SNS_BTF
 
 sys.path.append(os.getcwd())
+from pyorbit_sim import bunch_utils as bu
+from pyorbit_sim import utils
 from pyorbit_sim.linac import Monitor
 from pyorbit_sim.linac import track_bunch
+from pyorbit_sim.utils import ScriptManager
 
 
 # Setup
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
 
+# MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
 _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-outdir = "./data/"
-script_name = Path(__file__).stem
+# Create output directory and save script info. (Not yet MPI compatible.)
+man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
+man.save_info()
+man.save_script_copy()
+print("Script info:")
+pprint(man.get_info())
 
-# I think all processess should return the same timestamp, but to be safe:
-timestamp = ''
-if _mpi_rank == 0:
-    timestamp = time.strftime("%y%m%d%H%M%S")
-timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, 0, _mpi_comm)
-prefix = "{}-{}".format(timestamp, script_name)
-    
-    
+
+
 # Lattice
 # ------------------------------------------------------------------------------
 max_drift_length = 0.010  # [m]
-btf_lattice_generator = BTFLatticeGenerator(
-    coef_filename="/home/46h/repo/btf-lattice/magnets/default_i2gl_coeff.csv",
+file_path = os.path.dirname(os.path.realpath(__file__))
+btf = SNS_BTF(
+    coef_filename=os.path.join(file_path, "data/magnets/default_i2gl_coeff.csv")
 )
-btf_lattice_generator.init_lattice(
-    xml="/home/46h/repo/btf-lattice/xml/btf_lattice_default.xml",
+btf.init_lattice(
+    xml=os.path.join(file_path, "data/xml/BTF_lattice_default.xml"),
     beamlines=["MEBT1", "MEBT2", "MEBT3"], 
     max_drift_length=max_drift_length,
 )
-btf_lattice_generator.update_quads_from_mstate(
-    "/home/46h/repo/btf-lattice/mstate/TransmissionBS34_04212022.mstate",
+btf.update_quads_from_mstate(
+    os.path.join(file_path, "data/mstate/TransmissionBS34_04212022.mstate"),
     value_type="current",
 )
-btf_lattice_generator.make_pmq_fields_overlap(z_step=max_drift_length, verbose=True)
-btf_lattice_generator.add_aperture_nodes(drift_step=0.1)
-btf_lattice_generator.add_space_charge_nodes(
+btf.make_pmq_fields_overlap(z_step=max_drift_length, verbose=True)
+btf.add_aperture_nodes(drift_step=0.1)
+btf.add_space_charge_nodes(
     grid_size_x=64, 
     grid_size_y=64,
     grid_size_z=64,
@@ -61,27 +74,28 @@ btf_lattice_generator.add_space_charge_nodes(
     n_bunches=3,
     freq=402.5e6,
 )
-lattice = btf_lattice_generator.lattice
+lattice = btf.lattice
 
 # Save node positions.
 if _mpi_rank == 0:
-    file = open(os.path.join(outdir, "{}_nodes.dat".format(prefix)), "w")
+    file = open(man.get_filename("nodes.dat"), "w")
     file.write("node, position\n")
     for node in lattice.getNodes():
         file.write("{}, {}, {}\n".format(node.getName(), node.getPosition(), node.getLength()))
     file.close()
 
     # Write lattice structure to file.
-    file = open(os.path.join(outdir, "{}_lattice_structure.txt".format(prefix)), "w")
+    file = open(man.get_filename("lattice_structure.txt"), "w")
     file.write(lattice.structureToText())
     file.close()
 
-
+    
+    
 # Bunch
 # ------------------------------------------------------------------------------
 
 filename = os.path.join(
-    "/home/46h/BTF/meas_analysis/2022-06-26_scan-xxpy-image-ypdE/data/",
+    "/home/46h/projects/BTF/meas_analysis/2022-06-26_scan-xxpy-image-ypdE/data/",
     "220626140058-scan-xxpy-image-ypdE_samp6D_1.00e+06_decorrelated.dat",
 )
 bunch = Bunch()
@@ -108,11 +122,12 @@ if _mpi_rank == 0:
     print("  size (global) = {:.2e}".format(bunch_size_global))
     
     
+    
 # Sim
 # ------------------------------------------------------------------------------
 
 start = "MEBT:HZ04"  # start node (name or position)
-stop = "MEBT:HZ34a"  # stop node (name or position)
+stop = "MEBT:VT34a"  # stop node (name or position)
 
 monitor = Monitor(
     start_position=0.0, # this will be set automatically in `track_bunch`.
@@ -127,8 +142,8 @@ track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=Tru
 
 if _mpi_rank == 0 and monitor.track_history:
     print("Writing RMS history to file.")
-    monitor.write(filename=os.path.join(outdir, "{}_history.dat".format(prefix)), delimiter=",")
+    monitor.write(filename=man.get_filename("history.dat"), delimiter=",")
 
 if _mpi_rank == 0:
     print("Saving output bunch to file.")
-bunch.dumpBunch(os.path.join(outdir, "{}_bunch_{}.dat".format(prefix, stop)))
+bunch.dumpBunch(man.get_filename("bunch_{}.dat".format(stop)))

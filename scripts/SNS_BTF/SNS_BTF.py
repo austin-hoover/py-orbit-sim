@@ -142,7 +142,7 @@ def get_quad_func(quad_node):
         return None
                 
     
-class BTFLatticeGenerator:
+class SNS_BTF:
     """Class to generate BTF lattice.
 
     Attributes

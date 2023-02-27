@@ -17,10 +17,9 @@ from orbit.py_linac.lattice import LinacAccLattice
 from orbit.py_linac.lattice import LinacAccNodes
 
 sys.path.append('/home/46h/py-orbit-sim/')
-from pyorbit_sim.btf.lattice import BTFLatticeGenerator
-from pyorbit_sim.btf.sim import Monitor
-from pyorbit_sim.btf.sim import track_bunch
 from pyorbit_sim import bunch_utils as bu
+from pyorbit_sim.linac import Monitor
+from pyorbit_sim.linac import track_bunch
 
 
 # Setup
