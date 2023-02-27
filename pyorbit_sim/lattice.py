@@ -7,6 +7,7 @@ import scipy.optimize
 from bunch import Bunch
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
+from orbit.teapot import teapot
 from orbit.teapot import TEAPOT_Lattice
 from orbit.teapot import TEAPOT_MATRIX_Lattice
 from orbit_utils import Matrix
@@ -119,7 +120,7 @@ def fodo_lattice(
     """
     angle = np.radians(angle)
 
-    def fodo(k1, k2):
+    def _fodo(k1, k2):
         """Return FODO lattice.
 
         k1, k2 : float
@@ -165,7 +166,9 @@ def fodo_lattice(
         # Other
         if reverse:
             lattice.reverseOrder()
-        lattice.set_fringe(fringe)
+        for node in lattice.getNodes():
+            node.setUsageFringeFieldIN(fringe)
+            node.setUsageFringeFieldOUT(fringe)
         lattice.initialize()
         for node in lattice.getNodes():
             name = node.getName()
@@ -175,14 +178,19 @@ def fodo_lattice(
                 node.setTiltAngle(-angle)
         return lattice
 
-    def cost(kvals, correct_tunes, mass=0.93827231, energy=1):
-        lattice = fodo(*kvals)
-        M = utils.transfer_matrix(lattice, mass, energy)
-        tmat = twiss.TransferMatrix(M)
-        return correct_phase_adv - 360.0 * np.array(tmat.params['eigtunes'])
+    def cost(kvals, correct_tunes, mass=0.93827231, kin_energy=1.0):
+        lattice = _fodo(*kvals)
+        bunch = Bunch()
+        bunch.mass(mass)
+        bunch.getSyncParticle().kinEnergy(kin_energy)
+        matrix_lattice = TEAPOT_MATRIX_Lattice(lattice, bunch)
+        params = matrix_lattice.getRingParametersDict()
+        mux = 360.0 * params["fractional tune x"]
+        muy = 360.0 * params["fractional tune y"]
+        return correct_phase_adv - np.array([mux, muy])
 
     correct_phase_adv = np.array([mux, muy])
     k0 = np.array([0.5, 0.5])  # ~ 80 deg phase advance
     result = scipy.optimize.least_squares(cost, k0, args=(correct_phase_adv,))
     k1, k2 = result.x
-    return fodo(k1, k2)
+    return _fodo(k1, k2)
