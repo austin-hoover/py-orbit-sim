@@ -89,6 +89,7 @@ from SNS_RING import Y_INJ
 
 sys.path.append(os.getcwd())
 from pyorbit_sim import utils
+from pyorbit_sim.utils import ScriptManager
 
 
 # Setup
@@ -99,60 +100,19 @@ _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
 _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-
-# Create output directory.
-outdir = "/home/46h/sim_data/"
-path = pathlib.Path(__file__)
-script_name = path.stem
-outdir = os.path.join(
-    outdir, 
-    path.as_posix().split("scripts/")[1].split(".py")[0], 
-    time.strftime("%Y-%m-%d"),
-)
-if _mpi_rank == 0:
-    if not os.path.isdir(outdir):
-        os.makedirs(outdir)
-    print("Output directory: {}".format(outdir))
-        
-# Get timestamped output file prefix.
-timestamp = ""
-if _mpi_rank == 0:
-    timestamp = time.strftime("%y%m%d%H%M%S")
-timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, 0, _mpi_comm)
-prefix = "{}-{}".format(timestamp, script_name)
-if _mpi_rank == 0:
-    print(prefix)
-
-
-def get_filename(filename):
-    """Add output directory path and timestamp prefix to filename."""
-    return os.path.join(outdir, "{}_{}".format(prefix, filename))
-
-
-# Save a timestamped copy of this file. (It would be better to use version-control.)
-shutil.copy(__file__, get_filename(".py"))
-
-# Save git info
-git_hash = utils.git_revision_hash()
-git_url = "{}/commit/{}".format(utils.git_url(), git_hash)
-if git_hash and git_url and utils.is_git_clean():
-    print("Repository is clean.")
-    print("Code should be available at {}".format(git_url))
-else:
-    print("Unknown git revision.")
-    
-info = open(get_filename("info.txt"), "w")
-info.write("git_hash: {}\n".format(git_hash))
-info.write("git_url: {}\n".format(git_url))
-info.close()
-
+# Create output directory and save script info. (Not yet MPI compatible.)
+man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
+man.save_info()
+man.save_script_copy()
+print("Script info:")
+pprint(man.get_info())
 
 # Run parameters
 madx_file = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), 
-    "data/SNS_RING_nux6.18_nuy6.18_sol.lat",
+    "data/SNS_RING_nux6.18_nuy6.18_dual_solenoid/LATTICE.lat",
 )
-madx_seq = "rnginj"
+madx_seq = "rnginjsol"
 mass = mass_proton  # particle mass [GeV / c^2]
 kin_energy = 0.800  # synchronous particle energy [GeV]
 n_inj_turns = 1  # number of injected turns
@@ -169,6 +129,7 @@ switches = {
     "foil": False,
     "fringe": False,
     "RF": False,
+    "solenoid": False,
     "space_charge_transverse": False,
     "space_charge_longitudinal": False,
 }
@@ -182,12 +143,21 @@ ring = SNS_RING()
 ring.readMADX(madx_file, madx_seq)
 ring.initialize()
 
+# Toggle solenoid.
+for name in ["scbdsol_c13a", "scbdsol_c13b"]:
+    node = ring.getNodeForName(name)
+    B =  0.6 / (2.0 * node.getLength())
+    if switches["solenoid"]:
+        B = 0.6 / (2.0 * node.getLength())
+    else:
+        B = 0.0
+    node.setParam("B", B)
+    print("{}: B={:.2f}, L={:.2f}".format(node.getName(), node.getParam("B"), node.getLength()))
 
+    
 # Linear lattice analysis (uncoupled)
 
-## Turn off fringe fields. (This is affecting the MATRIX_Lattice tune calculation
-## below. But shouldn't MATRIX_Lattice just extract the linear transfer matrix
-# from each node? TODO: Figure out what's going on.)
+## Turn off fringe fields.
 ring.set_fringe_fields(False)
 
 ## Analyze the one-turn transfer matrix.
@@ -199,10 +169,9 @@ tmat_params = matrix_lattice.getRingParametersDict()
 if _mpi_rank == 0:
     print("Transfer matrix parameters (uncoupled):")
     pprint(tmat_params)
-file = open(get_filename("lattice_params_uncoupled.pkl"), "wb")
+file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
 pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 file.close()
-
 
 ## Save parameters throughout the ring.
 twiss = ring.get_ring_twiss(mass=mass, kin_energy=kin_energy)
@@ -210,10 +179,10 @@ dispersion = ring.get_ring_dispersion(mass=mass, kin_energy=kin_energy)
 if _mpi_rank == 0:
     print("Twiss:")
     print(twiss)
-    twiss.to_csv(get_filename("lattice_twiss.dat"), sep=" ")
+    twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
     print("Dispersion:")
     print(dispersion)
-    dispersion.to_csv(get_filename("lattice_dispersion.dat"), sep=" ")
+    dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
 
 
 # Linear lattice analysis (coupled)
@@ -224,14 +193,18 @@ tmat_params = matrix_lattice.getRingParametersDict()
 if _mpi_rank == 0:
     print("Transfer matrix parameters (coupled):")
     pprint(tmat_params)
-file = open(get_filename("lattice_params_coupled.pkl"), "wb")
+file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
 pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
 file.close()
 
 ## Compute Twiss parameters throughout the ring.
-## [...]
+twiss_coupled = ring.get_ring_twiss_coupled(mass=mass, kin_energy=kin_energy)
+if _mpi_rank == 0:
+    print("Twiss:")
+    print(twiss_coupled)
+    twiss.to_csv(man.get_filename("lattice_twiss_coupled.dat"), sep=" ")
 
-## Turn on fringe fields. (See previous comment.)
+## Turn on fringe fields.
 ring.set_fringe_fields(switches["fringe"])
 
 
@@ -303,21 +276,21 @@ if bias:
     inj_controller.set_inj_coords_vcorrectors([0.0, 0.0, 0.007, -0.0005], verbose=1)
     inj_controller.print_inj_coords()
 traj = inj_controller.get_trajectory()
-traj.to_csv(get_filename("inj_orbit_bias.dat"), sep=" ")
+traj.to_csv(man.get_filename("inj_orbit_bias.dat"), sep=" ")
 
 ## Set the initial phase space coordinates at the injection point.
 print("Optimizing kickers (t=0)")
 kicker_angles_t0 = inj_controller.set_inj_coords_fast(inj_coords_t0, **solver_kws)
 inj_controller.print_inj_coords()
 traj = inj_controller.get_trajectory()
-traj.to_csv(get_filename("inj_orbit_t0.dat"), sep=" ")
+traj.to_csv(man.get_filename("inj_orbit_t0.dat"), sep=" ")
 
 ## Set the final phase space coordinates at the injection point.
 print("Optimizing kickers (t=1)")
 kicker_angles_t1 = inj_controller.set_inj_coords_fast(inj_coords_t1, **solver_kws)
 inj_controller.print_inj_coords()
 traj = inj_controller.get_trajectory()
-traj.to_csv(get_filename("inj_orbit_t1.dat"), sep=" ")
+traj.to_csv(man.get_filename("inj_orbit_t1.dat"), sep=" ")
 
 # Set kicker waveforms.
 seconds_per_turn = ring.getLength() / (sync_part.beta() * consts.speed_of_light)
@@ -462,7 +435,7 @@ if switches["space_charge_transverse"]:
 # There is not much dispersion at the injection point...
 index = 0
 ring.add_tune_diagnostics_node(
-    filename=get_filename("tunes.dat"),
+    filename=man.get_filename("tunes.dat"),
     position=twiss.loc[index, "s"],
     beta_x=twiss.loc[index, "beta_x"],
     beta_y=twiss.loc[index, "beta_y"],
@@ -496,9 +469,9 @@ inj_controller.set_kicker_angles(kicker_angles_t1)
 for turn in trange(1, n_turns_track + 1):
     ring.trackBunch(bunch, params_dict)    
     if should_dump_bunch(turn):
-        filename = get_filename("bunch_turn{}.dat".format(turn))
+        filename = man.get_filename("bunch_turn{}.dat".format(turn))
         bunch.dumpBunch(filename)
         
 if _mpi_rank == 0:
-    print("output directory: {}".format(outdir))
-    print("timestamp: {}".format(timestamp))
+    print("Script info:")
+    pprint(man.get_info())

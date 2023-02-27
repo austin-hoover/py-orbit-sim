@@ -145,6 +145,30 @@ class SNS_RING(TEAPOT_Ring):
         twiss["beta_x"] = np.array(pos_beta_x)[:, 1]
         twiss["beta_y"] = np.array(pos_beta_y)[:, 1]
         return twiss
+    
+    def get_ring_twiss_coupled(self, mass=None, kin_energy=None, parameterization="LB"):
+        test_bunch = Bunch()
+        test_bunch.mass(mass)
+        test_bunch.getSyncParticle().kinEnergy(kin_energy)
+        matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(self, test_bunch, parameterization=parameterization)
+        data = matrix_lattice.getRingTwissData()
+        twiss = pd.DataFrame()
+        for key in [
+            "s",
+            "beta_1x",
+            "beta_1y",
+            "beta_2x",
+            "beta_1y",
+            "alpha_1x",
+            "alpha_1y",
+            "alpha_2x",
+            "alpha_2y",
+            "u",
+            "nu1",
+            "nu2",
+        ]:
+            twiss[key] = data[key]
+        return twiss
 
     def get_ring_dispersion(self, mass=None, kin_energy=None):
         test_bunch = Bunch()
