@@ -155,7 +155,3 @@ track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=Tru
 if _mpi_rank == 0 and monitor.track_history:
     print("Writing RMS history to file.")
     monitor.write(filename=man.get_filename("history.dat"), delimiter=",")
-
-if _mpi_rank == 0:
-    print("Saving output bunch to file.")
-bunch.dumpBunch(man.get_filename("bunch_{}.dat".format(stop)))
