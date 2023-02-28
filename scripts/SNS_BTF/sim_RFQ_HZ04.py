@@ -1,8 +1,4 @@
-"""Track RFQ-simulated bunch to first measurement plane.
-
-This is the same as `sim.py` but has a smaller step size and predefined
-dump locations.
-"""
+"""Track RFQ-simulated bunch to first measurement plane."""
 from __future__ import print_function
 import math
 import os
@@ -55,7 +51,7 @@ pprint(man.get_info())
 
 # Lattice
 # ------------------------------------------------------------------------------
-max_drift_length = 0.01  # [m]
+max_drift_length = 0.001  # [m]
 file_path = os.path.dirname(os.path.realpath(__file__))
 btf = SNS_BTF(
     coef_filename=os.path.join(file_path, "data/magnets/default_i2gl_coeff.csv")
