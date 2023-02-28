@@ -3,6 +3,8 @@ import os
 import sys
 
 import numpy as np
+from tqdm import trange
+from tqdm import tqdm
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -269,7 +271,10 @@ def load_bunch(
 
 
 def gen_bunch_from_twiss(
-    n_parts=0, twiss_x=None, twiss_y=None, twiss_z=None, dist_gen=None, **dist_gen_kws
+    n_parts=0, twiss_x=None, twiss_y=None, twiss_z=None, dist_gen=None, 
+    bunch=None,
+    verbose=False,
+    **dist_gen_kws
 ):
     """Generate bunch from Twiss parameters."""
     comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -277,12 +282,18 @@ def gen_bunch_from_twiss(
     size = orbit_mpi.MPI_Comm_size(comm)
     data_type = mpi_datatype.MPI_DOUBLE
     main_rank = 0
-    bunch = Bunch()
+    if bunch is None:
+        bunch = Bunch()
+    else:
+        bunch.deleteAllParticles()
     distributor = dist_gen(twiss_x, twiss_y, twiss_z, **dist_gen_kws)
     bunch.getSyncParticle().time(0.0)
-    for i in range(n_parts):
-        x, xp, y, yp, z, dE = distributor.getCoordinates()
-        x, xp, y, yp, z, dE = orbit_mpi.MPI_Bcast(
+    _range = range(n_parts)
+    if verbose:
+        _range = tqdm(_range)
+    for i in _range:
+        (x, xp, y, yp, z, dE) = distributor.getCoordinates()
+        (x, xp, y, yp, z, dE) = orbit_mpi.MPI_Bcast(
             (x, xp, y, yp, z, dE),
             data_type,
             main_rank,
