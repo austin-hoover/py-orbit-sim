@@ -75,28 +75,24 @@ class Monitor:
         self.position = 0.0
 
     def action(self, params_dict):
-        if _mpi_rank == 0:
-            position = params_dict["path_length"]
-            if position <= self.position:
-                return
-            self.position = position
-            if self.start_time is None:
-                self.start_time = time.clock()
-            time_ellapsed = time.clock() - self.start_time
-    
-        if self.rms:
-            bunch = params_dict["bunch"]
-            bunch_twiss_analysis = BunchTwissAnalysis()
-            order = 2
-            dispersion_flag = 0
-            emit_norm_flag = 0
-            bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)
-            if _mpi_rank == 0:
-                xrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(0, 0))
-                yrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(2, 2))  
-                zrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(4, 4))  
-        else:
-            xrms = yrms = zrms = -1.0
+        position = params_dict["path_length"]
+        if position <= self.position:
+            return
+        self.position = position
+        
+        if self.start_time is None:
+            self.start_time = time.clock()
+        time_ellapsed = time.clock() - self.start_time
+        
+        bunch = params_dict["bunch"]
+        bunch_twiss_analysis = BunchTwissAnalysis()
+        order = 2
+        dispersion_flag = 0
+        emit_norm_flag = 0
+        bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)
+        xrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(0, 0))
+        yrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(2, 2))  
+        zrms = 1000.0 * math.sqrt(bunch_twiss_analysis.getCorrelation(4, 4))  
         if _mpi_rank == 0:
             print(
                 "time={:.3f}, s={:.3f}, xrms={:.3f}, yrms={:.3f}, zrms={:.3f}"
