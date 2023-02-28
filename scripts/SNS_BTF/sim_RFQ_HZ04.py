@@ -109,10 +109,10 @@ if _mpi_rank == 0:
 # Bunch
 # ------------------------------------------------------------------------------
 
-filename = "/home/46h/projects/BTF/sim/_input/realisticLEBT_50mA_42mA_8555k.dat"
+filename = "/home/46h/projects/BTF/sim_data/realisticLEBT_50mA_42mA_8555k.dat"
 bunch = Bunch()
 if _mpi_rank == 0:
-    print("Generating bunch from file '{}'.".format(filename))
+    print("Reading bunch from file '{}'.".format(filename))
 bunch.readBunch(filename)
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
@@ -146,6 +146,7 @@ monitor = Monitor(
     plotter=None,
     verbose=True,
     track_history=True,
+    track_rms=True,
     dispersion_flag=True,
     emit_norm_flag=False,
 )
