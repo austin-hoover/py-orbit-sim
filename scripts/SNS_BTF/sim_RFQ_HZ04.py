@@ -117,7 +117,7 @@ bunch.readBunch(filename)
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-bunch_current = 0.050  # [A]
+bunch_current = 0.042  # [A]
 bunch_freq = 402.5e6  # [Hz]
 bunch_charge = bunch_current / bunch_freq
 intensity = bunch_charge / abs(float(bunch.charge()) * consts.charge_electron)
