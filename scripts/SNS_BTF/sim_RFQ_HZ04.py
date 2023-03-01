@@ -53,7 +53,7 @@ save_output_bunch = False
 
 # Lattice
 # ------------------------------------------------------------------------------
-max_drift_length = 0.001  # [m]
+max_drift_length = 0.0025  # [m]
 file_path = os.path.dirname(os.path.realpath(__file__))
 btf = SNS_BTF(
     coef_filename=os.path.join(file_path, "data/magnets/default_i2gl_coeff.csv")
@@ -192,7 +192,7 @@ if _mpi_rank == 0:
 track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
 
 if save_output_bunch:
-    filename = man.get_filename("bunch_STOP.dat")
+    filename = man.get_filename("bunch_{}.dat".format(stop))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)
