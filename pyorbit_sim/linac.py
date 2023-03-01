@@ -101,8 +101,8 @@ class Monitor:
         time_ellapsed = time.clock() - self.start_time
         if self.verbose and _mpi_rank == 0:
             print(
-                "step={}, s={:.3f} [m], node={}, time={:.3f}".format(
-                    step, position, node.getName(), time_ellapsed
+                "step={}, time={:.3f}, s={:.3f}, node={}".format(
+                    step, time_ellapsed, position, node.getName()
                 )
             )
         params_dict["step"] += 1
