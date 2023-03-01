@@ -270,35 +270,42 @@ def load_bunch(
     return bunch
 
 
-def gen_bunch_from_twiss(
-    n_parts=0, twiss_x=None, twiss_y=None, twiss_z=None, dist_gen=None, 
-    bunch=None,
-    verbose=False,
-    **dist_gen_kws
-):
-    """Generate bunch from Twiss parameters."""
-    comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-    rank = orbit_mpi.MPI_Comm_rank(comm)
-    size = orbit_mpi.MPI_Comm_size(comm)
+def gen_bunch(dist=None, n_parts=0, verbose=0, bunch=None):
+    """Generate bunch from distribution generator. (MPI compatible.)
+    
+    Parameters
+    ----------
+    dist : orbit.bunch_generators.distribution_generators
+        Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
+    n_parts : int
+        The number of particles to generate.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+    bunch : Bunch
+        If provided, it is repopulated with `dist_gen`.
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     data_type = mpi_datatype.MPI_DOUBLE
     main_rank = 0
+    
     if bunch is None:
         bunch = Bunch()
     else:
         bunch.deleteAllParticles()
-    distributor = dist_gen(twiss_x, twiss_y, twiss_z, **dist_gen_kws)
-    bunch.getSyncParticle().time(0.0)
+        
     _range = range(n_parts)
     if verbose:
         _range = tqdm(_range)
     for i in _range:
-        (x, xp, y, yp, z, dE) = distributor.getCoordinates()
+        (x, xp, y, yp, z, dE) = dist.getCoordinates()
         (x, xp, y, yp, z, dE) = orbit_mpi.MPI_Bcast(
             (x, xp, y, yp, z, dE),
-            data_type,
+            mpi_datatype.MPI_DOUBLE,
             main_rank,
-            comm,
+            _mpi_comm,
         )
-        if i % size == rank:
+        if i % _mpi_size == _mpi_rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
     return bunch
