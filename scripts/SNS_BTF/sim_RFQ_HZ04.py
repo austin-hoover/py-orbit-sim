@@ -13,7 +13,6 @@ import numpy as np
 
 from bunch import Bunch
 from orbit.bunch_generators import TwissContainer
-from orbit.bunch_generators import WaterBagDist2D
 from orbit.bunch_generators import WaterBagDist3D
 from orbit.diagnostics import diagnostics
 from orbit.lattice import AccActionsContainer
@@ -25,8 +24,8 @@ import orbit_mpi
 from SNS_BTF import SNS_BTF
 
 sys.path.append(os.getcwd())
-from pyorbit_sim import bunch_utils as bu
 from pyorbit_sim import utils
+from pyorbit_sim.bunch_utils import gen_bunch
 from pyorbit_sim.linac import Monitor
 from pyorbit_sim.linac import track_bunch
 from pyorbit_sim.utils import ScriptManager
@@ -47,6 +46,9 @@ man.save_script_copy()
 print("Script info:")
 pprint(man.get_info())
 
+# A few settings.
+save_input_bunch = True
+save_output_bunch = False
 
 
 # Lattice
@@ -124,6 +126,35 @@ intensity = bunch_charge / abs(float(bunch.charge()) * consts.charge_electron)
 bunch_size_global = bunch.getSizeGlobal()
 bunch.macroSize(intensity / bunch_size_global)
 
+# If `dist` is not None, generate an RMS-equivalent distribution in x-x',
+# y-y', and z-z' using an analytic distribution function (such as Gaussian, 
+# KV, or Waterbag). Then reconstruct the the six-dimensional distribution as
+# f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
+dist = None
+if dist is not None:
+    if _mpi_rank == 0:
+        print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    dispersion_flag = 0
+    emit_norm_flag = 0
+    order = 2
+    bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)    
+    eps_x = bunch_twiss_analysis.getEffectiveEmittance(0)
+    eps_y = bunch_twiss_analysis.getEffectiveEmittance(1)
+    eps_z = bunch_twiss_analysis.getEffectiveEmittance(2)
+    beta_x = bunch_twiss_analysis.getEffectiveBeta(0)
+    beta_y = bunch_twiss_analysis.getEffectiveBeta(1)
+    beta_z = bunch_twiss_analysis.getEffectiveBeta(2)
+    alpha_x = bunch_twiss_analysis.getEffectiveAlpha(0)
+    alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
+    alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)
+    dist = dist(
+        twissX=TwissContainer(alpha_x, beta_x, eps_x),
+        twissY=TwissContainer(alpha_y, beta_y, eps_y),
+        twissZ=TwissContainer(alpha_z, beta_z, eps_z),
+    )
+    bunch = gen_bunch(dist=dist, n_parts=bunch_size_global, bunch=bunch, verbose=True)
+    
 if _mpi_rank == 0:
     print("Bunch parameters:")
     print("  charge = {}".format(bunch.charge()))
@@ -132,7 +163,6 @@ if _mpi_rank == 0:
     print("  macrosize = {}".format(bunch.macroSize()))
     print("  size (local) = {:.2e}".format(bunch.getSize()))
     print("  size (global) = {:.2e}".format(bunch_size_global))
-    
     
     
 # Sim
@@ -151,8 +181,23 @@ monitor = Monitor(
     emit_norm_flag=False,
 )
 
+if save_input_bunch:
+    filename = man.get_filename("bunch_START.dat")
+    if _mpi_rank == 0:
+        print("Saving bunch to file {}".format(filename))
+    bunch.dumpBunch(filename)
+
+if _mpi_rank == 0:
+    print("Tracking...")
 track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
 
+if save_output_bunch:
+    filename = man.get_filename("bunch_STOP.dat")
+    if _mpi_rank == 0:
+        print("Saving bunch to file {}".format(filename))
+    bunch.dumpBunch(filename)
+    
 if _mpi_rank == 0 and monitor.track_history:
-    print("Writing RMS history to file.")
-    monitor.write(filename=man.get_filename("history.dat"), delimiter=",")
+    filename = man.get_filename("history.dat")
+    print("Writing history to {}".format(filename))
+    monitor.write(filename, delimiter=",")
