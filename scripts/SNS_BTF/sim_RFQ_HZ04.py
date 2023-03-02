@@ -48,7 +48,7 @@ pprint(man.get_info())
 
 # A few settings.
 save_input_bunch = True
-save_output_bunch = False
+save_output_bunch = True
 
 
 # Lattice
