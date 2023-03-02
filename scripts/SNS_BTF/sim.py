@@ -134,6 +134,7 @@ monitor = Monitor(
     plotter=None,
     verbose=True,
     track_history=True,
+    track_rms=True,
     dispersion_flag=True,
     emit_norm_flag=False,
 )
