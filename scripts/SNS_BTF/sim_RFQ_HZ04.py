@@ -12,6 +12,7 @@ import time
 import numpy as np
 
 from bunch import Bunch
+from bunch import BunchTwissAnalysis
 from orbit.bunch_generators import TwissContainer
 from orbit.bunch_generators import WaterBagDist3D
 from orbit.diagnostics import diagnostics
