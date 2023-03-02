@@ -46,10 +46,6 @@ man.save_script_copy()
 print("Script info:")
 pprint(man.get_info())
 
-# A few settings.
-save_input_bunch = True
-save_output_bunch = True
-
 
 # Lattice
 # ------------------------------------------------------------------------------
@@ -130,7 +126,7 @@ bunch.macroSize(intensity / bunch_size_global)
 # y-y', and z-z' using an analytic distribution function (such as Gaussian, 
 # KV, or Waterbag). Then reconstruct the the six-dimensional distribution as
 # f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-dist = None
+dist = WaterBagDist3D
 if dist is not None:
     if _mpi_rank == 0:
         print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
@@ -181,8 +177,12 @@ monitor = Monitor(
     emit_norm_flag=False,
 )
 
-if save_input_bunch:
-    filename = man.get_filename("bunch_START.dat")
+if True:
+    # Save the input bunch.
+    if start == 0:
+        filename = man.get_filename("bunch_START.dat")
+    else:
+        filename = man.get_filename("bunch_{}.dat".format(start))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)
@@ -191,8 +191,12 @@ if _mpi_rank == 0:
     print("Tracking...")
 track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
 
-if save_output_bunch:
-    filename = man.get_filename("bunch_{}.dat".format(stop))
+if True:
+    # Save the output bunch.
+    if stop == -1:
+        filename = man.get_filename("bunch_STOP.dat")
+    else:
+        filename = man.get_filename("bunch_{}.dat".format(stop))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)
