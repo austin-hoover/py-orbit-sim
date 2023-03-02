@@ -14,6 +14,7 @@ import numpy as np
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
 from orbit.bunch_generators import TwissContainer
+from orbit.bunch_generators import GaussDist3D
 from orbit.bunch_generators import WaterBagDist3D
 from orbit.diagnostics import diagnostics
 from orbit.lattice import AccActionsContainer
@@ -127,7 +128,7 @@ bunch.macroSize(intensity / bunch_size_global)
 # y-y', and z-z' using an analytic distribution function (such as Gaussian, 
 # KV, or Waterbag). Then reconstruct the the six-dimensional distribution as
 # f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-dist = WaterBagDist3D
+dist = GaussDist3D
 if dist is not None:
     if _mpi_rank == 0:
         print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
