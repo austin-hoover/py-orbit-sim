@@ -109,6 +109,8 @@ filename = os.path.join(
     "/home/46h/projects/BTF/meas_analysis/2022-06-26_scan-xxpy-image-ypdE/data/",
     "220626140058-scan-xxpy-image-ypdE_samp6D_1.00e+07.dat",
 )
+
+
 bunch = Bunch()
 if _mpi_rank == 0:
     print("Reading bunch from file '{}'.".format(filename))
