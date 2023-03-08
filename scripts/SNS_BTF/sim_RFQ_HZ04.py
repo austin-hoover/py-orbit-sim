@@ -117,7 +117,7 @@ bunch.readBunch(filename)
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-bunch_current = 0.042  # [A]
+bunch_current = 0.0255  # [A]
 bunch_freq = 402.5e6  # [Hz]
 bunch_charge = bunch_current / bunch_freq
 intensity = bunch_charge / abs(float(bunch.charge()) * consts.charge_electron)
@@ -128,7 +128,7 @@ bunch.macroSize(intensity / bunch_size_global)
 # y-y', and z-z' using an analytic distribution function (such as Gaussian, 
 # KV, or Waterbag). Then reconstruct the the six-dimensional distribution as
 # f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-dist = GaussDist3D
+dist = None
 if dist is not None:
     if _mpi_rank == 0:
         print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
