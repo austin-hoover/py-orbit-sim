@@ -172,6 +172,7 @@ def reverse_bunch(bunch):
         bunch.xp(i, -bunch.xp(i))
         bunch.yp(i, -bunch.yp(i))
         bunch.z(i, -bunch.z(i))
+    return bunch
 
 
 def shift_bunch(bunch, location=None, verbose=False):

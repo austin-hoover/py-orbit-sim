@@ -213,20 +213,14 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True
         print("time = {:.3f} [sec]".format(time.clock() - time_start))
 
 
-def track_bunch_reverse(bunch, lattice, monitor=None, start=None, stop=None, verbose=0):
-    """Track bunch backward from stop to start. (Untested)"""
-    if start is None:
-        start = lattice.getLength()
-    if stop is None:
-        stop = 0.0
+def track_bunch_reverse(bunch, lattice, monitor=None, start=None, stop=0.0, verbose=0):
+    """Track bunch backward from stop to start."""
     lattice.reverseOrder()
     bunch = reverse_bunch(bunch)
-    track_bunch(
-        bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=verbose
-    )
+    track_bunch(bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbose)
     lattice.reverseOrder()
     bunch = reverse_bunch(bunch)
     if monitor is not None:
-        pass
         # node_stop, index_stop, s0_stop, s1_stop = _get_node(stop, lattice)
         # monitor.history["position"] = 2.0 * s1_stop - monitor.history["position"]
+        pass
