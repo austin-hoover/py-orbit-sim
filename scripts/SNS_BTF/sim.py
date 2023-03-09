@@ -47,7 +47,6 @@ print("Script info:")
 pprint(man.get_info())
 
 
-
 # Lattice
 # ------------------------------------------------------------------------------
 max_drift_length = 0.010  # [m]
@@ -57,7 +56,7 @@ btf = SNS_BTF(
 )
 btf.init_lattice(
     xml=os.path.join(file_path, "data/xml/BTF_lattice_default.xml"),
-    beamlines=["MEBT1", "MEBT2", "MEBT3"], 
+    beamlines=["MEBT1", "MEBT2", "MEBT3"],
     max_drift_length=max_drift_length,
 )
 btf.update_quads_from_mstate(
@@ -67,7 +66,7 @@ btf.update_quads_from_mstate(
 btf.make_pmq_fields_overlap(z_step=max_drift_length, verbose=True)
 btf.add_aperture_nodes(drift_step=0.1)
 btf.add_space_charge_nodes(
-    grid_size_x=64, 
+    grid_size_x=64,
     grid_size_y=64,
     grid_size_z=64,
     path_length_min=max_drift_length,
@@ -81,7 +80,9 @@ if _mpi_rank == 0:
     file = open(man.get_filename("nodes.dat"), "w")
     file.write("node, position\n")
     for node in lattice.getNodes():
-        file.write("{}, {}, {}\n".format(node.getName(), node.getPosition(), node.getLength()))
+        file.write(
+            "{}, {}, {}\n".format(node.getName(), node.getPosition(), node.getLength())
+        )
     file.close()
 
     # Write lattice structure to file.
@@ -89,15 +90,15 @@ if _mpi_rank == 0:
     file.write(lattice.structureToText())
     file.close()
 
-    
-    
+
 # Bunch
 # ------------------------------------------------------------------------------
 
 filename = os.path.join(
-    "/home/46h/projects/BTF/meas_analysis/2022-06-26_scan-xxpy-image-ypdE/data/",
-    "220626140058-scan-xxpy-image-ypdE_samp6D_1.00e+06_decorrelated.dat",
+    "/home/46h/sim_data/SNS_BTF/sim_RFQ_HZ04_reverse/2023-03-09/",
+    "230309125322-sim_RFQ_HZ04_reverse_bunch_RFQ_decorrelated.dat",
 )
+
 bunch = Bunch()
 if _mpi_rank == 0:
     print("Generating bunch from file '{}'.".format(filename))
@@ -105,12 +106,41 @@ bunch.readBunch(filename)
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-bunch_current = 0.050  # [A]
+bunch_current = 0.0255  # [A]
 bunch_freq = 402.5e6  # [Hz]
 bunch_charge = bunch_current / bunch_freq
 intensity = bunch_charge / abs(float(bunch.charge()) * consts.charge_electron)
 bunch_size_global = bunch.getSizeGlobal()
 bunch.macroSize(intensity / bunch_size_global)
+
+# If `dist` is not None, generate an RMS-equivalent distribution in x-x',
+# y-y', and z-z' using an analytic distribution function (such as Gaussian, 
+# KV, or Waterbag). Then reconstruct the the six-dimensional distribution as
+# f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
+dist = None
+if dist is not None:
+    if _mpi_rank == 0:
+        print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    dispersion_flag = 0
+    emit_norm_flag = 0
+    order = 2
+    bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)    
+    eps_x = bunch_twiss_analysis.getEffectiveEmittance(0)
+    eps_y = bunch_twiss_analysis.getEffectiveEmittance(1)
+    eps_z = bunch_twiss_analysis.getEffectiveEmittance(2)
+    beta_x = bunch_twiss_analysis.getEffectiveBeta(0)
+    beta_y = bunch_twiss_analysis.getEffectiveBeta(1)
+    beta_z = bunch_twiss_analysis.getEffectiveBeta(2)
+    alpha_x = bunch_twiss_analysis.getEffectiveAlpha(0)
+    alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
+    alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)
+    dist = dist(
+        twissX=TwissContainer(alpha_x, beta_x, eps_x),
+        twissY=TwissContainer(alpha_y, beta_y, eps_y),
+        twissZ=TwissContainer(alpha_z, beta_z, eps_z),
+    )
+    bunch = gen_bunch(dist=dist, n_parts=bunch_size_global, bunch=bunch, verbose=True)
 
 if _mpi_rank == 0:
     print("Bunch parameters:")
@@ -120,17 +150,16 @@ if _mpi_rank == 0:
     print("  macrosize = {}".format(bunch.macroSize()))
     print("  size (local) = {:.2e}".format(bunch.getSize()))
     print("  size (global) = {:.2e}".format(bunch_size_global))
-    
-    
-    
+
+
 # Sim
 # ------------------------------------------------------------------------------
 
-start = "MEBT:HZ04"  # start node (name or position)
-stop = "MEBT:VT34a"  # stop node (name or position)
+start = 0  # start node (name or position)
+stop = "MEBT:HZ34a"  # stop node (name or position)
 
 monitor = Monitor(
-    start_position=0.0, # this will be set automatically in `track_bunch`.
+    start_position=0.0,  # this will be set automatically in `track_bunch`.
     plotter=None,
     verbose=True,
     track_history=True,
