@@ -106,8 +106,8 @@ if _mpi_rank == 0:
 # ------------------------------------------------------------------------------
 
 filename = os.path.join(
-    "/home/46h/projects/BTF/meas_analysis/2022-06-26_scan-xxpy-image-ypdE/data/",
-    "220626140058-scan-xxpy-image-ypdE_samp6D_1.00e+07.dat",
+    "/home/46h/projects/BTF/meas/2022-06-26_scan-xxpy-image-ypdE/data/",
+    "220626140058-scan-xxpy-image-ypdE_samp6D_1.00e+08.dat",
 )
 
 
@@ -174,8 +174,8 @@ monitor = Monitor(
     start_position=0.0, # this will be set automatically in `track_bunch`.
     plotter=None,
     verbose=True,
-    track_history=True,
-    track_rms=True,
+    track_history=False,
+    track_rms=False,
     dispersion_flag=True,
     emit_norm_flag=False,
 )
