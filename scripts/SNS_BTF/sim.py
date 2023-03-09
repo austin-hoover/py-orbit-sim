@@ -168,12 +168,32 @@ monitor = Monitor(
     emit_norm_flag=False,
 )
 
-track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
-
-if _mpi_rank == 0 and monitor.track_history:
-    print("Writing RMS history to file.")
-    monitor.write(filename=man.get_filename("history.dat"), delimiter=",")
+# Save the input bunch.
+if False:
+    if start is None or start == 0:
+        filename = man.get_filename("bunch_START.dat")
+    else:
+        filename = man.get_filename("bunch_{}.dat".format(start))
+    if _mpi_rank == 0:
+        print("Saving bunch to file {}".format(filename))
+    bunch.dumpBunch(filename)
 
 if _mpi_rank == 0:
-    print("Saving output bunch to file.")
-bunch.dumpBunch(man.get_filename("bunch_{}.dat".format(stop)))
+    print("Tracking...")
+track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
+
+# Save history.
+if _mpi_rank == 0 and monitor.track_history:
+    filename = man.get_filename("history.dat")
+    print("Writing history to {}".format(filename))
+    monitor.write(filename, delimiter=",")
+
+# Save the output bunch.
+if True:
+    if stop is None or stop == -1:
+        filename = man.get_filename("bunch_STOP.dat")
+    else:
+        filename = man.get_filename("bunch_{}.dat".format(stop))
+    if _mpi_rank == 0:
+        print("Saving bunch to file {}".format(filename))
+    bunch.dumpBunch(filename)
