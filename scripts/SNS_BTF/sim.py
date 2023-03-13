@@ -96,7 +96,7 @@ if _mpi_rank == 0:
 
 filename = os.path.join(
     "/home/46h/sim_data/SNS_BTF/sim_RFQ_HZ04_reverse/2023-03-09/",
-    "230309125322-sim_RFQ_HZ04_reverse_bunch_RFQ.dat",
+    "230309125322-sim_RFQ_HZ04_reverse_bunch_RFQ_decorrelated.dat",
 )
 
 bunch = Bunch()
@@ -106,7 +106,7 @@ bunch.readBunch(filename)
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-bunch_current = 0.0255  # [A]
+bunch_current = 0.050  # [A]
 bunch_freq = 402.5e6  # [Hz]
 bunch_charge = bunch_current / bunch_freq
 intensity = bunch_charge / abs(float(bunch.charge()) * consts.charge_electron)
