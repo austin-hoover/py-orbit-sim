@@ -95,7 +95,7 @@ if _mpi_rank == 0:
 
 filename = os.path.join(
     "/home/46h/sim_data/SNS_BTF/sim_RFQ_HZ04_reverse/2023-03-09/",
-    "230309125322-sim_RFQ_HZ04_reverse_bunch_RFQ.dat",
+    "230309125322-sim_RFQ_HZ04_reverse_bunch_RFQ_decorrelated.dat",
 )
 
 bunch = Bunch()
