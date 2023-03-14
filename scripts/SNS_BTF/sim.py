@@ -12,7 +12,6 @@ import numpy as np
 
 from bunch import Bunch
 from orbit.bunch_generators import TwissContainer
-from orbit.bunch_generators import WaterBagDist2D
 from orbit.bunch_generators import WaterBagDist3D
 from orbit.diagnostics import diagnostics
 from orbit.lattice import AccActionsContainer
