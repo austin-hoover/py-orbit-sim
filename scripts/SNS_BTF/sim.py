@@ -38,7 +38,7 @@ _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
 _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-# Create output directory and save script info. (Not yet MPI compatible.)
+# Create output directory and save script info.
 man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
 man.save_info()
 man.save_script_copy()

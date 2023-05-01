@@ -33,23 +33,14 @@ class Monitor:
         "gamma", "beta" = syncronous particle relativistic factors
         "mean_0", "mean_1", ... = first-order moments
         "cov_0-0", "cov_0-1", ... = second-order moments
-    start_position : float
-        The start position in the lattice [m].
-    plotter : btfsim.plot.Plotter
-        Plotting manager. We can decide when this plotter should activate.
-    emit_norm_flag, dispersion_flag : bool
-        Used by `BunchTwissAnalysis` class.
-    track_history : bool
-        Whether to append to history array on each action.
-    track_rms : bool
-        Whether include RMS bunch parameters in history arrays.
-    verbose : bool
-        Whether to print an update statement on each action.
+    position : float
+        Position of bunch on last call.
     """
 
     def __init__(
         self,
         start_position=0.0,
+        position_step=0.1,
         plotter=None,
         dispersion_flag=False,
         emit_norm_flag=False,
@@ -57,7 +48,27 @@ class Monitor:
         track_rms=True,
         verbose=True,
     ):
+        """
+        Parameters
+        ----------
+        start_position : float
+            The start position in the lattice [m].
+        position_step : float
+            Gap between monitor calls.
+        plotter : btfsim.plot.Plotter
+            Plotting manager. We can decide when this plotter should activate.
+        emit_norm_flag, dispersion_flag : bool
+            Used by `BunchTwissAnalysis` class.
+        track_history : bool
+            Whether to append to history array on each action.
+        track_rms : bool
+            Whether include RMS bunch parameters in history arrays.
+        verbose : bool
+            Whether to print an update statement on each action.
+        """
         self.start_position = start_position
+        self.position = -1.0
+        self.position_step = position_step
         self.plotter = plotter
         self.dispersion_flag = int(dispersion_flag)
         self.emit_norm_flag = int(emit_norm_flag)
@@ -86,10 +97,14 @@ class Monitor:
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
+        position = params_dict["path_length"] + self.start_position
+        if (position == self.position) or (position < self.position + self.position_step):
+            return
+        self.position = position
+
         bunch = params_dict["bunch"]
         node = params_dict["node"]
         step = params_dict["step"]
-        position = params_dict["path_length"] + self.start_position
         beta = bunch.getSyncParticle().beta()
         gamma = bunch.getSyncParticle().gamma()
         if params_dict["old_pos"] == position:
