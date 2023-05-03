@@ -1,6 +1,7 @@
-"""Within-simulation plotting routines.
+"""Simulation plotting routines.
 
-(Uses python2-compatible matplotlib.)
+These routines use python2-compatible matplotlib; they can be called within
+pyorbit scripts.
 """
 import os
 import sys
@@ -13,8 +14,17 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 
+from bunch import Bunch
+from orbit.diagnostics.diagnostics import get_bunch_coords
+
+
+
+# General matplotlib plotting functions.
+# -----------------------------------------------------------------------------
+
 DIMS = ["x", "xp", "y", "yp", "z", "dE"]
 UNITS = ["m", "rad", "m", "rad", "m", "GeV"]
+DIMS_UNITS = ["{} [{}]".format(d, u) for d, u in zip(DIMS, UNITS)]
 
 
 def centers_from_edges(edges):
@@ -94,12 +104,25 @@ def truncate_cmap(cmap, vmin=0.0, vmax=1.0, n=100):
 
 
 def histogram_bin_edges(X, bins=10, limits=None):
-    n = X.shape[1]
-    if type(bins) not in [list, tuple]:
-        bins = n * [bins]
-    if type(limits) not in [list, tuple]:
-        limits = n * [limits] 
-    return [np.histogram_bin_edges(X[:, i], bins[i], limits[i]) for i in range(n)]
+    """Multi-dimensional histogram bin edges."""
+    if not array_like(bins):
+        bins = X.shape[1] * [bins]
+    if not array_like(limits):
+        limits = X.shape[1] * [limits]
+    return [
+        np.histogram_bin_edges(X[:, i], bins[i], limits[i]) 
+        for i in range(X.shape[1])
+    ]
+
+
+def histogram(X, bins=10, limits=None, centers=False):
+    """Multi-dimensional histogram."""
+    edges = histogram_bin_edges(X, bins=bins, limits=limits)
+    hist, edges = np.histogramdd(X, edges)
+    if centers:
+        return hist, [centers_from_edges(e) for e in edges]
+    else:
+        return hist, edges
 
 
 def plot_image_profiles(
@@ -295,7 +318,7 @@ def proj2d(
     X,
     info=None, 
     axis=(0, 1),
-    bins='auto', 
+    bins=32,
     limits=None, 
     units=True,
     fig_kws=None,
@@ -315,13 +338,10 @@ def proj2d(
             ax.set_xlabel("{}".format(DIMS[axis[0]]))
             ax.set_ylabel("{}".format(DIMS[axis[1]]))
     
-    edges = histogram_bin_edges(X[:, axis], bins=bins, limits=limits)
-    hist, _ = np.histogramdd(X[:, axis], edges)
-    centers = [centers_from_edges(e) for e in edges]
+    hist, centers = histogram(X[:, axis], bins=bins, centers=True)    
     ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
-    
     if text is not None:
-        if 's' in info:
+        if "position" in info:
             ax.set_title('s = {:.3f} [m]'.format(info['s']))
             
             
@@ -374,15 +394,17 @@ def corner():
         
 
 class Plotter:
-    def __init__(self, transform=None, path='.', default_save_kws=None):
+    def __init__(self, transform=None, folder="./", default_save_kws=None, index=0, position=0.0):
         self.transform = transform
-        self.path = path
+        self.folder = folder
         self.funcs = []
         self.kws = []
         self.save_kws = []
         self.default_save_kws = default_save_kws
         if self.default_save_kws is None:
             self.default_save_kws  = dict()
+        self.index = index
+        self.position = position
         
     def add_func(self, func, save_kws=None, name=None, **kws):
         self.funcs.append(func)
@@ -390,18 +412,25 @@ class Plotter:
         self.names.append(name if name else 'plot_{}'.format(len(self.funcs)))
         self.save_kws.append(save_kws if save_kws else self.default_save_kws)
         
-    def plot(self, X, info=None, verbose=False):
+    def action(self, X, info=None, verbose=False):
         if self.transform is not None:
             X = self.transform(X)
         for i in range(len(self.funcs)):
             if verbose:
                 print("Calling '{}' ({}).".format(self.names[i], self.func.__name__))
+                
             self.funcs[i](X, info=info, **self.kws[i])
+            
             filename = self.names[i]
-            if 'step' in info:
-                filename = '{}_{:03}'.format(filename, info['step'])
-            if 'node' in info:
-                filename = '{}_{}'.format(filename, info['node'])
-            filename = os.path.join(self.path, filename)
-            plt.savefig(os.path.join(self.path, filename, **self.save_kws[i]))
+            filename = '{}_{}'.format(filename, self.index)
+            if "node" in info:
+                filename = '{}_{}'.format(filename, info["node"])
+            filename = os.path.join(self.folder, filename)
+            
+            plt.savefig(filename, **self.save_kws[i])
             plt.close()
+            
+            self.index += 1
+            if "position" in info:
+                self.position = info["position"]
+            

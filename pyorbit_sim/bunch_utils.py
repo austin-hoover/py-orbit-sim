@@ -310,3 +310,7 @@ def gen_bunch(dist=None, n_parts=0, verbose=0, bunch=None):
         if i % _mpi_size == _mpi_rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
     return bunch
+
+
+def slice_bunch_planar(bunch):
+    raise NotImplementedError

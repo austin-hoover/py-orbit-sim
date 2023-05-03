@@ -1,4 +1,8 @@
-"""SNS linac lattice generation."""
+"""SNS linac lattice generation.
+
+TODO: There is not as much to set up here (compared to RING or BTF). Probably makes
+sense to use one master script.
+"""
 from __future__ import print_function
 import collections
 import os

@@ -12,6 +12,7 @@ import time
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
+from bunch_utils_functions import copyCoordsToInitCoordsAttr
 from linac import BaseRfGap
 from linac import BaseRfGap_slow
 from linac import MatrixRfGap
@@ -22,6 +23,7 @@ from orbit.bunch_generators import GaussDist3D
 from orbit.bunch_generators import KVDist3D
 from orbit.bunch_generators import TwissContainer
 from orbit.bunch_generators import WaterBagDist3D
+from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
@@ -29,6 +31,7 @@ from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_rfgap_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import AddMEBTChopperPlatesAperturesToSNS_Lattice
 from orbit.py_linac.lattice_modifications import AddScrapersAperturesToLattice
+from orbit.py_linac.lattice_modifications import GetLostDistributionArr
 from orbit.py_linac.lattice_modifications import Replace_BaseRF_Gap_and_Quads_to_Overlapping_Nodes
 from orbit.py_linac.lattice_modifications import Replace_BaseRF_Gap_to_AxisField_Nodes
 from orbit.py_linac.lattice_modifications import Replace_Quads_to_OverlappingQuads_Nodes
@@ -47,13 +50,17 @@ from SNS_LINAC import SNS_LINAC
 sys.path.append(os.getcwd())
 from pyorbit_sim import bunch_utils
 from pyorbit_sim.linac import Monitor
+from pyorbit_sim.linac import BunchWriter
 from pyorbit_sim.linac import track_bunch
 from pyorbit_sim.misc import lorentz_factors
+from pyorbit_sim.plotting import Plotter
 from pyorbit_sim.utils import ScriptManager
 
 
 # Setup
 # --------------------------------------------------------------------------------------
+
+save = True  # no output if false
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -62,8 +69,9 @@ _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
 # Create output directory and save script info.
 man = ScriptManager(datadir="/home/46h/sim_data/", path=pathlib.Path(__file__))
-man.save_info()
-man.save_script_copy()
+if save:
+    man.save_info()
+    man.save_script_copy()
 print("Script info:")
 pprint(man.get_info())
 
@@ -95,6 +103,13 @@ sequences = [
 linac = SNS_LINAC(xml=xml_file_name, max_drift_length=max_drift_length, sequences=sequences, verbose=True)
 lattice = linac.lattice
 
+# Save node positions.
+if save:
+    file = open(man.get_filename("nodes.txt"), "w")
+    for node in lattice.getNodes():
+        file.write("{} {}\n".format(node.getName(), node.getPosition()))
+    file.close()
+
 ## Set the RF gap model.
 linac.set_rf_gap_model(RfGapTTF)
 
@@ -105,7 +120,7 @@ z_step = 0.002
 
 ## Add space charge nodes.
 sc_nodes = linac.add_space_charge_nodes(
-    solver="3D",  # {"3D", "ellipsoid"}
+    solver="ellipsoid",  # {"3D", "ellipsoid"}
     grid_size=(64, 64, 64), 
     path_length_min=0.01,
     n_bunches=1,
@@ -155,7 +170,7 @@ bunch = bunch_utils.gen_bunch(
         twissY=TwissContainer(alpha_y, beta_y, eps_y),
         twissZ=TwissContainer(alpha_z, beta_z, eps_z),
     ), 
-    n_parts=int(1e5), 
+    n_parts=int(1e4), 
     verbose=True,
 )
 
@@ -184,17 +199,30 @@ if _mpi_rank == 0:
 # --------------------------------------------------------------------------------------
 
 start = 0  # start node (name or position)
-stop = "SCL_Diag:BPM32"  # stop node (name or position)
-save_input_bunch = False
-save_output_bunch = False
+# stop = "SCL_Diag:BPM24"  # stop node (name or position)s
+stop = 30.0
+save_input_bunch = True
+save_output_bunch = True
+
+writer = BunchWriter(
+    folder=man.outdir, 
+    prefix=man.prefix, 
+    index=1, 
+)
 monitor = Monitor(
-    start_position=0.0,  # will be set automatically in `track_bunch`.
+    position_offset=0.0,  # will be set automatically in `track_bunch`.
+    stride={
+        "update": 0.1,
+        "write_bunch": None,
+        "plot_bunch": None,
+    },
     plotter=None,
-    verbose=True,
+    writer=writer,
     track_history=True,
     track_rms=True,
     dispersion_flag=False,
     emit_norm_flag=False,
+    verbose=True,
 )
 
 # Record synchronous particle time of arrival at each accelerating cavity.
@@ -204,33 +232,68 @@ lattice.trackDesignBunch(bunch)
 if _mpi_rank == 0:
     print("Design bunch tracking complete.")
     
-# Save the input bunch.
-if save_input_bunch:
+# Save input bunch.
+if save_input_bunch and save:
     if start is None or start == 0:
-        filename = man.get_filename("bunch_START.dat")
+        filename = man.get_filename("bunch_0_START.dat")
     else:
-        filename = man.get_filename("bunch_{}.dat".format(start))
+        filename = man.get_filename("bunch_0_{}.dat".format(start))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)    
     
-# Track.
+# Track
 if _mpi_rank == 0:
     print("Tracking...")
-track_bunch(bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True)
+        
+params_dict = track_bunch(
+    bunch, 
+    lattice, 
+    monitor=monitor, 
+    start=start, 
+    stop=stop, 
+    verbose=True
+)
 
 # Save history.
-if _mpi_rank == 0 and monitor.track_history:
+if _mpi_rank == 0 and monitor.track_history and save:
     filename = man.get_filename("history.dat")
     print("Writing history to {}".format(filename))
-    monitor.write(filename, delimiter=",")
+    monitor.write_history(filename, delimiter=",")
+    
+# Save lost particles.
+lostbunch = params_dict["lostbunch"]
+aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, lostbunch)
+total_loss = 0.0
+for (node, loss) in aprt_nodes_losses:
+    print(
+        "node={:30s},".format(node.getName()), 
+        "pos={:9.3f},".format(node.getPosition()), 
+        "loss= {:6.0f}".format(loss),
+    )
+    total_loss += loss
+print("Total loss = {:.2e}".format(total_loss))
+if save:
+    filename = man.get_filename("losses.txt")
+    print("Saving loss vs. node array to {}".format(filename))
+    file = open(filename, "w")
+    for (node, loss) in aprt_nodes_losses:
+        file.write("{} {}\n".format(node, loss))
+    file.close()
 
-# Save the output bunch.
-if save_output_bunch:
+    filename = man.get_filename("bunch_lost.dat".format(stop))
+    if _mpi_rank == 0:
+        print("Saving lost bunch to file {}".format(filename))
+    bunch.dumpBunch(filename)    
+    
+# Save output bunch.
+if save_output_bunch and save:
     if stop is None or stop == -1:
-        filename = man.get_filename("bunch_STOP.dat")
+        filename = man.get_filename("bunch_{}_STOP.dat".format(writer.index + 1))
     else:
-        filename = man.get_filename("bunch_{}.dat".format(stop))
+        filename = man.get_filename("bunch_{}_{}.dat".format(writer.index + 1, stop))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)
+
+print(timestamp)
