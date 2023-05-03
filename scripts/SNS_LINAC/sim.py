@@ -10,6 +10,8 @@ import shutil
 import sys
 import time
 
+import numpy as np
+
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
 from bunch_utils_functions import copyCoordsToInitCoordsAttr
@@ -48,12 +50,10 @@ from spacecharge import SpaceChargeCalcUnifEllipse
 from SNS_LINAC import SNS_LINAC
 
 sys.path.append(os.getcwd())
-from pyorbit_sim import bunch_utils
-from pyorbit_sim.linac import Monitor
-from pyorbit_sim.linac import BunchWriter
-from pyorbit_sim.linac import track_bunch
+import pyorbit_sim.bunch_utils
+import pyorbit_sim.linac
+import pyorbit_sim.plotting
 from pyorbit_sim.misc import lorentz_factors
-from pyorbit_sim.plotting import Plotter
 from pyorbit_sim.utils import ScriptManager
 
 
@@ -120,7 +120,7 @@ z_step = 0.002
 
 ## Add space charge nodes.
 sc_nodes = linac.add_space_charge_nodes(
-    solver="ellipsoid",  # {"3D", "ellipsoid"}
+    solver="3D",  # {"3D", "ellipsoid"}
     grid_size=(64, 64, 64), 
     path_length_min=0.01,
     n_bunches=1,
@@ -164,13 +164,13 @@ eps_z = eps_z * gamma**3 * beta**2 * mass
 beta_z = beta_z / (gamma**3 * beta**2 * mass)
 
 print("Generating bunch from Twiss parameters.")
-bunch = bunch_utils.gen_bunch(
+bunch = pyorbit_sim.bunch_utils.generate(
     dist=WaterBagDist3D(
         twissX=TwissContainer(alpha_x, beta_x, eps_x),
         twissY=TwissContainer(alpha_y, beta_y, eps_y),
         twissZ=TwissContainer(alpha_z, beta_z, eps_z),
     ), 
-    n_parts=int(1e4), 
+    n_parts=int(1.0e4), 
     verbose=True,
 )
 
@@ -193,6 +193,10 @@ if _mpi_rank == 0:
     print("  macrosize = {}".format(bunch.macroSize()))
     print("  size (local) = {:.2e}".format(bunch.getSize()))
     print("  size (global) = {:.2e}".format(bunch_size_global))
+    
+## Assign ID number to each particle.
+# ParticleIdNumber.addParticleIdNumbers(bunch)
+# copyCoordsToInitCoordsAttr(bunch)
 
 
 # Tracking
@@ -204,20 +208,48 @@ stop = 30.0
 save_input_bunch = True
 save_output_bunch = True
 
-writer = BunchWriter(
+writer = pyorbit_sim.linac.BunchWriter(
     folder=man.outdir, 
     prefix=man.prefix, 
     index=1, 
 )
-monitor = Monitor(
-    position_offset=0.0,  # will be set automatically in `track_bunch`.
+
+
+def transform(X):
+    """Normalize the 2D phase spaces."""
+    Sigma = np.cov(X.T)
+    Xn = np.zeros(X.shape)
+    for i in range(0, X.shape[1], 2):
+        sigma = Sigma[i : i + 2, i : i + 2]
+        eps = np.sqrt(np.linalg.det(sigma))
+        alpha = -sigma[0, 1] / eps
+        beta = sigma[0, 0] / eps
+        Xn[:, i] = X[:, i] / np.sqrt(beta)
+        Xn[:, i + 1] = (np.sqrt(beta) * X[:, i + 1]) + (alpha * X[:, i] / np.sqrt(beta))
+        Xn[:, i : i + 2] = Xn[:, i : i + 2] / np.sqrt(eps)
+    return Xn
+    
+plotter = pyorbit_sim.plotting.Plotter(
+    transform=transform, 
+    folder=man.outdir,
+    default_save_kws=None, 
+)
+plotter.add_function(
+    pyorbit_sim.plotting.proj2d_three_column, 
+    save_kws=None, 
+    name=None, 
+    bins=32,
+)
+
+monitor = pyorbit_sim.linac.Monitor(
+    position_offset=0.0,  # will be set automatically in `track`.
     stride={
-        "update": 0.1,
-        "write_bunch": None,
-        "plot_bunch": None,
+        "update": 0.1,  # [m]
+        "write_bunch": None,  # [m]
+        "plot_bunch": 5.0,  # [m]
     },
-    plotter=None,
     writer=writer,
+    plotter=plotter,
     track_history=True,
     track_rms=True,
     dispersion_flag=False,
@@ -234,7 +266,7 @@ if _mpi_rank == 0:
     
 # Save input bunch.
 if save_input_bunch and save:
-    if start is None or start == 0:
+    if start is None or type(start) is not str:
         filename = man.get_filename("bunch_0_START.dat")
     else:
         filename = man.get_filename("bunch_0_{}.dat".format(start))
@@ -246,7 +278,7 @@ if save_input_bunch and save:
 if _mpi_rank == 0:
     print("Tracking...")
         
-params_dict = track_bunch(
+params_dict = pyorbit_sim.linac.track(
     bunch, 
     lattice, 
     monitor=monitor, 
@@ -278,7 +310,7 @@ if save:
     print("Saving loss vs. node array to {}".format(filename))
     file = open(filename, "w")
     for (node, loss) in aprt_nodes_losses:
-        file.write("{} {}\n".format(node, loss))
+        file.write("{} {}\n".format(node.getName(), loss))
     file.close()
 
     filename = man.get_filename("bunch_lost.dat".format(stop))
@@ -288,12 +320,12 @@ if save:
     
 # Save output bunch.
 if save_output_bunch and save:
-    if stop is None or stop == -1:
-        filename = man.get_filename("bunch_{}_STOP.dat".format(writer.index + 1))
+    if stop is None or type(stop) is not str:
+        filename = man.get_filename("bunch_{}_STOP.dat".format(writer.index))
     else:
-        filename = man.get_filename("bunch_{}_{}.dat".format(writer.index + 1, stop))
+        filename = man.get_filename("bunch_{}_{}.dat".format(writer.index, stop))
     if _mpi_rank == 0:
         print("Saving bunch to file {}".format(filename))
     bunch.dumpBunch(filename)
 
-print(timestamp)
+print(man.timestamp)

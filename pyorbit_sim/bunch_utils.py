@@ -32,7 +32,7 @@ from orbit_mpi import mpi_op
 from orbit_utils import Matrix
 
 
-def initialize_bunch(mass=None, kin_energy=None):
+def initialize(mass=None, kin_energy=None):
     """Create and initialize Bunch.
 
     Parameters
@@ -54,7 +54,7 @@ def initialize_bunch(mass=None, kin_energy=None):
     return bunch, params_dict
 
 
-def get_bunch_coords(bunch):
+def get_coords(bunch):
     """Return phase space coordinate array from bunch."""
     X = np.zeros((bunch.getSize(), 6))
     for i in range(bunch.getSize()):
@@ -67,14 +67,14 @@ def get_bunch_coords(bunch):
     return X
 
 
-def get_bunch_coords_global(bunch):
+def get_coords_global(bunch):
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     return
 
 
-def set_bunch_coords(bunch, X, start_index=0):
+def set_coords(bunch, X, start_index=0):
     """Assign phase space coordinate array to bunch.
 
     bunch : Bunch
@@ -104,7 +104,7 @@ def set_bunch_coords(bunch, X, start_index=0):
     return bunch
 
 
-def set_bunch_current(bunch, current=None, freq=None):
+def set_current(bunch, current=None, freq=None):
     """Set macro-size from current [A] and frequency [Hz]."""
     charge_bunch = current / freq
     charge_particle = abs(float(bunch.charge()) * consts.charge_electron)
@@ -120,7 +120,7 @@ def get_z_to_phase_coeff(bunch, freq=None):
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
-def center_bunch(bunch):
+def center(bunch):
     """Shift the bunch so that first-order moments are zero."""
     bunch_twiss_analysis = BunchTwissAnalysis()
     bunch_twiss_analysis.analyzeBunch(bunch)
@@ -128,7 +128,7 @@ def center_bunch(bunch):
     return shift_bunch(bunch, centroid)
 
 
-def decorrelate_bunch(bunch, verbose=False):
+def decorrelate_x_y_z(bunch, verbose=False):
     if verbose:
         print('Decorrelating x-xp, y-yp, z-dE...')
     X = get_bunch_coords(bunch)
@@ -141,7 +141,7 @@ def decorrelate_bunch(bunch, verbose=False):
     return bunch
 
 
-def downsample_bunch(bunch, samples=1, verbose=False):
+def downsample(bunch, samples=1, verbose=False):
     if verbose:
         print('Downsampling bunch (samples={})...'.format(samples))
     X = get_bunch_coords(bunch)
@@ -162,7 +162,7 @@ def downsample_bunch(bunch, samples=1, verbose=False):
     return bunch
 
 
-def reverse_bunch(bunch):
+def reverse(bunch):
     """Reverse the bunch propagation direction.
 
     Since the tail becomes the head of the bunch, the sign of z
@@ -175,7 +175,7 @@ def reverse_bunch(bunch):
     return bunch
 
 
-def shift_bunch(bunch, location=None, verbose=False):
+def shift(bunch, location=None, verbose=False):
     """Shift the bunch centroid in phase space."""
     x, xp, y, yp, z, dE = location
     if verbose:
@@ -198,7 +198,7 @@ def shift_bunch(bunch, location=None, verbose=False):
     return bunch
 
 
-def load_bunch(
+def load(
     filename=None,
     file_format='pyorbit',
     bunch=None,
@@ -271,7 +271,7 @@ def load_bunch(
     return bunch
 
 
-def gen_bunch(dist=None, n_parts=0, verbose=0, bunch=None):
+def generate(dist=None, n_parts=0, verbose=0, bunch=None):
     """Generate bunch from distribution generator. (MPI compatible.)
     
     Parameters
@@ -309,8 +309,8 @@ def gen_bunch(dist=None, n_parts=0, verbose=0, bunch=None):
         )
         if i % _mpi_size == _mpi_rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
-    return bunch
+    return bunch    
 
 
-def slice_bunch_planar(bunch):
+def slice_planar(bunch):
     raise NotImplementedError

@@ -113,7 +113,7 @@ class SNS_LINAC:
             sc_nodes = setSC3DAccNodes(self.lattice, path_length_min, sc_calc)
         if verbose:
             print("Added {} space charge nodes".format(len(sc_nodes)))
-            if solver == "ellipsoid":
+            if solver == "3D":
                 print(
                     "(grid={}X{}X{}, n_bunches={}, path_length_min={})".format(
                         grid_size[0], 
@@ -123,7 +123,7 @@ class SNS_LINAC:
                         path_length_min,
                     )
                 )
-            else:
+            elif solver == "ellipsoid":
                 print("n_ellipsoids = {}".format(n_ellipsoids))
             sc_lengths = [sc_node.getLengthOfSC() for sc_node in sc_nodes]
             min_sc_length = min(min(sc_lengths), self.lattice.getLength())

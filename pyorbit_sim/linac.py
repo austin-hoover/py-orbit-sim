@@ -15,25 +15,29 @@ from orbit.lattice import AccActionsContainer
 import orbit.utils.consts as consts
 import orbit_mpi
 
-from pyorbit_sim.bunch_utils import reverse_bunch
+from pyorbit_sim import bunch_utils
 
 
 class BunchWriter:
-    def __init__(self, folder="./", prefix=None, index=0, position=0.0):
+    def __init__(self, folder="./", prefix=None, index=0, position=0.0, verbose=True):
         self.folder = folder
         self.prefix = prefix
         self.index = index
         self.position = position
+        self.verbose = verbose
         
-    def action(self, bunch, node=None, position=None):            
-        filename = "{}_bunch_{}.dat".format(self.prefix, self.index)
+    def action(self, bunch, node=None, position=None):  
+        filename = "{}_bunch_{}".format(self.prefix, self.index)
         if node is not None:
-            filename = "{}_{}.dat".format(filename, node)
+            filename = "{}_{}".format(filename, node)
+        filename = "{}.dat".format(filename)
         filename = os.path.join(self.folder, filename)
+        if self.verbose:
+            print("Writing bunch to file {}".format(filename))
         bunch.dumpBunch(filename)
         self.index += 1
         self.position = position
-
+            
 
 class Monitor:
     """Monitor the bunch.
@@ -176,12 +180,12 @@ class Monitor:
                         self.history[key].append(value)
                                                 
         # Write bunch coordinates to file.
-        if self.writer is not None:
+        if self.writer is not None and self.stride["write_bunch"] is not None:
             if (position - self.writer.position) >= self.stride["write_bunch"]:
-                self.writer.action(bunch, node=node, position=position)
+                self.writer.action(bunch, node=node.getName(), position=position)
 
-        # Call plotting routines (untested!).
-        if self.plotter is not None:
+        # Call plotting routines.
+        if self.plotter is not None and self.stride["plot_bunch"] is not None:
             if (position - self.plotter.position) >= self.stride["plot_bunch"]:
                 info = dict()
                 for key in self.history:
@@ -211,7 +215,7 @@ class Monitor:
         return df
 
 
-def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
+def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     """Track bunch from start to stop."""
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -227,10 +231,6 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True
     if monitor is not None:
         monitor.position_offset = start["s0"]
         action_container.addAction(monitor.action, AccActionsContainer.EXIT)
-        
-    # Assign ID number to each particle.
-    ParticleIdNumber.addParticleIdNumbers(bunch)
-    copyCoordsToInitCoordsAttr(bunch)
         
     params_dict = dict()
     params_dict["lostbunch"] = Bunch()
@@ -253,13 +253,13 @@ def track_bunch(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True
     return params_dict
 
 
-def track_bunch_reverse(bunch, lattice, monitor=None, start=None, stop=0.0, verbose=0):
+def track_reverse(bunch, lattice, monitor=None, start=None, stop=0.0, verbose=0):
     """Track bunch backward from stop to start."""
     lattice.reverseOrder()
-    bunch = reverse_bunch(bunch)
-    params_dict = track_bunch(bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbose)
+    bunch = bunch_utils.reverse(bunch)
+    params_dict = track(bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbose)
     lattice.reverseOrder()
-    bunch = reverse_bunch(bunch)
+    bunch = bunch_utils.reverse(bunch)
     return params_dict
 
 

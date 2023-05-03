@@ -2,6 +2,12 @@
 
 These routines use python2-compatible matplotlib; they can be called within
 pyorbit scripts.
+
+TODO
+----
+Make plotting work with MPI. The idea would be to compute a histogram on
+each processor, then to add the histograms, then call the plotting routine
+on a single processor.
 """
 import os
 import sys
@@ -12,7 +18,6 @@ from matplotlib import colors
 from matplotlib import patches
 from matplotlib import pyplot as plt
 import numpy as np
-
 
 from bunch import Bunch
 from orbit.diagnostics.diagnostics import get_bunch_coords
@@ -101,6 +106,10 @@ def truncate_cmap(cmap, vmin=0.0, vmax=1.0, n=100):
     name = 'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=vmin, b=vmax)
     vals = np.linspace(vmin, vmax, n)
     return colors.LinearSegmentedColormap.from_list(name, vals)
+
+
+def array_like(a):
+    return np.ndim(np.array(a, dtype=object)) > 0
 
 
 def histogram_bin_edges(X, bins=10, limits=None):
@@ -261,9 +270,9 @@ def plot_image(
     **plot_kws
         Key word arguments for `ax.pcolormesh`.
     """
-    plot_kws.setdefault("ec", "None")
-    plot_kws.setdefault("linewidth", 0.0)
-    plot_kws.setdefault("rasterized", True)
+    # plot_kws.setdefault("ec", "None")
+    # plot_kws.setdefault("linewidth", 0.0)
+    # plot_kws.setdefault("rasterized", True)
     log = "norm" in plot_kws and plot_kws["norm"] == "log"
 
     f = f.copy()
@@ -322,7 +331,7 @@ def proj2d(
     limits=None, 
     units=True,
     fig_kws=None,
-    text=None,
+    text=False,
     **plot_kws
 ):
     """Plot the 2D projection onto the specified axis."""
@@ -340,9 +349,9 @@ def proj2d(
     
     hist, centers = histogram(X[:, axis], bins=bins, centers=True)    
     ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
-    if text is not None:
+    if text:
         if "position" in info:
-            ax.set_title('s = {:.3f} [m]'.format(info['s']))
+            ax.set_title('s = {:.3f} [m]'.format(info["position"]))
             
             
 def proj2d_three_column(
@@ -353,7 +362,7 @@ def proj2d_three_column(
     limits=None,
     units=False,
     fig_kws=None,
-    text=None,
+    text=False,
     **plot_kws
 ):
     """Plot the x-x', y-y', z-dE projections in 1x3 grid.
@@ -368,6 +377,7 @@ def proj2d_three_column(
         limits = 3 * [limits]
     if fig_kws is None:
         fig_kws = dict()
+    fig_kws.setdefault("figsize", (9.0, 2.5))
     fig, axes = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=False, **fig_kws)
     labels = True
     if labels:
@@ -384,9 +394,9 @@ def proj2d_three_column(
         hist, _ = np.histogramdd(X[:, ind], edges)
         centers = [centers_from_edges(e) for e in edges]  
         ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
-        if text is not None:
-            if 's' in info:
-                ax.set_title('s = {:.3f} [m]'.format(info['s']))
+        if text:
+            if "position" in info:
+                ax.set_title("s = {:.3f} [m]".format(info["position"]))
 
                 
 def corner():
@@ -397,7 +407,7 @@ class Plotter:
     def __init__(self, transform=None, folder="./", default_save_kws=None, index=0, position=0.0):
         self.transform = transform
         self.folder = folder
-        self.funcs = []
+        self.functions = []
         self.kws = []
         self.save_kws = []
         self.default_save_kws = default_save_kws
@@ -406,27 +416,27 @@ class Plotter:
         self.index = index
         self.position = position
         
-    def add_func(self, func, save_kws=None, name=None, **kws):
-        self.funcs.append(func)
+    def add_function(self, function, save_kws=None, name=None, **kws):
+        self.functions.append(function)
         self.kws.append(kws)
-        self.names.append(name if name else 'plot_{}'.format(len(self.funcs)))
         self.save_kws.append(save_kws if save_kws else self.default_save_kws)
         
-    def action(self, X, info=None, verbose=False):
+    def action(self, bunch, info=None, verbose=False):
+        X = get_bunch_coords(bunch)
         if self.transform is not None:
             X = self.transform(X)
-        for i in range(len(self.funcs)):
+        for i, function in enumerate(self.functions):
             if verbose:
-                print("Calling '{}' ({}).".format(self.names[i], self.func.__name__))
+                print("Calling {}.".format(function.__name__))
                 
-            self.funcs[i](X, info=info, **self.kws[i])
+            function(X, info=info, **self.kws[i])
             
-            filename = self.names[i]
-            filename = '{}_{}'.format(filename, self.index)
+            filename = '{}_{}'.format(function.__name__, self.index)
             if "node" in info:
                 filename = '{}_{}'.format(filename, info["node"])
             filename = os.path.join(self.folder, filename)
             
+            print("Saving figure to file {}".format(filename))
             plt.savefig(filename, **self.save_kws[i])
             plt.close()
             
