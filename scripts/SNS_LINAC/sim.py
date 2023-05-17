@@ -57,7 +57,7 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = False  # no output if False
+save = True  # no output if False
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -110,7 +110,7 @@ if _mpi_rank == 0:
 
 
 # Save lattice structure.
-if _mpi_rank == 0:
+if save and _mpi_rank == 0:
     # Node start/stop positions.
     file = open(man.get_filename("lattice_nodes.txt"), "w")
     file.write("node position length\n")
