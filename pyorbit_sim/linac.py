@@ -27,12 +27,15 @@ class BunchWriter:
         self.verbose = verbose
         
     def action(self, bunch, node=None, position=None):  
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
         filename = "{}_bunch_{}".format(self.prefix, self.index)
         if node is not None:
             filename = "{}_{}".format(filename, node)
         filename = "{}.dat".format(filename)
         filename = os.path.join(self.folder, filename)
-        if self.verbose:
+        if _mpi_rank == 0 and self.verbose:
             print("Writing bunch to file {}".format(filename))
         bunch.dumpBunch(filename)
         self.index += 1
@@ -139,21 +142,14 @@ class Monitor:
             return
         self.position = position
 
-        # Print update message.
         bunch = params_dict["bunch"]
         node = params_dict["node"]
         beta = bunch.getSyncParticle().beta()
         gamma = bunch.getSyncParticle().gamma()
+        n_parts = bunch.getSizeGlobal()
         if self.start_time is None:
             self.start_time = time.clock()
         time_ellapsed = time.clock() - self.start_time
-        if self.verbose and _mpi_rank == 0:
-            print(
-                "step={}, time={:.3f}, s={:.3f}, node={}".format(
-                    self.step, time_ellapsed, position, node.getName()
-                )
-            )
-        self.step += 1
         
         # Record scalar values (position, energy, etc.)
         if _mpi_rank == 0 and self.track_history:
@@ -178,6 +174,27 @@ class Monitor:
                     value = bunch_twiss_analysis.getCorrelation(j, i)
                     if _mpi_rank == 0:
                         self.history[key].append(value)
+                        
+        if self.verbose and _mpi_rank == 0:
+            fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>9.3f} | {:<9.3e} | {} "
+            if self.step == 0:
+                print("{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<9} | {:<9} | {}"
+                      .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [mm]", "nparts", "node"))
+                print(109 * "-")
+            print(
+                fstr.format(
+                    self.step, 
+                    time_ellapsed, 
+                    position, 
+                    1000.0 * bunch.getSyncParticle().kinEnergy(),
+                    1000.0 * np.sqrt(self.history["cov_0-0"][-1]),
+                    1000.0 * np.sqrt(self.history["cov_2-2"][-1]),
+                    1000.0 * np.sqrt(self.history["cov_4-4"][-1]),
+                    n_parts,
+                    node.getName(),
+                )
+            )
+        self.step += 1
                                                 
         # Write bunch coordinates to file.
         if self.writer is not None and self.stride["write_bunch"] is not None:
