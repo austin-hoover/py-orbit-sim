@@ -29,6 +29,12 @@ from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
+from orbit.py_linac.lattice import LinacApertureNode
+from orbit.py_linac.lattice import LinacEnergyApertureNode
+from orbit.py_linac.lattice import LinacPhaseApertureNode
+from orbit.py_linac.lattice import AxisFieldRF_Gap
+from orbit.py_linac.lattice import AxisField_and_Quad_RF_Gap
+from orbit.py_linac.lattice import BaseRF_Gap
 from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_rfgap_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import AddMEBTChopperPlatesAperturesToSNS_Lattice
@@ -79,6 +85,8 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 
 # Lattice
 # --------------------------------------------------------------------------------------
+
+rf_frequency = 402.5e6  # [1/s]
 
 # Generate SNS linac lattice from XML file.
 xml_file_name = os.path.join(file_path, "data/sns_linac.xml")
@@ -184,16 +192,44 @@ if sc_solver is not None and _mpi_rank == 0:
     print("min length = {}".format(min_sc_length))
 
 
-# Add aperture nodes.
-x_size = 0.042
-y_size = 0.042
-aperture_nodes = Add_quad_apertures_to_lattice(lattice)
-aperture_nodes = Add_rfgap_apertures_to_lattice(lattice, aperture_nodes)
-aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(lattice, aperture_nodes)
-aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
-aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
+# Add transverse aperture nodes.
+add_transverse_apertures = True
+if add_transverse_apertures:
+    x_size = 0.042  # [m]
+    y_size = 0.042  # [m]
+    aperture_nodes = Add_quad_apertures_to_lattice(lattice)
+    aperture_nodes = Add_rfgap_apertures_to_lattice(lattice, aperture_nodes)
+    aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(lattice, aperture_nodes)
+    aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
+    aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
+    n_transverse_aperture_nodes = len(aperture_nodes)
+    if _mpi_rank == 0:
+        print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
+
+# Add longitudinal (phase, energy) aperture nodes after every RF gap node.
+add_energy_apertures = True
+add_phase_apertures = True
+node_pos_dict = lattice.getNodePositionsDict()
+rf_gap_nodes = lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap])
+for node in rf_gap_nodes[::2]:
+    if node.hasParam("aperture") and node.hasParam("aprt_type"):
+        position_start, position_stop = node_pos_dict[node]
+        if add_phase_apertures:
+            aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
+            aperture_node.setMinMaxPhase(-180.0, 180.0)  # [deg]
+            aperture_node.setPosition(position_stop)
+            aperture_node.setSequence(node.getSequence())
+            node.addChildNode(aperture_node, node.EXIT)
+            aperture_nodes.append(aperture_node)
+        if add_energy_apertures:
+            aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
+            aperture_node.setMinMaxEnergy(-0.010, +0.010)  # [GeV]
+            aperture_node.setPosition(position_stop)
+            aperture_node.setSequence(node.getSequence())
+            node.addChildNode(aperture_node, node.EXIT)
+            aperture_nodes.append(aperture_node)
 if _mpi_rank == 0:
-    print("Added {} aperture nodes.".format(len(aperture_nodes)))
+    print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
 
     
 # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
@@ -210,8 +246,7 @@ bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
 current = 0.042  # [C/s]
-frequency = 402.5e6  # [1/s]
-intensity = (current / frequency) / abs(float(bunch.charge()) * consts.charge_electron)
+intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge_electron)
 gamma = bunch.getSyncParticle().gamma()
 beta = bunch.getSyncParticle().beta()
 
@@ -278,7 +313,7 @@ if decorrelate:
 # If `dist` is not None, generate an RMS-equivalent distribution in x-x', y-y', and z-z' 
 # using an analytic distribution function (Gaussian, KV, Waterbag). Reconstruct the the 
 # six-dimensional distribution as f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-dist = GaussDist3D
+dist = None
 n_parts = int(1e5)
 if dist is not None:
     if _mpi_rank == 0:
@@ -342,11 +377,11 @@ if _mpi_rank == 0:
 
 start = 0  # start node (name or position)
 stop = 30.0  # stop node (name or position)s
-save_input_bunch = True
-save_output_bunch = True
+save_input_bunch = False
+save_output_bunch = False
 
 
-# Bunch coordinate writer
+# Create bunch writer/plotter/monitor nodes.
 writer = pyorbit_sim.linac.BunchWriter(
     folder=man.outdir, 
     prefix=man.prefix, 
@@ -388,7 +423,7 @@ monitor = pyorbit_sim.linac.Monitor(
         "write_bunch": (5.0 if save else None),  # [m]
         "plot_bunch": (None if save else None),  # [m]
     },
-    writer=writer,
+    writer=None,
     plotter=None,
     track_history=True,
     track_rms=True,
@@ -439,7 +474,6 @@ if _mpi_rank == 0 and monitor.track_history and save:
 lostbunch = params_dict["lostbunch"]
 aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, lostbunch)
 total_loss = 0.0
-
 for (node, loss) in aprt_nodes_losses:
     if _mpi_rank == 0:
         print(
@@ -448,17 +482,16 @@ for (node, loss) in aprt_nodes_losses:
             "loss= {:6.0f}".format(loss),
         )
     total_loss += loss
-
 if _mpi_rank == 0:
     print("Total loss = {:.2e}".format(total_loss))
-    
 if save:
     filename = man.get_filename("losses.txt")
     if _mpi_rank == 0:
         print("Saving loss vs. node array to {}".format(filename))
     file = open(filename, "w")
+    file.write("node position loss\n")
     for (node, loss) in aprt_nodes_losses:
-        file.write("{} {}\n".format(node.getName(), loss))
+        file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
     file.close()
 
     filename = man.get_filename("bunch_lost.dat".format(stop))
