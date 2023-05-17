@@ -278,7 +278,7 @@ if decorrelate:
 # If `dist` is not None, generate an RMS-equivalent distribution in x-x', y-y', and z-z' 
 # using an analytic distribution function (Gaussian, KV, Waterbag). Reconstruct the the 
 # six-dimensional distribution as f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-dist = WaterBagDist3D
+dist = GaussDist3D
 n_parts = int(1e5)
 if dist is not None:
     if _mpi_rank == 0:
