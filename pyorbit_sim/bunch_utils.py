@@ -129,6 +129,10 @@ def center(bunch):
 
 
 def decorrelate_x_y_z(bunch, verbose=False):
+    """Decorrelate x-y-z.
+    
+    How should this work with MPI?
+    """
     if verbose:
         print('Decorrelating x-xp, y-yp, z-dE...')
     X = get_coords(bunch)
