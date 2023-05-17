@@ -125,17 +125,17 @@ def center(bunch):
     bunch_twiss_analysis = BunchTwissAnalysis()
     bunch_twiss_analysis.analyzeBunch(bunch)
     centroid = [bunch_twiss_analysis.getAverage(i) for i in range(6)]
-    return shift_bunch(bunch, centroid)
+    return shift(bunch, centroid)
 
 
 def decorrelate_x_y_z(bunch, verbose=False):
     if verbose:
         print('Decorrelating x-xp, y-yp, z-dE...')
-    X = get_bunch_coords(bunch)
+    X = get_coords(bunch)
     for i in range(0, X.shape[1], 2):
         idx = np.random.permutation(np.arange(X.shape[0]))
         X[:, i : i + 2] = X[idx, i : i + 2]
-    bunch = set_bunch_coords(bunch, X)
+    bunch = set_coords(bunch, X)
     if verbose:
         print('Decorrelation complete.')
     return bunch
@@ -144,7 +144,7 @@ def decorrelate_x_y_z(bunch, verbose=False):
 def downsample(bunch, samples=1, verbose=False):
     if verbose:
         print('Downsampling bunch (samples={})...'.format(samples))
-    X = get_bunch_coords(bunch)
+    X = get_coords(bunch)
 
     if 0 < samples < 1:
         samples = samples * X.shape[0]
@@ -154,7 +154,7 @@ def downsample(bunch, samples=1, verbose=False):
 
     new_bunch = Bunch()
     bunch.copyEmptyBunchTo(new_bunch)
-    new_bunch = set_bunch_coords(new_bunch, X)
+    new_bunch = set_coords(new_bunch, X)
     new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
     new_bunch.copyBunchTo(bunch)
     if verbose:
