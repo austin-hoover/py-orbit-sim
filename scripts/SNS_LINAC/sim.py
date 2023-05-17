@@ -252,7 +252,7 @@ beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
 # bunch_filename = None
-bunch_filename = "/home/46h/projects/BTF/sim/data/RFQ_output_PARMTEQ_50mA_42mA_1.00e+06.dat"
+bunch_filename = "/home/46h/projects/BTF/sim/data/RFQ_output_PARMTEQ_50mA_42mA_1.00e+06_decorr_x-y-z.dat"
 if bunch_filename is None:
     if _mpi_rank == 0:
         print("Generating bunch from Twiss parameters.")    
@@ -304,18 +304,19 @@ if samples is not None and bunch_size_global > samples:
         )
     new_bunch.copyBunchTo(bunch)
     bunch.macroSize(intensity / samples)
+    bunch_size_global = bunch.getSizeGlobal()
 
 # Decorrelate x-y-z.
-decorrelate = False
-if decorrelate:
+decorrelate_x_y_z = False
+if decorrelate_x_y_z:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
 
 # If `dist` is not None, generate an RMS-equivalent distribution in x-x', y-y', and z-z' 
 # using an analytic distribution function (Gaussian, KV, Waterbag). Reconstruct the the 
 # six-dimensional distribution as f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
 dist = None
-n_parts = int(1e5)
 if dist is not None:
+    n_parts = bunch_size_global
     if _mpi_rank == 0:
         print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
     bunch_twiss_analysis = BunchTwissAnalysis()
@@ -377,8 +378,8 @@ if _mpi_rank == 0:
 
 start = 0  # start node (name or position)
 stop = 30.0  # stop node (name or position)s
-save_input_bunch = False
-save_output_bunch = False
+save_input_bunch = True
+save_output_bunch = True
 
 
 # Create bunch writer/plotter/monitor nodes.
@@ -423,7 +424,7 @@ monitor = pyorbit_sim.linac.Monitor(
         "write_bunch": (5.0 if save else None),  # [m]
         "plot_bunch": (None if save else None),  # [m]
     },
-    writer=None,
+    writer=writer,
     plotter=None,
     track_history=True,
     track_rms=True,
@@ -493,11 +494,6 @@ if save:
     for (node, loss) in aprt_nodes_losses:
         file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
     file.close()
-
-    filename = man.get_filename("bunch_lost.dat".format(stop))
-    if _mpi_rank == 0:
-        print("Saving lost bunch to file {}".format(filename))
-    bunch.dumpBunch(filename)    
     
     
 # Save output bunch.
