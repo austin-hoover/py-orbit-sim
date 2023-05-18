@@ -71,7 +71,7 @@ def get_coords_global(bunch):
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
-    return
+    raise NotImplementedError
 
 
 def set_coords(bunch, X, start_index=0):
@@ -104,9 +104,9 @@ def set_coords(bunch, X, start_index=0):
     return bunch
 
 
-def set_current(bunch, current=None, freq=None):
+def set_current(bunch, current=None, frequency=None):
     """Set macro-size from current [A] and frequency [Hz]."""
-    charge_bunch = current / freq
+    charge_bunch = current / frequency
     charge_particle = abs(float(bunch.charge()) * consts.charge_electron)
     intensity = charge_bunch / charge_particle
     macro_size = intensity / bunch.getSizeGlobal()
@@ -114,12 +114,17 @@ def set_current(bunch, current=None, freq=None):
     return bunch
 
 
-def get_z_to_phase_coeff(bunch, freq=None):
+def get_z_to_phase_coeff(bunch, frequency=None):
     """Return coefficient to calculate phase [degrees] from z [m]."""
-    wavelength = consts.speed_of_light / freq
+    wavelength = consts.speed_of_light / frequency
     return -360.0 / (bunch.getSyncParticle().beta() * wavelength)
 
 
+def get_z_rms_deg(bunch, frequency=None, z_rms=None):
+    """Convert z rms from [m] to [deg]."""
+    z_to_phase_coeff = -get_z_to_phase_coeff(bunch, frequency) * z_rms
+
+    
 def center(bunch):
     """Shift the bunch so that first-order moments are zero."""
     bunch_twiss_analysis = BunchTwissAnalysis()
@@ -179,26 +184,24 @@ def reverse(bunch):
     return bunch
 
 
-def shift(bunch, location=None, verbose=False):
+def shift(bunch, delta=None, verbose=False):
     """Shift the bunch centroid in phase space."""
-    x, xp, y, yp, z, dE = location
+    x, xp, y, yp, z, dE = delta
     if verbose:
-        print(
-            "Shifting bunch centroid...",
-            "  delta_x = {:.3f}".format(x),
-            "  delta_x = {:.3f}".format(y),
-            "  delta_z = {:.3f}".format(z),
-            "  delta_xp = {:.3f}".format(xp),
-            "  delta_yp = {:.3f}".format(yp),
-            "  delta_dE = {:.3f}".format(dE),
-        )
+        print("Shifting bunch centroid...")
+        print(" delta x = {:.3e} [m]".format(delta[0]))
+        print(" delta y = {:.3e} [m]".format(delta[2]))
+        print(" delta z = {:.3e} [m]".format(delta[4]))
+        print(" delta xp = {:.3e} [mrad]".format(delta[1]))
+        print(" delta yp = {:.3e} [mrad]".format(delta[3]))
+        print(" delta dE = {:.3e} [GeV]".format(delta[5]))
     for i in range(bunch.getSize()):
-        bunch.x(i, bunch.x(i) + x)
-        bunch.y(i, bunch.y(i) + y)
-        bunch.z(i, bunch.z(i) + z)
-        bunch.xp(i, bunch.xp(i) + xp)
-        bunch.yp(i, bunch.yp(i) + yp)
-        bunch.dE(i, bunch.dE(i) + dE)
+        bunch.x(i, bunch.x(i) + delta[0])
+        bunch.y(i, bunch.y(i) + delta[2])
+        bunch.z(i, bunch.z(i) + delta[4])
+        bunch.xp(i, bunch.xp(i) + delta[1])
+        bunch.yp(i, bunch.yp(i) + delta[3])
+        bunch.dE(i, bunch.dE(i) + delta[5])
     return bunch
 
 
