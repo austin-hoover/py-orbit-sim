@@ -391,8 +391,8 @@ if _mpi_rank == 0:
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = 0  # start node (name or position)
-stop = "MEBT_Diag:WS07"  # stop node (name or position)
+start = "MEBT_Diag:WS07"  # start node (name or position)
+stop = 30.0  # stop node (name or position)
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
@@ -433,7 +433,7 @@ monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.1,  # [m]
-        "write_bunch": (5.0 if save else None),  # [m]
+        "write_bunch": (None if save else None),  # [m]
         "plot_bunch": (None if save else None),  # [m]
     },
     writer=writer,
@@ -454,7 +454,7 @@ if _mpi_rank == 0:
     print("Design bunch tracking complete.")
     
 # Save input bunch.
-if save and True:
+if save and False:
     node_name = "START" if (start is None or type(start) is not str) else start
     writer.action(bunch, node_name)
     

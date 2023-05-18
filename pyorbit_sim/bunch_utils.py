@@ -122,7 +122,7 @@ def get_z_to_phase_coeff(bunch, frequency=None):
 
 def get_z_rms_deg(bunch, frequency=None, z_rms=None):
     """Convert z rms from [m] to [deg]."""
-    z_to_phase_coeff = -get_z_to_phase_coeff(bunch, frequency) * z_rms
+    return -get_z_to_phase_coeff(bunch, frequency) * z_rms
 
     
 def center(bunch):

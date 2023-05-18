@@ -123,14 +123,15 @@ class Monitor:
         keys = [
             "position",
             "node",
+            "n_parts",
             "gamma",
             "beta",
             "energy",
-            "z_to_phase_coeff",
             "x_rms",
             "y_rms",
             "z_rms",
             "z_rms_deg",
+            "z_to_phase_coeff",
         ]
         for i in range(6):
             keys.append("mean_{}".format(i))
@@ -163,6 +164,7 @@ class Monitor:
         if _mpi_rank == 0 and self.track_history:
             self.history["position"].append(position)
             self.history["node"].append(node.getName())
+            self.history["n_parts"].append(n_parts)
             self.history["beta"].append(beta)
             self.history["gamma"].append(gamma)
             self.history["energy"].append(bunch.getSyncParticle().kinEnergy())
