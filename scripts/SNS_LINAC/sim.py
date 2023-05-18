@@ -65,7 +65,7 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = False  # no output if False
+save = True  # no output if False
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -258,7 +258,7 @@ beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
 # bunch_filename = None
-bunch_filename = "/home/46h/projects/BTF/sim/data/RFQ_output_PARMTEQ_50mA_42mA_8.66e+06.dat"
+bunch_filename = "/home/46h/projects/BTF/sim/data/RFQ_output_PARMTEQ_50mA_42mA_8.55e+06.dat"
 if bunch_filename is None:
     if _mpi_rank == 0:
         print("Generating bunch from Twiss parameters.")    
@@ -290,7 +290,7 @@ else:
     
 # Shift the longitudinal bunch position.
 phase_offset = 0.0  # [deg]
-if math.abs(phase_offset) > 1.0e-30:
+if np.abs(phase_offset) > 1.0e-30:
     z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, rf_frequency)
     z_offset = -phase_offset / z_to_phase_coeff
     pyorbit_sim.bunch_utils.shift(bunch, delta=[0.0, 0.0, 0.0, 0.0, z_offset, 0.0], verbose=True)
