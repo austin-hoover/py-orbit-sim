@@ -15,7 +15,7 @@ from orbit.lattice import AccActionsContainer
 import orbit.utils.consts as consts
 import orbit_mpi
 
-from pyorbit_sim import bunch_utils
+import pyorbit_sim.bunch_utils
 
 
 class BunchWriter:
@@ -73,7 +73,7 @@ class Monitor:
         emit_norm_flag=False,
         position_offset=0.0,
         verbose=True,
-        frequency=402.5e6,
+        rf_frequency=402.5e6,
     ):
         """
         Parameters
@@ -102,7 +102,7 @@ class Monitor:
         self.position = self.position_offset = position_offset
         self.step = 0
         self.start_time = None
-        self.frequency = frequency
+        self.rf_frequency = rf_frequency
 
         self.stride = stride
         if self.stride is None:
@@ -125,6 +125,12 @@ class Monitor:
             "node",
             "gamma",
             "beta",
+            "energy",
+            "z_to_phase_coeff",
+            "x_rms",
+            "y_rms",
+            "z_rms",
+            "z_rms_deg",
         ]
         for i in range(6):
             keys.append("mean_{}".format(i))
@@ -159,6 +165,7 @@ class Monitor:
             self.history["node"].append(node.getName())
             self.history["beta"].append(beta)
             self.history["gamma"].append(gamma)
+            self.history["energy"].append(bunch.getSyncParticle().kinEnergy())
 
         # Record covariance matrix.
         if self.track_history and self.track_rms:
@@ -179,31 +186,38 @@ class Monitor:
                         
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
-            
+                    
             # Get RMS beam sizes.
             x_rms = np.sqrt(self.history["cov_0-0"][-1])
             y_rms = np.sqrt(self.history["cov_2-2"][-1])
             z_rms = np.sqrt(self.history["cov_4-4"][-1])
             
-            # Convert z_rms to degrees.
-            bunch_lambda = bunch.getSyncParticle().beta() * (consts.speed_of_light / self.frequency)
-            z_to_phase_coeff = 360.0 / bunch_lambda
-            z_rms_deg = z_to_phase_coeff * z_rms
+            # Convert z_rms to degrees.            
+            z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, self.rf_frequency)
+            z_rms_deg = -z_to_phase_coeff * z_rms
+            
+            self.history["x_rms"] = x_rms
+            self.history["y_rms"] = y_rms
+            self.history["z_rms"] = z_rms
+            self.history["z_rms_deg"].append(z_rms_deg)
+            self.history["z_to_phase_coeff"].append(z_to_phase_coeff)
             
             fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.3e} | {} "
             if self.step == 0:
-                print("{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
-                      .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node"))
-                print(109 * "-")
+                print(
+                    "{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
+                    .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
+                )
+                print(115 * "-")
             print(
                 fstr.format(
                     self.step,
                     time_ellapsed,  # [s]
                     position,  # [m]
-                    1000.0 * bunch.getSyncParticle().kinEnergy(),  # [MeV]
-                    1000.0 * x_rms,  # [mm]
-                    1000.0 * y_rms,  # [mm]
-                    z_rms_deg,  # [deg]
+                    1000.0 * bunch.getSyncParticle().kinEnergy(),
+                    1000.0 * x_rms,
+                    1000.0 * y_rms,
+                    z_rms_deg,
                     n_parts,
                     node.getName(),
                 )
@@ -287,10 +301,10 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
 def track_reverse(bunch, lattice, monitor=None, start=None, stop=0.0, verbose=0):
     """Track bunch backward from stop to start."""
     lattice.reverseOrder()
-    bunch = bunch_utils.reverse(bunch)
+    bunch = pyorbit_sim.bunch_utils.reverse(bunch)
     params_dict = track(bunch, lattice, monitor=monitor, start=stop, stop=start, verbose=verbose)
     lattice.reverseOrder()
-    bunch = bunch_utils.reverse(bunch)
+    bunch = pyorbit_sim.bunch_utils.reverse(bunch)
     return params_dict
 
 
