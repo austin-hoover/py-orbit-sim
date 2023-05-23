@@ -165,8 +165,8 @@ class Monitor:
             self.history["position"].append(position)
             self.history["node"].append(node.getName())
             self.history["n_parts"].append(n_parts)
-            self.history["beta"].append(beta)
             self.history["gamma"].append(gamma)
+            self.history["beta"].append(beta)
             self.history["energy"].append(bunch.getSyncParticle().kinEnergy())
 
         # Record covariance matrix.
@@ -185,45 +185,63 @@ class Monitor:
                     value = bunch_twiss_analysis.getCorrelation(j, i)
                     if _mpi_rank == 0:
                         self.history[key].append(value)
-                        
-        # Print update statement.
-        if self.verbose and _mpi_rank == 0:
-                    
+                                            
             # Get RMS beam sizes.
             x_rms = np.sqrt(self.history["cov_0-0"][-1])
             y_rms = np.sqrt(self.history["cov_2-2"][-1])
             z_rms = np.sqrt(self.history["cov_4-4"][-1])
-            
+
             # Convert z_rms to degrees.            
             z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, self.rf_frequency)
             z_rms_deg = -z_to_phase_coeff * z_rms
-            
-            self.history["x_rms"] = x_rms
-            self.history["y_rms"] = y_rms
-            self.history["z_rms"] = z_rms
+
+            self.history["x_rms"].append(x_rms)
+            self.history["y_rms"].append(y_rms)
+            self.history["z_rms"].append(z_rms)
             self.history["z_rms_deg"].append(z_rms_deg)
             self.history["z_to_phase_coeff"].append(z_to_phase_coeff)
-            
-            fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.3e} | {} "
-            if self.step == 0:
+                        
+        # Print update statement.
+        if self.verbose and _mpi_rank == 0:
+            if self.track_rms:
+                fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.3e} | {} "
+                if self.step == 0:
+                    print(
+                        "{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
+                        .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
+                    )
+                    print(115 * "-")
                 print(
-                    "{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
-                    .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
+                    fstr.format(
+                        self.step,
+                        time_ellapsed,  # [s]
+                        position,  # [m]
+                        1000.0 * bunch.getSyncParticle().kinEnergy(),
+                        1000.0 * x_rms,
+                        1000.0 * y_rms,
+                        z_rms_deg,
+                        n_parts,
+                        node.getName(),
+                    )
                 )
-                print(115 * "-")
-            print(
-                fstr.format(
-                    self.step,
-                    time_ellapsed,  # [s]
-                    position,  # [m]
-                    1000.0 * bunch.getSyncParticle().kinEnergy(),
-                    1000.0 * x_rms,
-                    1000.0 * y_rms,
-                    z_rms_deg,
-                    n_parts,
-                    node.getName(),
+            else:
+                fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:<9.3e} | {} "
+                if self.step == 0:
+                    print(
+                        "{:<5} | {:<10} | {:<7} | {:<10} | {:<9} | {}"
+                        .format("step", "time [s]", "s [m]", "T [MeV]", "nparts", "node")
+                    )
+                    print(80 * "-")
+                print(
+                    fstr.format(
+                        self.step,
+                        time_ellapsed,  # [s]
+                        position,  # [m]
+                        1000.0 * bunch.getSyncParticle().kinEnergy(),
+                        n_parts,
+                        node.getName(),
+                    )
                 )
-            )
         self.step += 1
                                                 
         # Write bunch coordinates to file.
