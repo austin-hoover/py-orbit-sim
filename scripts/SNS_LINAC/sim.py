@@ -92,7 +92,7 @@ rf_frequency = 402.5e6  # [1/s]
 
 # Generate SNS linac lattice from XML file.
 xml_file_name = os.path.join(file_path, "data/sns_linac.xml")
-max_drift_length = 0.0025  # [m]
+max_drift_length = 0.010  # [m]
 sequences = [
     "MEBT",
     "DTL1",
@@ -432,7 +432,7 @@ plotter.add_function(
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
-        "update": 0.1,  # [m]
+        "update": 0.010,  # [m]
         "write_bunch": (None if save else None),  # [m]
         "plot_bunch": (None if save else None),  # [m]
     },
