@@ -392,7 +392,7 @@ if _mpi_rank == 0:
 # --------------------------------------------------------------------------------------
 
 start = 0.0  # start node (name or position)
-stop = "MEBT_Diag:WS07"  # stop node (name or position)
+stop = "MEBT_Diag:WS04b"  # stop node (name or position)
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
@@ -432,7 +432,7 @@ plotter.add_function(
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
-        "update": 0.009,  # [m]
+        "update": 0.100,  # [m]
         "write_bunch": (None if save else None),  # [m]
         "plot_bunch": (None if save else None),  # [m]
     },
