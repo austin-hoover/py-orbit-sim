@@ -259,6 +259,7 @@ beta = bunch.getSyncParticle().beta()
 # Load the bunch coordinates.
 # bunch_filename = None
 bunch_filename = "/home/46h/projects/BTF/sim/data/RFQ_output_PARMTEQ_50mA_42mA_8.55e+06.dat"
+
 if bunch_filename is None:
     if _mpi_rank == 0:
         print("Generating bunch from Twiss parameters.")    

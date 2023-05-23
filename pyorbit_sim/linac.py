@@ -185,16 +185,13 @@ class Monitor:
                     value = bunch_twiss_analysis.getCorrelation(j, i)
                     if _mpi_rank == 0:
                         self.history[key].append(value)
-                                            
-            # Get RMS beam sizes.
+                               
+        if _mpi_rank == 0 and self.track_rms:
             x_rms = np.sqrt(self.history["cov_0-0"][-1])
             y_rms = np.sqrt(self.history["cov_2-2"][-1])
             z_rms = np.sqrt(self.history["cov_4-4"][-1])
-
-            # Convert z_rms to degrees.            
             z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, self.rf_frequency)
             z_rms_deg = -z_to_phase_coeff * z_rms
-
             self.history["x_rms"].append(x_rms)
             self.history["y_rms"].append(y_rms)
             self.history["z_rms"].append(z_rms)
