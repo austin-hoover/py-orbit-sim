@@ -392,7 +392,7 @@ if _mpi_rank == 0:
 # --------------------------------------------------------------------------------------
 
 start = 0.0  # start node (name or position)
-stop = "MEBT_Diag:WS07"  # stop node (name or position)
+stop = "MEBT_Diag:WS04b"  # stop node (name or position)
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
