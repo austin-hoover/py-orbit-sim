@@ -184,7 +184,7 @@ if False:
 
 # Add space charge nodes.
 sc_solver = "3D"  # {"3D", "ellipsoid", None}
-sc_grid_size = (128, 128, 128)
+sc_grid_size = (64, 64, 64)
 sc_path_length_min = 0.01
 sc_n_bunches = 1
 if sc_solver == "3D":
