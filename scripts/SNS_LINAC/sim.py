@@ -92,7 +92,7 @@ rf_frequency = 402.5e6  # [1/s]
 
 # Generate SNS linac lattice from XML file.
 xml_file_name = os.path.join(file_path, "data/sns_linac.xml")
-max_drift_length = 0.01  # [m]
+max_drift_length = 0.0025  # [m]
 sequences = [
     "MEBT",
     "DTL1",
@@ -185,7 +185,7 @@ if False:
 # Add space charge nodes.
 sc_solver = "3D"  # {"3D", "ellipsoid", None}
 sc_grid_size = (64, 64, 64)
-sc_path_length_min = 0.01
+sc_path_length_min = max_drift_length
 sc_n_bunches = 1
 if sc_solver == "3D":
     sc_calc = SpaceChargeCalc3D(sc_grid_size[0], sc_grid_size[1], sc_grid_size[2])
