@@ -257,8 +257,10 @@ gamma = bunch.getSyncParticle().gamma()
 beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
-# bunch_filename = None
-bunch_filename = "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/bunch_RFQ_output_8.55e+06.dat"
+bunch_filename = os.path.join(
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-05-23_PARMTEQ_WS07/data/derived",
+    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+06.dat",
+)
 if bunch_filename is None:
     if _mpi_rank == 0:
         print("Generating bunch from Twiss parameters.")    
@@ -391,17 +393,17 @@ if _mpi_rank == 0:
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = 0.0  # start node (name or position)
-stop = "MEBT_Diag:WS04b"  # stop node (name or position)
+start = "MEBT_Diag:WS07"  # start node (name or position)
+stop = 37.0  # stop node (name or position)
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
     folder=man.outdir, 
     prefix=man.prefix, 
-    index=0, 
+    index=0,
 )
     
-# Create bunch plotter.
+# Create bunch plotter. (Does not currently work with MPI.)
 def transform(X):
     """Normalize the 2D phase spaces."""
     Sigma = np.cov(X.T)
@@ -433,8 +435,8 @@ monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.100,  # [m]
-        "write_bunch": (None if save else None),  # [m]
-        "plot_bunch": (None if save else None),  # [m]
+        "write_bunch": 7.0 if save else None,  # [m]
+        "plot_bunch": None if save else None,  # [m]
     },
     writer=writer,
     plotter=None,
@@ -454,7 +456,7 @@ if _mpi_rank == 0:
     print("Design bunch tracking complete.")
     
 # Save input bunch.
-if save and False:
+if save and True:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
