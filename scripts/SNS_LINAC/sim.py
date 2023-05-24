@@ -65,7 +65,7 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = True  # no output if False
+save = False  # no output if False
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -167,7 +167,7 @@ if False:
 
 
 # Set longitudinal fields
-if False:
+if True:
     # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
     # the energy spread is large, but is slower and is not symplectic.)
     lattice.setLinacTracker(True)
@@ -183,7 +183,7 @@ if False:
 
 
 # Add space charge nodes.
-sc_solver = "3D"  # {"3D", "ellipsoid", None}
+sc_solver = None  # {"3D", "ellipsoid", None}
 sc_grid_size = (64, 64, 64)
 sc_path_length_min = max_drift_length
 sc_n_bunches = 1
@@ -259,7 +259,7 @@ beta = bunch.getSyncParticle().beta()
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2023-05-23_PARMTEQ_WS07/data/derived",
-    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+06_decorr_x-y-z.dat",
+    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+05.dat",
 )
 if bunch_filename is None:
     if _mpi_rank == 0:
@@ -298,11 +298,12 @@ if np.abs(phase_offset) > 1.0e-30:
     pyorbit_sim.bunch_utils.shift(bunch, delta=[0.0, 0.0, 0.0, 0.0, z_offset, 0.0], verbose=True)
         
 # Downsample by random selection. 
-## Here we assume the particles were randomly generated to begin with, so we
-## just use the first k indices. Note that random selection is not guaranteed
-## to preserve the 6D phase space distribution.
-##
-## Need to think more about how to work with MPI.
+#
+# Here we assume the particles were randomly generated to begin with, so we
+# just use the first k indices. Note that random selection is not guaranteed
+# to preserve the 6D phase space distribution.
+#
+# (Need to think more about how to work with MPI.)
 samples = None
 if samples is not None and bunch_size_global > samples:
     new_bunch = Bunch()
@@ -321,6 +322,8 @@ if samples is not None and bunch_size_global > samples:
     bunch_size_global = bunch.getSizeGlobal()
 
 # Decorrelate x-y-z.
+#
+# (Need to think about how to work with MPI.)
 if False:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
 
@@ -406,28 +409,23 @@ writer = pyorbit_sim.linac.BunchWriter(
 # Create bunch plotter. (Does not currently work with MPI.)
 def transform(X):
     """Normalize the 2D phase spaces."""
-    Sigma = np.cov(X.T)
-    Xn = np.zeros(X.shape)
-    for i in range(0, X.shape[1], 2):
-        sigma = Sigma[i : i + 2, i : i + 2]
-        eps = np.sqrt(np.linalg.det(sigma))
-        alpha = -sigma[0, 1] / eps
-        beta = sigma[0, 0] / eps
-        Xn[:, i] = X[:, i] / np.sqrt(beta)
-        Xn[:, i + 1] = (np.sqrt(beta) * X[:, i + 1]) + (alpha * X[:, i] / np.sqrt(beta))
-        Xn[:, i : i + 2] = Xn[:, i : i + 2] / np.sqrt(eps)
-    return Xn
+    X[:, :] *= 1000.0
+    # X = pyorbit_sim.ap.norm_xpx_ypy_zpz(X, scale_emittance=True)
+    return X
     
 plotter = pyorbit_sim.plotting.Plotter(
     transform=transform, 
     folder=man.outdir,
+    prefix=man.prefix,
     default_save_kws=None, 
 )
 plotter.add_function(
     pyorbit_sim.plotting.proj2d_three_column, 
+    fig_kws=dict(figsize=(11.0, 2.5)),
     save_kws=None, 
     name=None, 
-    bins=32,
+    bins=64,
+    norm="log",
 )
 
 # Create bunch monitor.
@@ -435,11 +433,11 @@ monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.100,  # [m]
-        "write_bunch": 7.0 if save else None,  # [m]
-        "plot_bunch": None if save else None,  # [m]
+        "write_bunch": np.inf if save else None,  # [m]
+        "plot_bunch": 1.0 if save else None,  # [m]
     },
     writer=writer,
-    plotter=None,
+    plotter=plotter,
     track_history=True,
     track_rms=True,
     dispersion_flag=False,
@@ -447,16 +445,22 @@ monitor = pyorbit_sim.linac.Monitor(
     rf_frequency=rf_frequency,
     verbose=True,
 )
+    
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:
     print("Tracking design bunch...")
-lattice.trackDesignBunch(bunch)
+design_bunch = lattice.trackDesignBunch(bunch)
 if _mpi_rank == 0:
     print("Design bunch tracking complete.")
     
+# Check the synchronous particle time. This could be wrong if start != 0 and
+# if the bunch was loaded from a file without a PyORBIT header (which should 
+# automatically load the correct time).
+pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=True)
+    
 # Save input bunch.
-if save and True:
+if save and False:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -495,7 +499,7 @@ if save:
     file.close()
     
 # Save output bunch.
-if save and True:
+if save and False:
     node_name = stop
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"

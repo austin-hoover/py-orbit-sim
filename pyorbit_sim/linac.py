@@ -305,7 +305,59 @@ class Monitor:
         df = pd.DataFrame(data=data, columns=keys)
         df.to_csv(filename, sep=delimiter, index=False)
         return df
-
+    
+    
+def get_node_info(node_name_or_position, lattice):
+    """Return node, node index, start and stop position for node name or center position.
+    
+    Helper method for `track_bunch` and `track_bunch_reverse`.
+    
+    Parameters
+    ----------
+    argument : node name or position.
+    lattice : LinacAccLattice
+    
+    Returns
+    -------
+    dict
+        "node": the node instance
+        "index": the node index in the lattice
+        "s0": the node start position
+        "
+    """
+    if type(node_name_or_position) is str:
+        name = node_name_or_position
+        node = lattice.getNodeForName(name)
+        index = lattice.getNodeIndex(node)
+        s0 = node.getPosition() - 0.5 * node.getLength()
+        s1 = node.getPosition() + 0.5 * node.getLength()
+    else:
+        position = node_name_or_position
+        node, index, s0, s1 = lattice.getNodeForPosition(position)
+    return {
+        "node": node,
+        "index": index,
+        "s0": s0,
+        "s1": s1,
+    }
+    
+    
+def check_sync_part_time(bunch, lattice, start=0.0, set_design=False):
+    """Check if the synchronous particle time is set to the design value at start."""
+    start = get_node_info(start, lattice)
+    sync_time = bunch.getSyncParticle().time()
+    sync_time_design = 0.0
+    if start["index"] > 0:
+        design_bunch = lattice.trackDesignBunch(bunch, index_start=0, index_stop=start["index"])
+        sync_time_design = design_bunch.getSyncParticle().time()  
+    print("Start index = {}:".format(start["index"]))
+    print("    Synchronous particle time (actual) = {}".format(sync_time))
+    print("    Synchronous particle time (design) = {}".format(sync_time_design))
+    if set_design and abs(sync_time - sync_time_design) > 1.0e-30:
+        print("    Setting to design value.")
+        bunch.getSyncParticle().time(sync_time_design)
+        print("bunch.getSyncParticle().time() = {}".format(bunch.getSyncParticle().time()))
+            
 
 def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     """Track bunch from start to stop."""
@@ -315,8 +367,8 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     # Get start/stop node names, indices, and positions.
     if stop is None:
         stop = lattice.getLength()
-    start = _get_node(start, lattice)
-    stop = _get_node(stop, lattice)
+    start = get_node_info(start, lattice)
+    stop = get_node_info(stop, lattice)
     
     # Add monitor.
     action_container = AccActionsContainer("monitor")
@@ -353,22 +405,3 @@ def track_reverse(bunch, lattice, monitor=None, start=None, stop=0.0, verbose=0)
     lattice.reverseOrder()
     bunch = pyorbit_sim.bunch_utils.reverse(bunch)
     return params_dict
-
-
-def _get_node(argument, lattice):
-    """Helper method for `track_bunch` and `track_bunch_reverse`."""
-    if type(argument) is str:
-        name = argument
-        node = lattice.getNodeForName(name)
-        index = lattice.getNodeIndex(node)
-        s0 = node.getPosition() - 0.5 * node.getLength()
-        s1 = node.getPosition() + 0.5 * node.getLength()
-    else:
-        position = argument
-        node, index, s0, s1 = lattice.getNodeForPosition(position)
-    return {
-        "node": node,
-        "index": index,
-        "s0": s0,
-        "s1": s1,
-    }
