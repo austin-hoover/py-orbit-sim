@@ -28,7 +28,7 @@ class BunchWriter:
         self.position = position
         self.verbose = verbose
         
-    def action(self, bunch, node=None, position=None):  
+    def action(self, bunch, node_name=None, position=None):  
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
@@ -37,31 +37,33 @@ class BunchWriter:
             filename = "{}_{}".format(self.prefix, filename)
         if self.index is not None:
             filename = "{}_{}".format(filename, self.index)
-        if node is not None:
-            filename = "{}_{}".format(filename, node)
+        if node_name is not None:
+            filename = "{}_{}".format(filename, node_name)
         filename = "{}.dat".format(filename)
         filename = os.path.join(self.folder, filename)
         if _mpi_rank == 0 and self.verbose:
             print("Writing bunch to file {}".format(filename))
         bunch.dumpBunch(filename)
-        self.index += 1
-        self.position = position
+        if self.index is not None:
+            self.index += 1
+        if position is not None:
+            self.position = position
         
         
 class BunchWriterNode(BaseLinacNode):
-    def __init__(self, name="bunch_writer_node", node=None, writer=None, **kws):
+    def __init__(self, name="bunch_writer_node", node_name=None, writer=None, **kws):
         BaseLinacNode.__init__(self, name)
         self.writer = writer
         if self.writer is None:
             self.writer = BunchWriter(**kws)
         self.active = True
-        self.node = node
+        self.node_name = node_name
         
     def track(self, params_dict):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if self.active and params_dict.has_key("bunch"):
-            self.writer.action(params_dict["bunch"], node=self.node)
+            self.writer.action(params_dict["bunch"], node_name=self.node_name)
             
     def trackDesign(self, params_dict):
         pass
@@ -269,10 +271,10 @@ class Monitor:
                 )
         self.step += 1
                                                 
-        # Write bunch coordinates to file.
+        # Write bunch coordinates to file.        
         if self.writer is not None and self.stride["write_bunch"] is not None:
             if (position - self.writer.position) >= self.stride["write_bunch"]:
-                self.writer.action(bunch, node=node.getName(), position=position)
+                self.writer.action(bunch, node_name=node.getName(), position=position)
 
         # Call plotting routines.
         if self.plotter is not None and self.stride["plot_bunch"] is not None:
