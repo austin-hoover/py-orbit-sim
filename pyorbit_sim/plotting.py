@@ -404,9 +404,10 @@ def corner():
         
 
 class Plotter:
-    def __init__(self, transform=None, folder="./", default_save_kws=None, index=0, position=0.0):
+    def __init__(self, transform=None, folder="./", prefix=None, default_save_kws=None, index=0, position=0.0):
         self.transform = transform
         self.folder = folder
+        self.prefix = prefix
         self.functions = []
         self.kws = []
         self.save_kws = []
@@ -431,7 +432,9 @@ class Plotter:
                 
             function(X, info=info, **self.kws[i])
             
-            filename = '{}_{}'.format(function.__name__, self.index)
+            filename = "{}_{:04.0f}".format(function.__name__, self.index)
+            if self.prefix is not None:
+                filename = "{}_{}".format(self.prefix, filename)
             if "node" in info:
                 filename = '{}_{}'.format(filename, info["node"])
             filename = os.path.join(self.folder, filename)
