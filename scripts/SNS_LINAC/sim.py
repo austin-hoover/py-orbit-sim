@@ -259,7 +259,7 @@ beta = bunch.getSyncParticle().beta()
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2023-05-23_PARMTEQ_WS07/data/derived",
-    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+06.dat",
+    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+06_decorr_x-y-z.dat",
 )
 if bunch_filename is None:
     if _mpi_rank == 0:
