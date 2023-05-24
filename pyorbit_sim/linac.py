@@ -12,6 +12,8 @@ from bunch import BunchTwissAnalysis
 from bunch_utils_functions import copyCoordsToInitCoordsAttr
 from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
+from orbit.py_linac.lattice import BaseLinacNode
+from orbit.teapot import DriftTEAPOT
 import orbit.utils.consts as consts
 import orbit_mpi
 
@@ -30,7 +32,11 @@ class BunchWriter:
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
-        filename = "{}_bunch_{}".format(self.prefix, self.index)
+        filename = "bunch"
+        if self.prefix is not None:
+            filename = "{}_{}".format(self.prefix, filename)
+        if self.index is not None:
+            filename = "{}_{}".format(filename, self.index)
         if node is not None:
             filename = "{}_{}".format(filename, node)
         filename = "{}.dat".format(filename)
@@ -40,6 +46,25 @@ class BunchWriter:
         bunch.dumpBunch(filename)
         self.index += 1
         self.position = position
+        
+        
+class BunchWriterNode(BaseLinacNode):
+    def __init__(self, name="bunch_writer_node", node=None, writer=None, **kws):
+        BaseLinacNode.__init__(self, name)
+        self.writer = writer
+        if self.writer is None:
+            self.writer = BunchWriter(**kws)
+        self.active = True
+        self.node = node
+        
+    def track(self, params_dict):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if self.active and params_dict.has_key("bunch"):
+            self.writer.action(params_dict["bunch"], node=self.node)
+            
+    def trackDesign(self, params_dict):
+        pass
             
 
 class Monitor:
@@ -84,7 +109,9 @@ class Monitor:
             Bunch writing manager. 
         stride : dict
             Each value corresponds to the stride length (in meters) between updates.
-            Can contain the following keys.
+            If a list of node names is provided, an update will occur only at thos
+            nodes.
+            The dictionary can contain the following keys.
                 "update": proceed with all updates (print statement, etc.)
                 "write_bunch": call `bunch.dumpBunch`
                 "plot_bunch": call plotting routines
@@ -144,13 +171,14 @@ class Monitor:
     def action(self, params_dict):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
+        
         # Update position; decide whether to proceed.        
         position = params_dict["path_length"] + self.position_offset
         if (position - self.position) < self.stride["update"]:
             return
+        
         self.position = position
-
+        
         bunch = params_dict["bunch"]
         node = params_dict["node"]
         beta = bunch.getSyncParticle().beta()
@@ -287,7 +315,7 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
         stop = lattice.getLength()
     start = _get_node(start, lattice)
     stop = _get_node(stop, lattice)
-
+    
     # Add monitor.
     action_container = AccActionsContainer("monitor")
     if monitor is not None:
