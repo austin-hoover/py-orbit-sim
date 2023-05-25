@@ -125,12 +125,12 @@ def get_z_rms_deg(bunch, frequency=None, z_rms=None):
     return -get_z_to_phase_coeff(bunch, frequency) * z_rms
 
     
-def center(bunch):
+def center(bunch, verbose=False):
     """Shift the bunch so that first-order moments are zero."""
     bunch_twiss_analysis = BunchTwissAnalysis()
     bunch_twiss_analysis.analyzeBunch(bunch)
-    centroid = [bunch_twiss_analysis.getAverage(i) for i in range(6)]
-    return shift(bunch, centroid)
+    centroid = np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
+    return shift(bunch, delta=-centroid, verbose=verbose)
 
 
 def decorrelate_x_y_z(bunch, verbose=False):
