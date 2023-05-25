@@ -65,7 +65,7 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = False  # no output if False
+save = True  # no output if False
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -183,7 +183,7 @@ if True:
 
 
 # Add space charge nodes.
-sc_solver = None  # {"3D", "ellipsoid", None}
+sc_solver = "3D"  # {"3D", "ellipsoid", None}
 sc_grid_size = (64, 64, 64)
 sc_path_length_min = max_drift_length
 sc_n_bunches = 1
@@ -258,8 +258,8 @@ beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-05-23_PARMTEQ_WS07/data/derived",
-    "230523132233-sim_bunch_MEBT_Diag:WS07_1.00e+05.dat",
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data",
+    "realisticLEBT_50mA_5M_41mA_4106k",
 )
 if bunch_filename is None:
     if _mpi_rank == 0:
@@ -322,7 +322,6 @@ if samples is not None and bunch_size_global > samples:
     bunch_size_global = bunch.getSizeGlobal()
 
 # Decorrelate x-y-z.
-#
 # (Need to think about how to work with MPI.)
 if False:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
@@ -396,7 +395,7 @@ if _mpi_rank == 0:
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = "MEBT_Diag:WS07"  # start node (name or position)
+start = 0.0  # start node (name or position)
 stop = 37.0  # stop node (name or position)
 
 # Create bunch writer.
@@ -433,11 +432,11 @@ monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.100,  # [m]
-        "write_bunch": np.inf if save else None,  # [m]
-        "plot_bunch": 1.0 if save else None,  # [m]
+        "write_bunch": 7.0 if save else None,  # [m]
+        "plot_bunch": np.inf if save else None,  # [m]
     },
-    writer=writer,
-    plotter=plotter,
+    writer=None,
+    plotter=None,
     track_history=True,
     track_rms=True,
     dispersion_flag=False,
@@ -460,7 +459,7 @@ if _mpi_rank == 0:
 pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=True)
     
 # Save input bunch.
-if save and False:
+if save and True:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -499,7 +498,7 @@ if save:
     file.close()
     
 # Save output bunch.
-if save and False:
+if save and True:
     node_name = stop
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"
