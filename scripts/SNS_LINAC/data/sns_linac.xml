@@ -58,9 +58,6 @@
   <accElement length="0.0" name="MEBT_Diag:WS04b" pos="1.193" type="MARKER">
    <parameters/>
   </accElement>
-  <accElement length="0.0" name="MEBT_Diag:WS04b" pos="1.193" type="MARKER">
-   <parameters/>
-  </accElement>
   <accElement length="0.0" name="MEBT_RF:Bnch02:Rg01" pos="1.288" type="RFGAP">
    <parameters E0L="0.000132964" E0TL="4.5e-05" EzFile="./axis_fields/MEBT2_Rg1.dat" aperture="0.036" aprt_type="1" cavity="MEBT2" mode="0" phase="90.00"/>
    <TTFs beta_max="0.0797326996297" beta_min="0.0651533180282">
