@@ -65,7 +65,7 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = True  # no output if False
+save = False  # no output if False
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -184,11 +184,13 @@ if True:
 
 # Add space charge nodes.
 sc_solver = "3D"  # {"3D", "ellipsoid", None}
-sc_grid_size = (64, 64, 64)
-sc_path_length_min = max_drift_length
+sc_grid_size_x = 64
+sc_grid_size_y = 64
+sc_grid_size_z = 64
+sc_path_length_min = 0.010  # [m]
 sc_n_bunches = 1
 if sc_solver == "3D":
-    sc_calc = SpaceChargeCalc3D(sc_grid_size[0], sc_grid_size[1], sc_grid_size[2])
+    sc_calc = SpaceChargeCalc3D(sc_grid_size_x, sc_grid_size_y, sc_grid_size_z)
     if sc_n_bunches > 1: 
         sc_calc.numExtBunches(n_bunches)
         sc_calc.freqOfBunches(rf_frequency)
@@ -258,9 +260,10 @@ beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data",
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data/initial_bunch/",
     "realisticLEBT_50mA_5M_41mA_4106k",
 )
+
 if bunch_filename is None:
     if _mpi_rank == 0:
         print("Generating bunch from Twiss parameters.")    
@@ -289,6 +292,17 @@ else:
     if _mpi_rank == 0:
         print("Generating bunch from file '{}'.".format(bunch_filename))
     bunch.readBunch(bunch_filename)
+    
+# Delete some of the particles. This works fine if the original bunch particles
+# were generated randomly.
+if True:
+    frac = 0.1
+    n = int(frac * bunch.getSize())
+    print("(rank {}) Deleting {} particles".format(_mpi_rank, n))
+    for i in reversed(range(n, bunch.getSize())):
+        bunch.deleteParticleFast(i)
+    bunch.compress()
+    print("(rank {}) New bunch size = {}".format(_mpi_rank, bunch.getSize()))
     
 # Set bunch centroid to zero. 
 pyorbit_sim.bunch_utils.center(bunch, verbose=True)
