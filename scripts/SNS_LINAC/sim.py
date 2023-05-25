@@ -259,7 +259,7 @@ beta = bunch.getSyncParticle().beta()
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data",
-    "realisticLEBT_50mA_5M_41mA_4106k",
+    "realisticLEBT_50mA_5M_41mA_4106k_decorrelated",
 )
 if bunch_filename is None:
     if _mpi_rank == 0:
@@ -291,8 +291,8 @@ else:
     bunch.readBunch(bunch_filename)
     
 # Shift the longitudinal bunch position.
-phase_offset = 0.0  # [deg]
-if np.abs(phase_offset) > 1.0e-30:
+phase_offset = -30.0  # [deg]
+if np.abs(phase_offset) > 1.0e-30:        
     z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, rf_frequency)
     z_offset = -phase_offset / z_to_phase_coeff
     pyorbit_sim.bunch_utils.shift(bunch, delta=[0.0, 0.0, 0.0, 0.0, z_offset, 0.0], verbose=True)
@@ -366,6 +366,9 @@ bunch.macroSize(macro_size)
 # Print bunch parameters.
 twiss_analysis = BunchTwissAnalysis()
 twiss_analysis.analyzeBunch(bunch)
+(alpha_x, beta_x, _, eps_x) = twiss_analysis.getTwiss(0)
+(alpha_y, beta_y, _, eps_y) = twiss_analysis.getTwiss(1)
+(alpha_z, beta_z, _, eps_z) = twiss_analysis.getTwiss(2)
 if _mpi_rank == 0:
     print("Bunch parameters:")
     print("  charge = {}".format(bunch.charge()))
@@ -375,16 +378,22 @@ if _mpi_rank == 0:
     print("  size (local) = {:.2e}".format(bunch.getSize()))
     print("  size (global) = {:.2e}".format(bunch_size_global))    
     print("Twiss parameters:")
-    print("  alpha_x = {}".format(twiss_analysis.getTwiss(0)[0]))
-    print("  alpha_y = {}".format(twiss_analysis.getTwiss(1)[0]))
-    print("  alpha_z = {}".format(twiss_analysis.getTwiss(2)[0]))
-    print("  beta_x = {}".format(twiss_analysis.getTwiss(0)[1]))
-    print("  beta_y = {}".format(twiss_analysis.getTwiss(1)[1]))
-    print("  beta_z = {}".format(twiss_analysis.getTwiss(2)[1]))
-    print("  eps_x = {} [mm * mrad]".format(1.0e6 * twiss_analysis.getTwiss(0)[3]))
-    print("  eps_y = {} [mm * mrad]".format(1.0e6 * twiss_analysis.getTwiss(1)[3]))
-    print("  eps_z = {} [mm * MeV]".format(1.0e6 * twiss_analysis.getTwiss(2)[3]))
-
+    print("  alpha_x = {}".format(alpha_x))
+    print("  alpha_y = {}".format(alpha_y))
+    print("  alpha_z = {}".format(alpha_z))
+    print("  beta_x = {}".format(beta_x))
+    print("  beta_y = {}".format(beta_y))
+    print("  beta_z = {}".format(beta_z))
+    print("  eps_x = {} [mm * mrad]".format(1.0e6 * eps_x))
+    print("  eps_y = {} [mm * mrad]".format(1.0e6 * eps_y))
+    print("  eps_z = {} [mm * MeV]".format(1.0e6 * eps_z))
+dims = ["x", "xp", "y", "yp", "z", "dE"]
+units = ["m", "rad", "m", "rad", "m", "GeV"]
+for i, (dim, unit) in enumerate(zip(dims, units)):
+    mean = twiss_analysis.getAverage(i)
+    if _mpi_rank == 0:
+        print("<{}> = {:.3e} [{}]".format(dim, mean, unit))
+    
     
 ## Assign ID number to each particle.
 # ParticleIdNumber.addParticleIdNumbers(bunch)
