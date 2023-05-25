@@ -344,19 +344,26 @@ def get_node_info(node_name_or_position, lattice):
     
 def check_sync_part_time(bunch, lattice, start=0.0, set_design=False):
     """Check if the synchronous particle time is set to the design value at start."""
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
     start = get_node_info(start, lattice)
     sync_time = bunch.getSyncParticle().time()
     sync_time_design = 0.0
     if start["index"] > 0:
         design_bunch = lattice.trackDesignBunch(bunch, index_start=0, index_stop=start["index"])
-        sync_time_design = design_bunch.getSyncParticle().time()  
-    print("Start index = {}:".format(start["index"]))
-    print("    Synchronous particle time (actual) = {}".format(sync_time))
-    print("    Synchronous particle time (design) = {}".format(sync_time_design))
+        sync_time_design = design_bunch.getSyncParticle().time()
+    if _mpi_rank == 0:
+        print("Start index = {}:".format(start["index"]))
+        print("    Synchronous particle time (actual) = {}".format(sync_time))
+        print("    Synchronous particle time (design) = {}".format(sync_time_design))
     if set_design and abs(sync_time - sync_time_design) > 1.0e-30:
-        print("    Setting to design value.")
+        if _mpi_rank == 0:
+            print("    Setting to design value.")
         bunch.getSyncParticle().time(sync_time_design)
-        print("bunch.getSyncParticle().time() = {}".format(bunch.getSyncParticle().time()))
+        if _mpi_rank == 0:
+            print("bunch.getSyncParticle().time() = {}".format(bunch.getSyncParticle().time()))
             
 
 def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):

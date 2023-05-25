@@ -186,8 +186,12 @@ def reverse(bunch):
 
 def shift(bunch, delta=None, verbose=False):
     """Shift the bunch centroid in phase space."""
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
     x, xp, y, yp, z, dE = delta
-    if verbose:
+    if _mpi_rank == 0 and verbose:
         print("Shifting bunch centroid...")
         print(" delta x = {:.3e} [m]".format(delta[0]))
         print(" delta y = {:.3e} [m]".format(delta[2]))
