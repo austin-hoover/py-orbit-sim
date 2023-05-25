@@ -259,7 +259,7 @@ beta = bunch.getSyncParticle().beta()
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data",
-    "realisticLEBT_50mA_5M_41mA_4106k_decorrelated",
+    "realisticLEBT_50mA_5M_41mA_4106k",
 )
 if bunch_filename is None:
     if _mpi_rank == 0:
@@ -290,12 +290,8 @@ else:
         print("Generating bunch from file '{}'.".format(bunch_filename))
     bunch.readBunch(bunch_filename)
     
-# Shift the longitudinal bunch position.
-phase_offset = -30.0  # [deg]
-if np.abs(phase_offset) > 1.0e-30:        
-    z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, rf_frequency)
-    z_offset = -phase_offset / z_to_phase_coeff
-    pyorbit_sim.bunch_utils.shift(bunch, delta=[0.0, 0.0, 0.0, 0.0, z_offset, 0.0], verbose=True)
+# Set bunch centroid to zero. 
+pyorbit_sim.bunch_utils.center(bunch, verbose=True)
         
 # Downsample by random selection. 
 #
@@ -465,7 +461,7 @@ if _mpi_rank == 0:
 # Check the synchronous particle time. This could be wrong if start != 0 and
 # if the bunch was loaded from a file without a PyORBIT header (which should 
 # automatically load the correct time).
-pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=True)
+pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=False)
     
 # Save input bunch.
 if save and True:
