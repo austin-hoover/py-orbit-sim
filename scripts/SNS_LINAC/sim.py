@@ -219,7 +219,7 @@ if True:
     if _mpi_rank == 0:
         print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
 
-# Add longitudinal (phase, energy) aperture nodes each RF gap node.
+# Add longitudinal (phase, energy) aperture nodes at each RF gap node.
 if False:
     node_pos_dict = lattice.getNodePositionsDict()
     for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
