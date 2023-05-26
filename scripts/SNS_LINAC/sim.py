@@ -399,7 +399,7 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 
 start = 0.0  # start node (name/position/None
 stop = None  # stop node (name/position/None)
-save_input_bunch = True
+save_input_bunch = False
 save_output_bunch = True
 
 # Create bunch writer.
