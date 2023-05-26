@@ -101,6 +101,7 @@ class Monitor:
         position_offset=0.0,
         verbose=True,
         rf_frequency=402.5e6,
+        filename=None,
     ):
         """
         Parameters
@@ -127,6 +128,9 @@ class Monitor:
             The initial position in the lattice [m].
         verbose : bool
             Whether to print an update statement on each action.
+        filename : str or None
+            If provided, saves the history to a file on each update. This allows the
+            simulation to terminate early without losing the scalar history data.
         """
         self.position = self.position_offset = position_offset
         self.step = 0
@@ -147,6 +151,8 @@ class Monitor:
         self.track_history = track_history
         self.track_rms = track_rms
         self.verbose = verbose
+        
+        self.filename = filename
         
         self.history = dict()
         keys = [
@@ -289,6 +295,10 @@ class Monitor:
                 info["gamma"] = gamma
                 info["beta"] = beta
                 self.plotter.action(bunch, info=info, verbose=self.verbose)  # MPI?
+                
+        # Write history to file.
+        if self.filename is not None:
+            self.write_history(self.filename)
 
     def clear_history(self):
         """Clear history array."""
@@ -300,6 +310,8 @@ class Monitor:
         if not self.track_history:
             print("Nothing to write! self.track_history=False")
             return
+        if filename is None:
+            filename = self.filename
         keys = list(self.history)
         data = np.array([self.history[key] for key in keys]).T
         df = pd.DataFrame(data=data, columns=keys)
