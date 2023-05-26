@@ -259,7 +259,7 @@ intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data/initial_bunch/",
-    "realisticLEBT_50mA_5M_41mA_4106k",
+    "realisticLEBT_50mA_5M_41mA_4106k_decorrelated",
 )
 if bunch_filename is not None:
     if _mpi_rank == 0:
