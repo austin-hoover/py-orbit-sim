@@ -1,4 +1,4 @@
-"""SNS Linac simulation."""
+"""SNS linac simulation."""
 from __future__ import print_function
 import math
 import os
@@ -65,7 +65,9 @@ from pyorbit_sim.utils import ScriptManager
 # Setup
 # --------------------------------------------------------------------------------------
 
-save = False  # no output if False
+save = True  # no output if False
+
+random.seed(100)
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -98,17 +100,17 @@ sequences = [
     "DTL1",
     "DTL2",
     "DTL3",
-    "DTL4",
-    "DTL5",
-    "DTL6",
-    "CCL1",
-    "CCL2",
-    "CCL3",
-    "CCL4",
-    "SCLMed",
-    "SCLHigh",
-    "HEBT1",
-    "HEBT2",
+    # "DTL4",
+    # "DTL5",
+    # "DTL6",
+    # "CCL1",
+    # "CCL2",
+    # "CCL3",
+    # "CCL4",
+    # "SCLMed",
+    # "SCLHigh",
+    # "HEBT1",
+    # "HEBT2",
 ]
 sns_linac_factory = SNS_LinacLatticeFactory()
 sns_linac_factory.setMaxDriftLength(max_drift_length)
@@ -167,7 +169,7 @@ if False:
 
 
 # Set longitudinal fields
-if True:
+if False:
     # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
     # the energy spread is large, but is slower and is not symplectic.)
     lattice.setLinacTracker(True)
@@ -184,28 +186,24 @@ if True:
 
 # Add space charge nodes.
 sc_solver = "3D"  # {"3D", "ellipsoid", None}
-sc_grid_size_x = 64
-sc_grid_size_y = 64
-sc_grid_size_z = 64
 sc_path_length_min = 0.010  # [m]
-sc_n_bunches = 1
 if sc_solver == "3D":
+    sc_grid_size_x = 64
+    sc_grid_size_y = 64
+    sc_grid_size_z = 64
     sc_calc = SpaceChargeCalc3D(sc_grid_size_x, sc_grid_size_y, sc_grid_size_z)
-    if sc_n_bunches > 1: 
-        sc_calc.numExtBunches(n_bunches)
-        sc_calc.freqOfBunches(rf_frequency)
     sc_nodes = setSC3DAccNodes(lattice, sc_path_length_min, sc_calc)
 elif sc_solver == "ellipsoid":
     n_ellipsoids = 1
     sc_calc = SpaceChargeCalcUnifEllipse(n_ellipsoids)
     sc_nodes = setUniformEllipsesSCAccNodes(lattice, sc_path_length_min, sc_calc)
 if sc_solver is not None and _mpi_rank == 0:
-    sc_lengths = [sc_node.getLengthOfSC() for sc_node in sc_nodes]
-    min_sc_length = min(min(sc_lengths), lattice.getLength())
-    max_sc_length = max(max(sc_lengths), 0.0)
+    lengths = [sc_node.getLengthOfSC() for sc_node in sc_nodes]
+    min_length = min(min(lengths), lattice.getLength())
+    max_length = max(max(lengths), 0.0)
     print("Added {} space charge nodes".format(len(sc_nodes)))
-    print("max length = {}".format(max_sc_length))
-    print("min length = {}".format(min_sc_length))
+    print("min length = {}".format(min_length))
+    print("max length = {}".format(max_length))
 
 
 # Add transverse aperture nodes.
@@ -222,26 +220,28 @@ if True:
         print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
 
 # Add longitudinal (phase, energy) aperture nodes each RF gap node.
-node_pos_dict = lattice.getNodePositionsDict()
-for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
-    if node.hasParam("aperture") and node.hasParam("aprt_type"):
-        position_start, position_stop = node_pos_dict[node]
-        if True:
+if False:
+    node_pos_dict = lattice.getNodePositionsDict()
+    for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
+        if node.hasParam("aperture") and node.hasParam("aprt_type"):
+            position_start, position_stop = node_pos_dict[node]
+
             aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
             aperture_node.setMinMaxPhase(-180.0, 180.0)  # [deg]
             aperture_node.setPosition(position_stop)
             aperture_node.setSequence(node.getSequence())
             node.addChildNode(aperture_node, node.EXIT)
             aperture_nodes.append(aperture_node)
-        if True:
+
             aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
             aperture_node.setMinMaxEnergy(-0.100, +0.100)  # [GeV]
             aperture_node.setPosition(position_stop)
             aperture_node.setSequence(node.getSequence())
             node.addChildNode(aperture_node, node.EXIT)
             aperture_nodes.append(aperture_node)
-if _mpi_rank == 0:
-    print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
+            
+    if _mpi_rank == 0:
+        print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
 
 
 
@@ -253,20 +253,24 @@ bunch = Bunch()
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-current = 0.042  # [A]
+current = 0.041  # [A]
 intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge_electron)
-gamma = bunch.getSyncParticle().gamma()
-beta = bunch.getSyncParticle().beta()
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data/initial_bunch/",
     "realisticLEBT_50mA_5M_41mA_4106k",
 )
-
-if bunch_filename is None:
+if bunch_filename is not None:
     if _mpi_rank == 0:
-        print("Generating bunch from Twiss parameters.")    
+        print("Generating bunch from file '{}'.".format(bunch_filename))
+    bunch.readBunch(bunch_filename)
+else:
+    dist = WaterBagDist3D
+    kin_energy = 0.0025  # [GeV]
+    mass = 0.939294  # [GeV / c^2]
+    gamma = (mass + kin_energy) / mass
+    beta = math.sqrt(gamma * gamma - 1.0) / gamma
     alpha_x = -1.9620
     alpha_y = 1.7681
     alpha_z = -0.0196
@@ -277,9 +281,11 @@ if bunch_filename is None:
     eps_y = 0.21e-6 / (beta * gamma)  # [m * rad]
     eps_z = 0.24153e-6 / (beta * gamma**3)  # [m * rad]
     eps_z = eps_z * gamma**3 * beta**2 * bunch.mass()  # [m * GeV]
-    beta_z = beta_z / (gamma**3 * beta**2 * bunch.mass())
+    beta_z = beta_z / (gamma**3 * beta**2 * bunch.mass())    
+    if _mpi_rank == 0:
+        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))    
     bunch = pyorbit_sim.bunch_utils.generate(
-        dist=WaterBagDist3D(
+        dist=dist(
             twissX=TwissContainer(alpha_x, beta_x, eps_x),
             twissY=TwissContainer(alpha_y, beta_y, eps_y),
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
@@ -288,61 +294,35 @@ if bunch_filename is None:
         n_parts=int(1e5), 
         verbose=True,
     )
-else:
-    if _mpi_rank == 0:
-        print("Generating bunch from file '{}'.".format(bunch_filename))
-    bunch.readBunch(bunch_filename)
-    
-# Delete some of the particles. This works fine if the original bunch particles
-# were generated randomly.
-if True:
-    frac = 0.1
-    n = int(frac * bunch.getSize())
-    print("(rank {}) Deleting {} particles".format(_mpi_rank, n))
-    for i in reversed(range(n, bunch.getSize())):
-        bunch.deleteParticleFast(i)
-    bunch.compress()
-    print("(rank {}) New bunch size = {}".format(_mpi_rank, bunch.getSize()))
     
 # Set bunch centroid to zero. 
 pyorbit_sim.bunch_utils.center(bunch, verbose=True)
         
-# Downsample by random selection. 
-#
-# Here we assume the particles were randomly generated to begin with, so we
-# just use the first k indices. Note that random selection is not guaranteed
+# Downsample. Here we assume the particles were randomly generated to begin with, 
+# so we just use the first k indices. Note that random selection is not guaranteed
 # to preserve the 6D phase space distribution.
-#
-# (Need to think more about how to work with MPI.)
-samples = None
-if samples is not None and bunch_size_global > samples:
-    new_bunch = Bunch()
-    bunch.copyEmptyBunchTo(new_bunch)
-    for i in range(samples):
-        new_bunch.addParticle(
-            bunch.x(i),
-            bunch.xp(i), 
-            bunch.y(i), 
-            bunch.yp(i), 
-            bunch.z(i), 
-            bunch.dE(i),
-        )
-    new_bunch.copyBunchTo(bunch)
-    bunch.macroSize(intensity / samples)
-    bunch_size_global = bunch.getSizeGlobal()
-
+if False:
+    fraction_keep = 0.05
+    n = int(fraction_keep * bunch.getSize())
+    print("(rank {}) Deleting last {} particles".format(_mpi_rank, n))
+    for i in reversed(range(n, bunch.getSize())):
+        bunch.deleteParticleFast(i)
+    bunch.compress()
+    print("(rank {}) New bunch size = {}".format(_mpi_rank, bunch.getSize()))
+        
 # Decorrelate x-y-z.
 # (Need to think about how to work with MPI.)
 if False:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
 
 # Generate an RMS-equivalent distribution in x-x', y-y', and z-z' using an analytic 
-# distribution function (Gaussian, KV, Waterbag). Reconstruct the the six-dimensional 
-# distribution as f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
+# distribution function. Reconstruct the six-dimensional distribution as 
+# f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
 if False:
-    n_parts = bunch_size_global
+    dist = WaterBagDist3D
+    n_parts = bunch.getSizeGlobal()
     if _mpi_rank == 0:
-        print("Repopulating bunch using 2D Twiss parameters and {} generator.".format(dist))
+        print("Forming rms-equivalent bunch using 2D Twiss parameters and {} generator.".format(dist))
     bunch_twiss_analysis = BunchTwissAnalysis()
     order = 2
     dispersion_flag = 0
@@ -358,7 +338,7 @@ if False:
     alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
     alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)    
     bunch = pyorbit_sim.bunch_utils.generate(
-        dist=WaterBagDist3D(
+        dist=dist(
             twissX=TwissContainer(alpha_x, beta_x, eps_x),
             twissY=TwissContainer(alpha_y, beta_y, eps_y),
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
@@ -368,12 +348,13 @@ if False:
         verbose=True,
     )
     
-# Set the macrosize.
+# Set the macro-particle size.
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = intensity / bunch_size_global
 bunch.macroSize(macro_size)
     
 # Print bunch parameters.
+bunch_size_global = bunch.getSizeGlobal()
 twiss_analysis = BunchTwissAnalysis()
 twiss_analysis.analyzeBunch(bunch)
 (alpha_x, beta_x, _, eps_x) = twiss_analysis.getTwiss(0)
@@ -397,12 +378,14 @@ if _mpi_rank == 0:
     print("  eps_x = {} [mm * mrad]".format(1.0e6 * eps_x))
     print("  eps_y = {} [mm * mrad]".format(1.0e6 * eps_y))
     print("  eps_z = {} [mm * MeV]".format(1.0e6 * eps_z))
+if _mpi_rank == 0:
+    print("Centroid coordinates:")
 dims = ["x", "xp", "y", "yp", "z", "dE"]
 units = ["m", "rad", "m", "rad", "m", "GeV"]
 for i, (dim, unit) in enumerate(zip(dims, units)):
     mean = twiss_analysis.getAverage(i)
     if _mpi_rank == 0:
-        print("<{}> = {:.3e} [{}]".format(dim, mean, unit))
+        print("  <{}> = {:.3e} [{}]".format(dim, mean, unit))
     
     
 ## Assign ID number to each particle.
@@ -414,15 +397,17 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = 0.0  # start node (name or position)
-stop = 37.0  # stop node (name or position)
+start = 0.0  # start node (name/position/None
+stop = None  # stop node (name/position/None)
+save_input_bunch = False
+save_output_bunch = True
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
     folder=man.outdir, 
     prefix=man.prefix, 
     index=0,
-)
+)    
     
 # Create bunch plotter. (Does not currently work with MPI.)
 def transform(X):
@@ -430,7 +415,7 @@ def transform(X):
     X[:, :] *= 1000.0
     # X = pyorbit_sim.ap.norm_xpx_ypy_zpz(X, scale_emittance=True)
     return X
-    
+
 plotter = pyorbit_sim.plotting.Plotter(
     transform=transform, 
     folder=man.outdir,
@@ -446,24 +431,29 @@ plotter.add_function(
     norm="log",
 )
 
+# Ignore writer and plotter if not saving output.
+if not save:
+    writer = None
+    plotter = None
+
 # Create bunch monitor.
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.100,  # [m]
-        "write_bunch": 7.0 if save else None,  # [m]
-        "plot_bunch": np.inf if save else None,  # [m]
+        "write_bunch": np.inf,  # [m]
+        "plot_bunch": np.inf,  # [m]
     },
-    writer=None,
-    plotter=None,
+    writer=writer,
+    plotter=plotter,
     track_history=True,
     track_rms=True,
     dispersion_flag=False,
     emit_norm_flag=False,
     rf_frequency=rf_frequency,
     verbose=True,
+    filename=man.get_filename("history.dat"),  # saves every update step
 )
-    
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:
@@ -478,7 +468,7 @@ if _mpi_rank == 0:
 pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=False)
     
 # Save input bunch.
-if save and True:
+if save and save_input_bunch:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -495,12 +485,6 @@ params_dict = pyorbit_sim.linac.track(
     stop=stop, 
     verbose=True
 )
-
-# Save scalar history.
-if _mpi_rank == 0 and monitor.track_history and save:
-    filename = man.get_filename("history.dat")
-    print("Writing history to {}".format(filename))
-    monitor.write_history(filename, delimiter=",")
     
 # Save losses.
 aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, params_dict["lostbunch"])
@@ -517,8 +501,8 @@ if save:
     file.close()
     
 # Save output bunch.
-if save and True:
-    node_name = stop
+if save and save_output_bunch:
+    node_name = stop 
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"
     writer.action(bunch, node_name)
