@@ -93,7 +93,7 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 rf_frequency = 402.5e6  # [1/s]
 
 # Generate SNS linac lattice from XML file.
-xml_file_name = os.path.join(file_path, "data/sns_linac.xml")
+xml_file_name = os.path.join(file_path, "./data_input/sns_linac.xml")
 max_drift_length = 0.010  # [m]
 sequences = [
     "MEBT",
@@ -143,7 +143,7 @@ for rf_gap in lattice.getRF_Gaps():
 
     
 # Set overlapping RF and quad fields.
-fields_filename = os.path.join(file_path, "data/sns_rf_fields.xml")
+fields_filename = os.path.join(file_path, "./data_input/sns_rf_fields.xml")
 z_step = 0.002
         
 ## Only RF gaps will be replaced with non-zero length models. Quads stay hard-edged. 
