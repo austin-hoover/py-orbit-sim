@@ -67,8 +67,6 @@ from pyorbit_sim.utils import ScriptManager
 
 save = True  # no output if False
 
-random.seed(100)
-
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
 _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -146,21 +144,21 @@ for rf_gap in lattice.getRF_Gaps():
 fields_filename = os.path.join(file_path, "./data_input/sns_rf_fields.xml")
 z_step = 0.002
         
-## Only RF gaps will be replaced with non-zero length models. Quads stay hard-edged. 
-## Such approach will not work for DTL cavities - RF and quad fields are overlapped 
-## for DTL.
+# Replace zero-length RF gap models with field-on-axis RF gap models. Quads stay
+# hard-edged. This approach will not work for DTL cavities -- RF and quad fields
+# are overlapped for DTL.
 if False:
     seq_names = ["MEBT", "CCL1", "CCL2", "CCL3", "CCL4", "SCLMed"]
     Replace_BaseRF_Gap_to_AxisField_Nodes(lattice, z_step, fields_filename, seq_names)
 
-## Hard-edge quad models will be replaced with soft-edge models. It is possible for DTL 
-## also - if the RF gap models are zero-length ones. 
+# Replace hard-edge quads with soft-edge quads. It is possible for DTL also -- if 
+# the RF gap models are zero-length ones. 
 if False:
     seq_names = ["MEBT", "DTL1", "DTL2", "DTL3", "DTL4", "DTL5", "DTL6"]
     Replace_Quads_to_OverlappingQuads_Nodes(lattice, z_step, seq_names, [], SNS_EngeFunctionFactory)
 
-## Hard-edge quad and zero-length RF gap models will be replaced with soft-edge quads
-## and field-on-axis RF gap models. Can be used for any sequences, no limitations.
+# Replace hard-edge quads with soft-edge quads; replace zero-length RF gap models
+# with field-on-axis RF gap models. Can be used for any sequences, no limitations.
 if False:
     seq_names = ["MEBT", "DTL1", "DTL2", "DTL3", "DTL4", "DTL5", "DTL6"]
     Replace_BaseRF_Gap_and_Quads_to_Overlapping_Nodes(
@@ -169,7 +167,7 @@ if False:
 
 
 # Set longitudinal fields
-if False:
+if True:
     # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
     # the energy spread is large, but is slower and is not symplectic.)
     lattice.setLinacTracker(True)
@@ -207,41 +205,39 @@ if sc_solver is not None and _mpi_rank == 0:
 
 
 # Add transverse aperture nodes.
-if True:
-    x_size = 0.042  # [m]
-    y_size = 0.042  # [m]
-    aperture_nodes = Add_quad_apertures_to_lattice(lattice)
-    aperture_nodes = Add_rfgap_apertures_to_lattice(lattice, aperture_nodes)
-    aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(lattice, aperture_nodes)
-    aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
-    aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
-    n_transverse_aperture_nodes = len(aperture_nodes)
-    if _mpi_rank == 0:
-        print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
+x_size = 0.042  # [m]
+y_size = 0.042  # [m]
+aperture_nodes = Add_quad_apertures_to_lattice(lattice)
+aperture_nodes = Add_rfgap_apertures_to_lattice(lattice, aperture_nodes)
+aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(lattice, aperture_nodes)
+aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
+aperture_nodes = AddScrapersAperturesToLattice(lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
+n_transverse_aperture_nodes = len(aperture_nodes)
+if _mpi_rank == 0:
+    print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
 
 # Add longitudinal (phase, energy) aperture nodes at each RF gap node.
-if True:
-    node_pos_dict = lattice.getNodePositionsDict()
-    for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
-        if node.hasParam("aperture") and node.hasParam("aprt_type"):
-            position_start, position_stop = node_pos_dict[node]
+node_pos_dict = lattice.getNodePositionsDict()
+for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
+    if node.hasParam("aperture") and node.hasParam("aprt_type"):
+        position_start, position_stop = node_pos_dict[node]
 
-            aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
-            aperture_node.setMinMaxPhase(-180.0, 180.0)  # [deg]
-            aperture_node.setPosition(position_stop)
-            aperture_node.setSequence(node.getSequence())
-            node.addChildNode(aperture_node, node.EXIT)
-            aperture_nodes.append(aperture_node)
+        aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
+        aperture_node.setMinMaxPhase(-180.0, 180.0)  # [deg]
+        aperture_node.setPosition(position_stop)
+        aperture_node.setSequence(node.getSequence())
+        node.addChildNode(aperture_node, node.EXIT)
+        aperture_nodes.append(aperture_node)
 
-            aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
-            aperture_node.setMinMaxEnergy(-0.100, +0.100)  # [GeV]
-            aperture_node.setPosition(position_stop)
-            aperture_node.setSequence(node.getSequence())
-            node.addChildNode(aperture_node, node.EXIT)
-            aperture_nodes.append(aperture_node)
-            
-    if _mpi_rank == 0:
-        print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
+        aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
+        aperture_node.setMinMaxEnergy(-0.100, +0.100)  # [GeV]
+        aperture_node.setPosition(position_stop)
+        aperture_node.setSequence(node.getSequence())
+        node.addChildNode(aperture_node, node.EXIT)
+        aperture_nodes.append(aperture_node)
+
+if _mpi_rank == 0:
+    print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
 
 
 
@@ -258,8 +254,8 @@ intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2021-02-08_Ruisard/data/initial_bunch/",
-    "realisticLEBT_50mA_5M_41mA_4106k_decorrelated",
+    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_8.56e+06.dat",
 )
 if bunch_filename is not None:
     if _mpi_rank == 0:
@@ -300,15 +296,16 @@ pyorbit_sim.bunch_utils.center(bunch, verbose=True)
         
 # Downsample. Here we assume the particles were randomly generated to begin with, 
 # so we just use the first k indices. Note that random selection is not guaranteed
-# to preserve the 6D phase space distribution.
-if False:
-    fraction_keep = 0.05
-    n = int(fraction_keep * bunch.getSize())
-    print("(rank {}) Deleting last {} particles".format(_mpi_rank, n))
+# to preserve the underlying 6D phase space distribution.
+fraction_keep = 1.0 / 8.56
+if fraction_keep and fraction_keep < 1.0:
+    n = int(fraction_keep * bunch.getSize())  # on each processor
+    print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
     for i in reversed(range(n, bunch.getSize())):
         bunch.deleteParticleFast(i)
-    bunch.compress()
-    print("(rank {}) New bunch size = {}".format(_mpi_rank, bunch.getSize()))
+    bunch.compress()    
+    size_global = bunch.getSizeGlobal()
+    bunch.macroSize(intensity / size_global)
         
 # Decorrelate x-y-z.
 # (Need to think about how to work with MPI.)
@@ -399,8 +396,8 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 
 start = 0.0  # start node (name/position/None
 stop = None  # stop node (name/position/None)
-save_input_bunch = True
-save_output_bunch = True
+save_input_bunch = False
+save_output_bunch = False
 
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
@@ -411,9 +408,14 @@ writer = pyorbit_sim.linac.BunchWriter(
     
 # Create bunch plotter. (Does not currently work with MPI.)
 def transform(X):
-    """Normalize the 2D phase spaces."""
     X[:, :] *= 1000.0
-    # X = pyorbit_sim.ap.norm_xpx_ypy_zpz(X, scale_emittance=True)
+    X = pyorbit_sim.bunch_utils.norm_xxp_yyp_zzp(X, scale_emittance=True)
+    X = pyorbit_sim.bunch_utils.slice_sphere(
+        X,
+        axis=(0, 1, 2, 3),
+        rmin=0.0,
+        rmax=1.0,
+    )
     return X
 
 plotter = pyorbit_sim.plotting.Plotter(
@@ -421,12 +423,22 @@ plotter = pyorbit_sim.plotting.Plotter(
     folder=man.outdir,
     prefix=man.prefix,
     default_save_kws=None, 
+    dims=["x", "xp", "y", "yp", "z", "dE"],
+    units=["mm", "mrad", "mm", "mrad", "mm", "MeV"],
+    
 )
 plotter.add_function(
-    pyorbit_sim.plotting.proj2d_three_column, 
-    fig_kws=dict(figsize=(11.0, 2.5)),
-    save_kws=None, 
+    pyorbit_sim.plotting.proj2d, 
+    axis=(4, 5),
+    limits=[(-5.0, 5.0), (-5.0, 5.0)],
+    save_kws=dict(dpi=200), 
     name=None, 
+    text=True,
+    colorbar=True,
+    floor=1.0,
+    divide_by_max=True,
+    profx=True,
+    profy=True,
     bins=64,
     norm="log",
 )
@@ -441,8 +453,8 @@ monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride={
         "update": 0.100,  # [m]
-        "write_bunch": np.inf,  # [m]
-        "plot_bunch": np.inf,  # [m]
+        "write_bunch": 30.0,  # [m]
+        "plot_bunch": 0.1,  # [m]
     },
     writer=writer,
     plotter=plotter,
