@@ -312,7 +312,7 @@ class Monitor:
             return
         if filename is None:
             filename = self.filename
-        keys = list(self.history)
+        keys = [key for key in self.history if self.history[key]]
         data = np.array([self.history[key] for key in keys]).T
         df = pd.DataFrame(data=data, columns=keys)
         df.to_csv(filename, sep=delimiter, index=False)
