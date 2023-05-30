@@ -399,7 +399,14 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     params_dict["lostbunch"] = Bunch()
 
     if _mpi_rank == 0 and verbose:
-        print("Tracking from {} to {}.".format(start["node"].getName(), stop["node"].getName()))
+        print(
+            "Tracking from {} (s={}) to {} (s={}).".format(
+                start["node"].getName(), 
+                start["s0"],
+                stop["node"].getName()
+                stop["s1"],
+            )
+        )
 
     time_start = time.clock()
     lattice.trackBunch(
