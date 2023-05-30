@@ -403,7 +403,7 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
             "Tracking from {} (s={}) to {} (s={}).".format(
                 start["node"].getName(), 
                 start["s0"],
-                stop["node"].getName()
+                stop["node"].getName(),
                 stop["s1"],
             )
         )
