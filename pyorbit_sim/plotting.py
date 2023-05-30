@@ -335,7 +335,7 @@ def proj2d(
             ax.set_xlabel(info["labels"][axis[0]])
             ax.set_ylabel(info["labels"][axis[1]])
     
-    hist, centers = histogram(X[:, axis], bins=bins, centers=True)    
+    hist, centers = histogram(X[:, axis], bins=bins, limits=limits, centers=True)    
     ax, mesh = plot_image(hist, x=centers[0], y=centers[1], ax=ax, return_mesh=True, **plot_kws)
     if colorbar:
         if colorbar_kws is None:
@@ -385,8 +385,13 @@ def proj2d_three_column(
         centers = [centers_from_edges(e) for e in edges]  
         ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
         if text:
+            # Would like better way to customize this from the PyORBIT script.
+            title = ""
+            if "node" in info:
+                title = "{}".format(info["node"])
             if "position" in info:
-                ax.set_title("s = {:.3f} [m]".format(info["position"]))
+                title = "s={:.2f} ({})".format(info["position"], info["node"])
+            ax.set_title(title, fontsize="medium")
 
                 
 def corner():
