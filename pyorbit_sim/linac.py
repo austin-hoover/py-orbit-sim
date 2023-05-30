@@ -312,12 +312,14 @@ class Monitor:
             return
         if filename is None:
             filename = self.filename
-        keys = [key for key in self.history if self.history[key]]
-        data = np.array([self.history[key] for key in keys]).T
-        df = pd.DataFrame(data=data, columns=keys)
-        df.to_csv(filename, sep=delimiter, index=False)
-        return df
-    
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if _mpi_rank == 0:
+            keys = [key for key in self.history if self.history[key]]
+            data = np.array([self.history[key] for key in keys]).T
+            df = pd.DataFrame(data=data, columns=keys)
+            df.to_csv(filename, sep=delimiter, index=False)
+            
     
 def get_node_info(node_name_or_position, lattice):
     """Return node, node index, start and stop position for node name or center position.
