@@ -297,7 +297,8 @@ pyorbit_sim.bunch_utils.center(bunch, verbose=True)
 # Downsample. Here we assume the particles were randomly generated to begin with, 
 # so we just use the first k indices. Note that random selection is not guaranteed
 # to preserve the underlying 6D phase space distribution.
-fraction_keep = 0.12
+# fraction_keep = 0.12
+fraction_keep = 1.0
 if fraction_keep and fraction_keep < 1.0:
     n = int(fraction_keep * bunch.getSize())  # on each processor
     print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
