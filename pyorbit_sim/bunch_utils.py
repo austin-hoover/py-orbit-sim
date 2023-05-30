@@ -343,7 +343,108 @@ def generate(dist=None, n_parts=0, verbose=0, bunch=None):
     return bunch 
 
 
-def norm_xpx_ypy_zpz(X, scale_emittance=False):
+def get_radii(X):
+    return np.linalg.norm(X, axis=1)
+
+
+def get_ellipsoid_radii(X):
+    Sigma_inv = np.linalg.inv(np.cov(X.T))
+    func = lambda point: np.sqrt(np.linalg.multi_dot([point.T, Sigma_inv, point]))
+    return transform(X, func)
+
+
+def enclosing_sphere(X, axis=None, fraction=1.0):
+    """Scales sphere until it contains some fraction of points.
+
+    Parameters
+    ----------
+    X : ndarray, shape (n, d)
+        Coordinates of n points in d-dimensional space.
+    axis : tuple
+        The distribution is projected onto this axis before proceeding. The
+        ellipsoid is defined in this subspace.
+    fraction : float
+        Fraction of points in sphere.
+
+    Returns
+    -------
+    radius : float
+        The sphere radius.
+    """
+    radii = np.sort(get_radii(X[:, axis]))
+    index = int(np.round(X.shape[0] * fraction)) - 1
+    return radii[index]
+
+
+def enclosing_ellipsoid(X, axis=None, fraction=1.0):
+    """Scale the rms ellipsoid until it contains some fraction of points.
+
+    Parameters
+    ----------
+    X : ndarray, shape (n, d)
+        Coordinates of n points in d-dimensional space.
+    axis : tuple
+        The distribution is projected onto this axis before proceeding. The
+        ellipsoid is defined in this subspace.
+    fraction : float
+        Fraction of points enclosed.
+
+    Returns
+    -------
+    float
+        The ellipsoid "radius" (x^T Sigma^-1 x) relative to the rms ellipsoid.
+    """
+    radii = np.sort(get_ellipsoid_radii(X[:, axis]))
+    index = int(np.round(X.shape[0] * fraction)) - 1
+    return radii[index]
+
+
+def transform(X, func=None, **kws):
+    """Apply a nonlinear transformation.
+
+    This function just calls `np.apply_along_axis`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (n, d)
+        Coordinates of n points in d-dimensional space.
+    function : callable
+        Function applied to each point in X. Call signature is
+        `function(point, **kws)` where `point` is an n-dimensional
+        point given by one row of `X`.
+    **kws
+        Key word arguments for
+
+    Returns
+    -------
+    ndarray, shape (n, d)
+        The transformed distribution.
+    """
+    return np.apply_along_axis(lambda point: func(point, **kws), 1, X)
+
+
+def transform_linear(X, M):
+    """Apply a linear transformation.
+
+    This function just calls `np.apply_along_axis`.
+
+    Parameters
+    ----------
+    X : ndarray, shape (n, d)
+        Coordinates of n points in d-dimensional space.
+    M : ndarray, shape (d, d)
+        A linear transfer matrix.
+
+    Returns
+    -------
+    ndarray, shape (n, d)
+        The transformed distribution.
+    """
+    func = lambda point: np.matmul(M, point)
+    return transform(X, lambda point: np.matmul(M, point))
+
+
+def norm_xxp_yyp_zzp(X, scale_emittance=False):
     Sigma = np.cov(X.T)
     Xn = np.zeros(X.shape)
     for i in range(0, X.shape[1], 2):
@@ -421,7 +522,7 @@ def slice_sphere(X, axis=None, rmin=0.0, rmax=None):
     """
     if rmax is None:
         rmax = np.inf
-    radii = get_radii(project(X, axis))
+    radii = get_radii(X[:, axis])
     idx = np.logical_and(radii > rmin, radii < rmax)
     return X[idx, :]
 
@@ -448,7 +549,7 @@ def slice_ellipsoid(X, axis=None, rmin=0.0, rmax=None):
     """
     if rmax is None:
         rmax = np.inf
-    radii = get_ellipsoid_radii(project(X, axis))
+    radii = get_ellipsoid_radii(X[:, axis])
     idx = np.logical_and(rmin < radii, radii < rmax)
     return X[idx, :]
 
@@ -480,7 +581,7 @@ def slice_contour(X, axis=None, lmin=0.0, lmax=1.0, interp=True, **hist_kws):
     ndarray, shape (?, d)
         Points within the shell.
     """
-    _X = project(X, axis)
+    _X = X[:, axis]
     hist, edges = histogram(_X, **hist_kws)
     hist = hist / np.max(hist)
     centers = [0.5 * (e[:-1] + e[1:]) for e in edges]
