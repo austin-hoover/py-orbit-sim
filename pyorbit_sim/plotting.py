@@ -76,21 +76,6 @@ def rms_ellipse_dims(Sigma, axis=(0, 1)):
     return c1, c2, angle
 
 
-def plot1d(x, y, ax=None, flipxy=False, kind="step", **kws):
-    """Convenience function for one-dimensional line/step/bar plots."""
-    funcs = {
-        "line": ax.plot,
-        "bar": ax.bar,
-        "step": ax.plot,
-    }
-    if kind == "step":
-        kws.setdefault("drawstyle", "steps-mid")
-    if flipxy:
-        x, y = y, x
-        funcs["bar"] = ax.barh
-    return funcs[kind](x, y, **kws)
-
-
 def rms_ellipse(Sigma=None, center=None, level=1.0, ax=None, **ellipse_kws):
     if type(level) not in [list, tuple, np.ndarray]:
         level = [level]
@@ -171,6 +156,7 @@ def plot_image_profiles(
         y = np.arange(f.shape[0])
     plot_kws.setdefault("lw", 0.75)
     plot_kws.setdefault("color", "white")
+    plot_kws.setdefault("drawstyle", "steps-mid")
 
     def _normalize(profile):
         pmax = np.max(profile)
@@ -188,7 +174,9 @@ def plot_image_profiles(
             continue
         if i == 1 and not profy:
             continue
-        ax = plot1d(xvals, yvals, ax=ax, flipxy=i, kind=kind, **plot_kws)
+        if i:
+            xvals, yvals = yvals, xvals
+        ax.plot(xvals, yvals, **plot_kws)
     return ax
 
 
@@ -332,23 +320,27 @@ def proj2d(
     units=True,
     fig_kws=None,
     text=False,
+    colorbar=False,
+    colorbar_kws=None,
     **plot_kws
 ):
     """Plot the 2D projection onto the specified axis."""
     if fig_kws is None:
         fig_kws = dict()
     fig, ax = plt.subplots(**fig_kws)
-    labels = True
-    if labels:
-        if units:
-            ax.set_xlabel("{} [{}]".format(DIMS[axis[0]], UNITS[axis[0]]))
-            ax.set_ylabel("{} [{}]".format(DIMS[axis[1]], UNITS[axis[1]]))
-        else:
-            ax.set_xlabel("{}".format(DIMS[axis[0]]))
-            ax.set_ylabel("{}".format(DIMS[axis[1]]))
+    
+    # Set axis labels.
+    if info is not None:
+        if "labels" in info:
+            ax.set_xlabel(info["labels"][axis[0]])
+            ax.set_ylabel(info["labels"][axis[1]])
     
     hist, centers = histogram(X[:, axis], bins=bins, centers=True)    
-    ax = plot_image(hist, x=centers[0], y=centers[1], ax=ax, **plot_kws)
+    ax, mesh = plot_image(hist, x=centers[0], y=centers[1], ax=ax, return_mesh=True, **plot_kws)
+    if colorbar:
+        if colorbar_kws is None:
+            colorbar_kws = dict()
+        fig.colorbar(mesh, **colorbar_kws)
     if text:
         if "position" in info:
             ax.set_title('s = {:.3f} [m]'.format(info["position"]))
@@ -372,24 +364,22 @@ def proj2d_three_column(
     axis : list[tuple]
         The indices to plot in each panel. 
     """
-    inds = axis
+    axis_list = axis
     if limits is None:
         limits = 3 * [limits]
     if fig_kws is None:
         fig_kws = dict()
     fig_kws.setdefault("figsize", (9.0, 2.5))
-    fig, axes = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=False, **fig_kws)
-    labels = True
-    if labels:
-        for ax, (i, j) in zip(axes, inds):
-            if units:
-                ax.set_xlabel("{} [{}]".format(DIMS[i], UNITS[i]))
-                ax.set_ylabel("{} [{}]".format(DIMS[j], UNITS[j]))
-            else:
-                ax.set_xlabel("{}".format(DIMS[i]))
-                ax.set_ylabel("{}".format(DIMS[j]))
-        
-    for ax, ind, lims in zip(axes, inds, limits):
+    fig, axs = plt.subplots(nrows=1, ncols=3, sharex=False, sharey=False, **fig_kws)
+    
+    # Set axis labels.
+    if info is not None:
+        if "labels" in info:
+            for ax, axis in zip(axs, axis_list):
+                ax.set_xlabel(info["labels"][axis[0]])
+                ax.set_ylabel(info["labels"][axis[1]])
+
+    for ax, ind, lims in zip(axs, inds, limits):
         edges = histogram_bin_edges(X[:, ind], bins=bins, limits=lims)
         hist, _ = np.histogramdd(X[:, ind], edges)
         centers = [centers_from_edges(e) for e in edges]  
@@ -404,7 +394,17 @@ def corner():
         
 
 class Plotter:
-    def __init__(self, transform=None, folder="./", prefix=None, default_save_kws=None, index=0, position=0.0):
+    def __init__(
+        self, 
+        transform=None, 
+        folder="./", 
+        prefix=None, 
+        default_save_kws=None, 
+        index=0, 
+        position=0.0,
+        dims=None,
+        units=None,
+    ):
         self.transform = transform
         self.folder = folder
         self.prefix = prefix
@@ -416,6 +416,14 @@ class Plotter:
             self.default_save_kws  = dict()
         self.index = index
         self.position = position
+        self.dims = dims
+        self.units = units
+        self.labels = None
+        if self.dims is not None:
+            if self.units is None:
+                self.labels = dims
+            else:
+                self.labels = ["{} [{}]".format(d, u) for d, u in zip(dims, units)]
         
     def add_function(self, function, save_kws=None, name=None, **kws):
         self.functions.append(function)
@@ -423,9 +431,14 @@ class Plotter:
         self.save_kws.append(save_kws if save_kws else self.default_save_kws)
         
     def action(self, bunch, info=None, verbose=False):
+        if info is None:
+            info = dict()
+        info["labels"] = self.labels
+            
         X = get_bunch_coords(bunch)
         if self.transform is not None:
             X = self.transform(X)
+            
         for i, function in enumerate(self.functions):
             if verbose:
                 print("Calling {}.".format(function.__name__))
