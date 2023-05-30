@@ -136,17 +136,37 @@ def center(bunch, verbose=False):
 def decorrelate_x_y_z(bunch, verbose=False):
     """Decorrelate x-y-z.
     
-    How should this work with MPI?
+    Does not work with MPI currently.
     """
-    if verbose:
-        print('Decorrelating x-xp, y-yp, z-dE...')
-    X = get_coords(bunch)
-    for i in range(0, X.shape[1], 2):
-        idx = np.random.permutation(np.arange(X.shape[0]))
-        X[:, i : i + 2] = X[idx, i : i + 2]
-    bunch = set_coords(bunch, X)
-    if verbose:
-        print('Decorrelation complete.')
+    n = bunch.getSizeGlobal()
+    idx_x = np.random.permutation(np.arange(n))
+    idx_y = np.random.permutation(np.arange(n))
+    idx_z = np.random.permutation(np.arange(n))
+    print("Building decorrelated bunch...")
+    bunch_out = Bunch()
+    bunch.copyEmptyBunchTo(bunch_out)
+    for i, j, k in tqdm(zip(idx_x, idx_y, idx_z)):
+        bunch_out.addParticle(bunch.x(i), bunch.xp(i), bunch.y(j), bunch.yp(j), bunch.z(k), bunch.dE(k))
+    bunch_out.copyBunchTo(bunch)
+    bunch_out.deleteAllParticles()
+    return bunch
+
+
+def decorrelate_xy_z(bunch, verbose=False):
+    """Decorrelate xy-z.
+    
+    Does not work with MPI currently.
+    """
+    n = bunch.getSizeGlobal()
+    idx_xy = np.random.permutation(np.arange(n))
+    idx_z = np.random.permutation(np.arange(n))
+    print("Building decorrelated bunch...")
+    bunch_out = Bunch()
+    bunch.copyEmptyBunchTo(bunch_out)
+    for i, k in tqdm(zip(idx_xy, idx_z)):
+        bunch_out.addParticle(bunch.x(i), bunch.xp(i), bunch.y(i), bunch.yp(i), bunch.z(k), bunch.dE(k))
+    bunch_out.copyBunchTo(bunch)
+    bunch_out.deleteAllParticles()
     return bunch
 
 
