@@ -36,7 +36,7 @@ class BunchWriter:
         if self.prefix is not None:
             filename = "{}_{}".format(self.prefix, filename)
         if self.index is not None:
-            filename = "{}_{}".format(filename, self.index)
+            filename = "{}_{:04.0f}".format(filename, self.index)
         if node_name is not None:
             filename = "{}_{}".format(filename, node_name)
         filename = "{}.dat".format(filename)
