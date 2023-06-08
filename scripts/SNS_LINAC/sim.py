@@ -30,13 +30,16 @@ from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
-from orbit.py_linac.lattice import LinacApertureNode
-from orbit.py_linac.lattice import LinacEnergyApertureNode
-from orbit.py_linac.lattice import LinacPhaseApertureNode
 from orbit.py_linac.lattice import AxisFieldRF_Gap
 from orbit.py_linac.lattice import AxisField_and_Quad_RF_Gap
 from orbit.py_linac.lattice import BaseRF_Gap
+from orbit.py_linac.lattice import Bend
+from orbit.py_linac.lattice import Drift
+from orbit.py_linac.lattice import LinacApertureNode
+from orbit.py_linac.lattice import LinacEnergyApertureNode
+from orbit.py_linac.lattice import LinacPhaseApertureNode
 from orbit.py_linac.lattice import OverlappingQuadsNode 
+from orbit.py_linac.lattice import Quad
 from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_rfgap_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import AddMEBTChopperPlatesAperturesToSNS_Lattice
@@ -106,7 +109,7 @@ sequences = [
     "CCL3",
     "CCL4",
     "SCLMed",
-    "SCLHigh",
+    # "SCLHigh",
     # "HEBT1",
     # "HEBT2",
 ]
@@ -159,27 +162,22 @@ if False:
 
 # Replace hard-edge quads with soft-edge quads; replace zero-length RF gap models
 # with field-on-axis RF gap models. Can be used for any sequences, no limitations.
-if False:
-    seq_names = ["MEBT", "DTL1", "DTL2", "DTL3", "DTL4", "DTL5", "DTL6"]
+if True:
+    seq_names = sequences
     Replace_BaseRF_Gap_and_Quads_to_Overlapping_Nodes(
         lattice, z_step, fields_filename, seq_names, [], SNS_EngeFunctionFactory
     )
 
+# Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
+# the energy spread is large, but is slower and is not symplectic.)
+lattice.setLinacTracker(True)
 
-# Set longitudinal fields
-if True:
-    # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
-    # the energy spread is large, but is slower and is not symplectic.)
-    lattice.setLinacTracker(True)
-
-    # Add tracking through the longitudinal field component of the quad. The
-    # longitudinal component is nonzero only for the distributed magnetic field
-    # of the quad. This means we have to modify the lattice with 
-    # `Replace_BaseRF_Gap_and_Quads_to_Overlapping_Nodes` or 
-    # `Replace_Quads_to_OverlappingQuads_Nodes`.
-    for node in lattice.getNodes():
-        if (isinstance(node, OverlappingQuadsNode) or isinstance(node, AxisField_and_Quad_RF_Gap)):
-            node.setUseLongitudinalFieldOfQuad(True)
+# Add tracking through the longitudinal field component of the quad. The
+# longitudinal component is nonzero only for the distributed magnetic field
+# of the quad. 
+for node in lattice.getNodes():
+    if (isinstance(node, OverlappingQuadsNode) or isinstance(node, AxisField_and_Quad_RF_Gap)):
+        node.setUseLongitudinalFieldOfQuad(True)
 
 
 # Add space charge nodes.
@@ -192,7 +190,7 @@ if sc_solver == "3D":
     sc_calc = SpaceChargeCalc3D(sc_grid_size_x, sc_grid_size_y, sc_grid_size_z)
     sc_nodes = setSC3DAccNodes(lattice, sc_path_length_min, sc_calc)
 elif sc_solver == "ellipsoid":
-    n_ellipsoids = 1
+    n_ellipsoids = 5
     sc_calc = SpaceChargeCalcUnifEllipse(n_ellipsoids)
     sc_nodes = setUniformEllipsesSCAccNodes(lattice, sc_path_length_min, sc_calc)
 if sc_solver is not None and _mpi_rank == 0:
@@ -216,26 +214,37 @@ n_transverse_aperture_nodes = len(aperture_nodes)
 if _mpi_rank == 0:
     print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
 
-# Add longitudinal (phase, energy) aperture nodes at each RF gap node.
+# Add longitudinal (phase, energy) aperture nodes at each quad and RF gap.
+classes = [
+    BaseRF_Gap, 
+    AxisFieldRF_Gap, 
+    AxisField_and_Quad_RF_Gap,
+    Quad, 
+    OverlappingQuadsNode,
+]
 node_pos_dict = lattice.getNodePositionsDict()
-for node in lattice.getNodesOfClasses([BaseRF_Gap, AxisFieldRF_Gap, AxisField_and_Quad_RF_Gap]):
+for node in lattice.getNodesOfClasses(classes):
     if node.hasParam("aperture") and node.hasParam("aprt_type"):
         position_start, position_stop = node_pos_dict[node]
-
+        
+        if 30.0 <= position_stop < 150.0:
+            phase_max = 90.0
+        else:
+            phase_max = 180.0
         aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
-        aperture_node.setMinMaxPhase(-180.0, 180.0)  # [deg]
+        aperture_node.setMinMaxPhase(-phase_max, phase_max)  # [deg]
         aperture_node.setPosition(position_stop)
         aperture_node.setSequence(node.getSequence())
         node.addChildNode(aperture_node, node.EXIT)
         aperture_nodes.append(aperture_node)
 
+        # Energy apertures are probably unnecessary, but add them anyway.
         aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
         aperture_node.setMinMaxEnergy(-0.100, +0.100)  # [GeV]
         aperture_node.setPosition(position_stop)
         aperture_node.setSequence(node.getSequence())
         node.addChildNode(aperture_node, node.EXIT)
         aperture_nodes.append(aperture_node)
-
 if _mpi_rank == 0:
     print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
 
@@ -249,13 +258,13 @@ bunch = Bunch()
 bunch.mass(0.939294)  # [GeV / c^2]
 bunch.charge(-1.0)  # [elementary charge units]
 bunch.getSyncParticle().kinEnergy(0.0025)  # [GeV]
-current = 0.041  # [A]
+current = 0.042  # [A]
 intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge_electron)
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-05-23_RFQ-WS07_PARMTEQ/data/derived/",
-    "230523132233-sim_bunch_MEBT_Diag:WS04b_8.56e+06_decorr_x-y-z.dat",
+    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_8.56e+06.dat"
 )
 if bunch_filename is not None:
     if _mpi_rank == 0:
@@ -263,6 +272,7 @@ if bunch_filename is not None:
     bunch.readBunch(bunch_filename)
 else:
     dist = WaterBagDist3D
+    n_parts = int(1e4)
     kin_energy = 0.0025  # [GeV]
     mass = 0.939294  # [GeV / c^2]
     gamma = (mass + kin_energy) / mass
@@ -287,31 +297,13 @@ else:
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
         ),
         bunch=bunch,
-        n_parts=int(1e5), 
+        n_parts=n_parts,
         verbose=True,
     )
     
 # Set bunch centroid to zero. 
 pyorbit_sim.bunch_utils.center(bunch, verbose=True)
         
-# Downsample. Here we assume the particles were randomly generated to begin with, 
-# so we just use the first k indices. Note that random selection is not guaranteed
-# to preserve the underlying 6D phase space distribution.
-# fraction_keep = 0.12
-fraction_keep = 1.0
-if fraction_keep and fraction_keep < 1.0:
-    n = int(fraction_keep * bunch.getSize())  # on each processor
-    print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
-    for i in reversed(range(n, bunch.getSize())):
-        bunch.deleteParticleFast(i)
-    bunch.compress()    
-    size_global = bunch.getSizeGlobal()
-    bunch.macroSize(intensity / size_global)
-        
-# Decorrelate x-y-z. (Not working with MPI).
-if False:
-    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
-
 # Generate an RMS-equivalent distribution in x-x', y-y', and z-z' using an analytic 
 # distribution function. Reconstruct the six-dimensional distribution as 
 # f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
@@ -345,13 +337,26 @@ if False:
         verbose=True,
     )
     
+# Downsample. (Assume the particles were randomly generated to begin with.)
+fraction_keep = 0.05
+if fraction_keep and fraction_keep < 1.0:
+    n = int(fraction_keep * bunch.getSize())  # on each processor
+    print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
+    for i in reversed(range(n, bunch.getSize())):
+        bunch.deleteParticleFast(i)
+    bunch.compress()    
+        
+# Decorrelate x-y-z. (Not working with MPI).
+if False:
+    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
+
+    
 # Set the macro-particle size.
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = intensity / bunch_size_global
 bunch.macroSize(macro_size)
     
 # Print bunch parameters.
-bunch_size_global = bunch.getSizeGlobal()
 twiss_analysis = BunchTwissAnalysis()
 twiss_analysis.analyzeBunch(bunch)
 (alpha_x, beta_x, _, eps_x) = twiss_analysis.getTwiss(0)
@@ -394,10 +399,15 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = "MEBT_Diag:WS04b"  # start node (name/position/None)
+start = None  # start node (name/position/None)
 stop = None  # stop node (name/position/None)
 save_input_bunch = True
 save_output_bunch = True
+stride = {
+    "update": 0.100,  # [m]
+    "write_bunch": 30.0,  # [m]
+    "plot_bunch": np.inf,  # [m]
+}
 
 
 # Create bunch writer.
@@ -426,7 +436,6 @@ plotter = pyorbit_sim.plotting.Plotter(
     prefix=man.prefix,
     default_save_kws=None, 
     dims=["x", "xp", "y", "yp", "z", "dE"],
-    # units=["mm", "mrad", "mm", "mrad", "mm", "MeV"],
 )
 plot_kws = dict(
     text=True,
@@ -457,11 +466,7 @@ if not save:
 # Create bunch monitor.
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
-    stride={
-        "update": 0.100,  # [m]
-        "write_bunch": 30.0,  # [m]
-        "plot_bunch": np.inf,  # [m]
-    },
+    stride=stride,
     writer=writer,
     plotter=plotter,
     track_history=True,
@@ -509,7 +514,7 @@ params_dict = pyorbit_sim.linac.track(
 )
     
     
-# Save losses.
+# Save losses vs. position.
 aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, params_dict["lostbunch"])
 if _mpi_rank == 0:
     print("Total loss = {:.2e}".format(sum([loss for (node, loss) in aprt_nodes_losses])))
