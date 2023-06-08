@@ -103,12 +103,12 @@ sequences = [
     "DTL3",
     "DTL4",
     "DTL5",
-    "DTL6",
-    "CCL1",
-    "CCL2",
-    "CCL3",
-    "CCL4",
-    "SCLMed",
+    # "DTL6",
+    # "CCL1",
+    # "CCL2",
+    # "CCL3",
+    # "CCL4",
+    # "SCLMed",
     # "SCLHigh",
     # "HEBT1",
     # "HEBT2",
@@ -181,12 +181,12 @@ for node in lattice.getNodes():
 
 
 # Add space charge nodes.
-sc_solver = "3D"  # {"3D", "ellipsoid", None}
+sc_solver = "ellipsoid"  # {"FFT", "ellipsoid", None}
 sc_path_length_min = 0.010  # [m]
-if sc_solver == "3D":
-    sc_grid_size_x = 64
-    sc_grid_size_y = 64
-    sc_grid_size_z = 64
+if sc_solver == "FFT":
+    sc_grid_size_x = 128
+    sc_grid_size_y = 128
+    sc_grid_size_z = 128
     sc_calc = SpaceChargeCalc3D(sc_grid_size_x, sc_grid_size_y, sc_grid_size_z)
     sc_nodes = setSC3DAccNodes(lattice, sc_path_length_min, sc_calc)
 elif sc_solver == "ellipsoid":
@@ -227,12 +227,8 @@ for node in lattice.getNodesOfClasses(classes):
     if node.hasParam("aperture") and node.hasParam("aprt_type"):
         position_start, position_stop = node_pos_dict[node]
         
-        if 30.0 <= position_stop < 250.0:
-            phase_max = 90.0
-        else:
-            phase_max = 180.0
         aperture_node = LinacPhaseApertureNode(frequency=rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
-        aperture_node.setMinMaxPhase(-phase_max, phase_max)  # [deg]
+        aperture_node.setMinMaxPhase(-180.0, +180.0)  # [deg]
         aperture_node.setPosition(position_stop)
         aperture_node.setSequence(node.getSequence())
         node.addChildNode(aperture_node, node.EXIT)
@@ -338,7 +334,7 @@ if False:
     )
     
 # Downsample. (Assume the particles were randomly generated to begin with.)
-fraction_keep = 0.05
+fraction_keep = 0.12
 if fraction_keep and fraction_keep < 1.0:
     n = int(fraction_keep * bunch.getSize())  # on each processor
     print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
@@ -405,7 +401,7 @@ save_input_bunch = True
 save_output_bunch = True
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": 30.0,  # [m]
+    "write_bunch": 12.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
