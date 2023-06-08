@@ -227,7 +227,7 @@ for node in lattice.getNodesOfClasses(classes):
     if node.hasParam("aperture") and node.hasParam("aprt_type"):
         position_start, position_stop = node_pos_dict[node]
         
-        if 30.0 <= position_stop < 150.0:
+        if 30.0 <= position_stop < 250.0:
             phase_max = 90.0
         else:
             phase_max = 180.0
