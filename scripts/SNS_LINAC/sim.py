@@ -181,12 +181,12 @@ for node in lattice.getNodes():
 
 
 # Add space charge nodes.
-sc_solver = "ellipsoid"  # {"FFT", "ellipsoid", None}
+sc_solver = "FFT"  # {"FFT", "ellipsoid", None}
 sc_path_length_min = 0.010  # [m]
 if sc_solver == "FFT":
-    sc_grid_size_x = 128
-    sc_grid_size_y = 128
-    sc_grid_size_z = 128
+    sc_grid_size_x = 64
+    sc_grid_size_y = 64
+    sc_grid_size_z = 64
     sc_calc = SpaceChargeCalc3D(sc_grid_size_x, sc_grid_size_y, sc_grid_size_z)
     sc_nodes = setSC3DAccNodes(lattice, sc_path_length_min, sc_calc)
 elif sc_solver == "ellipsoid":
@@ -303,7 +303,7 @@ pyorbit_sim.bunch_utils.center(bunch, verbose=True)
 # Generate an RMS-equivalent distribution in x-x', y-y', and z-z' using an analytic 
 # distribution function. Reconstruct the six-dimensional distribution as 
 # f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-if False:
+if True:
     dist = WaterBagDist3D
     n_parts = bunch.getSizeGlobal()
     if _mpi_rank == 0:
