@@ -103,7 +103,7 @@ sequences = [
     "DTL3",
     "DTL4",
     "DTL5",
-    # "DTL6",
+    "DTL6",
     # "CCL1",
     # "CCL2",
     # "CCL3",
@@ -147,19 +147,6 @@ for rf_gap in lattice.getRF_Gaps():
 fields_filename = os.path.join(file_path, "./data_input/sns_rf_fields.xml")
 z_step = 0.002
         
-# Replace zero-length RF gap models with field-on-axis RF gap models. Quads stay
-# hard-edged. This approach will not work for DTL cavities -- RF and quad fields
-# are overlapped for DTL.
-if False:
-    seq_names = ["MEBT", "CCL1", "CCL2", "CCL3", "CCL4", "SCLMed"]
-    Replace_BaseRF_Gap_to_AxisField_Nodes(lattice, z_step, fields_filename, seq_names)
-
-# Replace hard-edge quads with soft-edge quads. It is possible for DTL also -- if 
-# the RF gap models are zero-length ones. 
-if False:
-    seq_names = ["MEBT", "DTL1", "DTL2", "DTL3", "DTL4", "DTL5", "DTL6"]
-    Replace_Quads_to_OverlappingQuads_Nodes(lattice, z_step, seq_names, [], SNS_EngeFunctionFactory)
-
 # Replace hard-edge quads with soft-edge quads; replace zero-length RF gap models
 # with field-on-axis RF gap models. Can be used for any sequences, no limitations.
 if True:
@@ -245,7 +232,6 @@ if _mpi_rank == 0:
     print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes) - n_transverse_aperture_nodes))
 
 
-
 # Bunch
 # --------------------------------------------------------------------------------------
 
@@ -259,15 +245,15 @@ intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge
 
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_8.56e+06.dat"
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
+    "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08.dat"
 )
 if bunch_filename is not None:
     if _mpi_rank == 0:
         print("Generating bunch from file '{}'.".format(bunch_filename))
     bunch.readBunch(bunch_filename)
 else:
-    dist = WaterBagDist3D
+    dist = GaussDist3D
     n_parts = int(1e4)
     kin_energy = 0.0025  # [GeV]
     mass = 0.939294  # [GeV / c^2]
@@ -301,10 +287,9 @@ else:
 pyorbit_sim.bunch_utils.center(bunch, verbose=True)
         
 # Generate an RMS-equivalent distribution in x-x', y-y', and z-z' using an analytic 
-# distribution function. Reconstruct the six-dimensional distribution as 
-# f(x, x', y, y', z, z') = f(x, x') f(y, y') f(z, z').
-if True:
-    dist = WaterBagDist3D
+# distribution function.
+if False:
+    dist = GaussDist3D
     n_parts = bunch.getSizeGlobal()
     if _mpi_rank == 0:
         print("Forming rms-equivalent bunch using 2D Twiss parameters and {} generator.".format(dist))
@@ -334,7 +319,7 @@ if True:
     )
     
 # Downsample. (Assume the particles were randomly generated to begin with.)
-fraction_keep = 0.12
+fraction_keep = None
 if fraction_keep and fraction_keep < 1.0:
     n = int(fraction_keep * bunch.getSize())  # on each processor
     print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
@@ -395,13 +380,13 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = None  # start node (name/position/None)
+start = "MEBT_Diag:WS04b"  # start node (name/position/None)
 stop = None  # stop node (name/position/None)
 save_input_bunch = True
 save_output_bunch = True
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": 12.0,  # [m]
+    "write_bunch": 20.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
@@ -484,9 +469,8 @@ if _mpi_rank == 0:
     
     
 # Check the synchronous particle time. This could be wrong if start != 0 and
-# if the bunch was loaded from a file without a PyORBIT header (which should 
-# automatically load the correct time).
-pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=False)
+# if the bunch was loaded from a file without a PyORBIT header.
+pyorbit_sim.linac.check_sync_part_time(bunch, lattice, start=start, set_design=True)
     
     
 # Save input bunch.
