@@ -246,7 +246,7 @@ intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge
 # Load the bunch coordinates.
 bunch_filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
-    "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08.dat"
+    "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08_decorr_x-y-z.dat"
 )
 if bunch_filename is not None:
     if _mpi_rank == 0:
