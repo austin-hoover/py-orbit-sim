@@ -151,9 +151,7 @@ class Monitor:
         self.track_history = track_history
         self.track_rms = track_rms
         self.verbose = verbose
-        
-        self.filename = filename
-        
+                
         self.history = dict()
         keys = [
             "position",
@@ -174,8 +172,16 @@ class Monitor:
             for j in range(i + 1):
                 keys.append("cov_{}-{}".format(j, i))
         for key in keys:
-            self.history[key] = []
-                        
+            self.history[key] = None
+            
+        self.filename = filename
+        self.file = None
+        if self.filename is not None:
+            self.file = open(self.filename, "w")
+            line = ",".join(list(self.history))
+            line = line[:-1] + "\n"
+            self.file.write(line)
+            
     def action(self, params_dict):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -198,12 +204,12 @@ class Monitor:
         
         # Record scalar values (position, energy, etc.)
         if _mpi_rank == 0 and self.track_history:
-            self.history["position"].append(position)
-            self.history["node"].append(node.getName())
-            self.history["n_parts"].append(n_parts)
-            self.history["gamma"].append(gamma)
-            self.history["beta"].append(beta)
-            self.history["energy"].append(bunch.getSyncParticle().kinEnergy())
+            self.history["position"] = position
+            self.history["node"] = node.getName()
+            self.history["n_parts"] = n_parts
+            self.history["gamma"] = gamma
+            self.history["beta"] = beta
+            self.history["energy"] = bunch.getSyncParticle().kinEnergy()
 
         # Record covariance matrix.
         if self.track_history and self.track_rms:
@@ -214,25 +220,25 @@ class Monitor:
                 key = "mean_{}".format(i)
                 value = bunch_twiss_analysis.getAverage(i)
                 if _mpi_rank == 0:
-                    self.history[key].append(value)
+                    self.history[key] = value
             for i in range(6):
                 for j in range(i + 1):
                     key = "cov_{}-{}".format(j, i)
                     value = bunch_twiss_analysis.getCorrelation(j, i)
                     if _mpi_rank == 0:
-                        self.history[key].append(value)
+                        self.history[key] = value
                                
         if _mpi_rank == 0 and self.track_rms:
-            x_rms = np.sqrt(self.history["cov_0-0"][-1])
-            y_rms = np.sqrt(self.history["cov_2-2"][-1])
-            z_rms = np.sqrt(self.history["cov_4-4"][-1])
+            x_rms = np.sqrt(self.history["cov_0-0"])
+            y_rms = np.sqrt(self.history["cov_2-2"])
+            z_rms = np.sqrt(self.history["cov_4-4"])
             z_to_phase_coeff = pyorbit_sim.bunch_utils.get_z_to_phase_coeff(bunch, self.rf_frequency)
             z_rms_deg = -z_to_phase_coeff * z_rms
-            self.history["x_rms"].append(x_rms)
-            self.history["y_rms"].append(y_rms)
-            self.history["z_rms"].append(z_rms)
-            self.history["z_rms_deg"].append(z_rms_deg)
-            self.history["z_to_phase_coeff"].append(z_to_phase_coeff)
+            self.history["x_rms"] = x_rms
+            self.history["y_rms"] = y_rms
+            self.history["z_rms"] = z_rms
+            self.history["z_rms_deg"] = z_rms_deg
+            self.history["z_to_phase_coeff"] = z_to_phase_coeff
                         
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
@@ -288,7 +294,7 @@ class Monitor:
                 info = dict()
                 for key in self.history:
                     if self.history[key]:
-                        info[key] = self.history[key][-1]
+                        info[key] = self.history[key]
                 info["node"] = node.getName()
                 info["step"] = self.step
                 info["position"] = position
@@ -297,28 +303,29 @@ class Monitor:
                 self.plotter.action(bunch, info=info, verbose=self.verbose)  # MPI?
                 
         # Write history to file.
-        if self.filename is not None:
-            self.write_history(self.filename)
+        self.write_history()
 
     def clear_history(self):
         """Clear history array."""
         for key in self.history:
-            self.history[key] = []
+            self.history[key] = None
 
-    def write_history(self, filename=None, delimiter=","):
-        """Write history array to file."""
+    def write_history(self):
+        """Write history to new line of file."""
         if not self.track_history:
             print("Nothing to write! self.track_history=False")
             return
-        if filename is None:
-            filename = self.filename
+        if self.file is None:
+            return
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if _mpi_rank == 0:
-            keys = [key for key in self.history if self.history[key]]
-            data = np.array([self.history[key] for key in keys]).T
-            df = pd.DataFrame(data=data, columns=keys)
-            df.to_csv(filename, sep=delimiter, index=False)
+            data = [self.history[key] for key in self.history]
+            line = ""
+            for i in range(len(data)):
+                line += "{},".format(data[i])
+            line = line[:-1] + "\n"
+            self.file.write(line)
             
     
 def get_node_info(node_name_or_position, lattice):
