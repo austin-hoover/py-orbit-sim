@@ -103,7 +103,7 @@ sequences = [
     "DTL3",
     "DTL4",
     "DTL5",
-    "DTL6",
+    # "DTL6",
     # "CCL1",
     # "CCL2",
     # "CCL3",
@@ -244,10 +244,11 @@ current = 0.042  # [A]
 intensity = (current / rf_frequency) / abs(float(bunch.charge()) * consts.charge_electron)
 
 # Load the bunch coordinates.
-bunch_filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
-    "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08_decorr_x-y-z.dat"
-)
+bunch_filename = None
+# bunch_filename = os.path.join(
+#     "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
+#     "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08_decorr_x-y-z.dat"
+# )
 if bunch_filename is not None:
     if _mpi_rank == 0:
         print("Generating bunch from file '{}'.".format(bunch_filename))
@@ -380,7 +381,7 @@ for i, (dim, unit) in enumerate(zip(dims, units)):
 # Tracking
 # --------------------------------------------------------------------------------------
 
-start = "MEBT_Diag:WS04b"  # start node (name/position/None)
+start = 0.0  # start node (name/position/None)
 stop = None  # stop node (name/position/None)
 save_input_bunch = True
 save_output_bunch = True
