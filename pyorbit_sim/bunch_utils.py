@@ -104,11 +104,13 @@ def set_coords(bunch, X, start_index=0):
     return bunch
 
 
+def get_intensity(current=None, frequency=None, charge=-1.0):
+    return (current / frequency) / (charge * consts.charge_electron)
+
+
 def set_current(bunch, current=None, frequency=None):
     """Set macro-size from current [A] and frequency [Hz]."""
-    charge_bunch = current / frequency
-    charge_particle = abs(float(bunch.charge()) * consts.charge_electron)
-    intensity = charge_bunch / charge_particle
+    intensity = get_intensity(current, frequency)
     macro_size = intensity / bunch.getSizeGlobal()
     bunch.macroSize(macro_size)
     return bunch
