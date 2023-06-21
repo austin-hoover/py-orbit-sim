@@ -94,7 +94,6 @@ class Monitor:
         plotter=None,
         writer=None,
         stride=None,
-        track_history=True,
         track_rms=True,
         dispersion_flag=False,
         emit_norm_flag=False,
@@ -118,8 +117,6 @@ class Monitor:
                 "update": proceed with all updates (print statement, etc.)
                 "write_bunch": call `bunch.dumpBunch`
                 "plot_bunch": call plotting routines
-        track_history : bool
-            Whether to append to history array on each action.
         track_rms : bool
             Whether include RMS bunch parameters in history arrays.
         emit_norm_flag, dispersion_flag : bool
@@ -129,13 +126,19 @@ class Monitor:
         verbose : bool
             Whether to print an update statement on each action.
         filename : str or None
-            If provided, saves the history to a file on each update. This allows the
-            simulation to terminate early without losing the scalar history data.
+            If provided, save the history to a file.
         """
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
         self.position = self.position_offset = position_offset
         self.step = 0
         self.start_time = None
         self.rf_frequency = rf_frequency
+        self.dispersion_flag = int(dispersion_flag)
+        self.emit_norm_flag = int(emit_norm_flag)
+        self.track_rms = track_rms
+        self.verbose = verbose
 
         self.stride = stride
         if self.stride is None:
@@ -143,44 +146,40 @@ class Monitor:
         self.stride.setdefault("update", 0.1)
         self.stride.setdefault("write_bunch", np.inf)
         self.stride.setdefault("plot_bunch", np.inf)
+        
         self.writer = writer
         self.plotter = plotter
         
-        self.dispersion_flag = int(dispersion_flag)
-        self.emit_norm_flag = int(emit_norm_flag)
-        self.track_history = track_history
-        self.track_rms = track_rms
-        self.verbose = verbose
-                
-        self.history = dict()
-        keys = [
-            "position",
-            "node",
-            "n_parts",
-            "gamma",
-            "beta",
-            "energy",
-            "x_rms",
-            "y_rms",
-            "z_rms",
-            "z_rms_deg",
-            "z_to_phase_coeff",
-        ]
-        for i in range(6):
-            keys.append("mean_{}".format(i))
-        for i in range(6):
-            for j in range(i + 1):
-                keys.append("cov_{}-{}".format(j, i))
-        for key in keys:
-            self.history[key] = None
-            
-        self.filename = filename
-        self.file = None
-        if self.filename is not None:
-            self.file = open(self.filename, "w")
-            line = ",".join(list(self.history))
-            line = line[:-1] + "\n"
-            self.file.write(line)
+        if _mpi_rank == 0:
+            keys = [
+                "position",
+                "node",
+                "n_parts",
+                "gamma",
+                "beta",
+                "energy",
+                "x_rms",
+                "y_rms",
+                "z_rms",
+                "z_rms_deg",
+                "z_to_phase_coeff",
+            ]
+            for i in range(6):
+                keys.append("mean_{}".format(i))
+            for i in range(6):
+                for j in range(i + 1):
+                    keys.append("cov_{}-{}".format(j, i))
+            self.history = dict()
+            for key in keys:
+                self.history[key] = None
+
+            self.filename = filename
+            self.file = None
+            if self.filename is not None:
+                self.file = open(self.filename, "w")
+                line = ",".join(list(self.history))
+                line = line[:-1] + "\n"
+                self.file.write(line)
             
     def action(self, params_dict):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -190,20 +189,20 @@ class Monitor:
         position = params_dict["path_length"] + self.position_offset
         if (position - self.position) < self.stride["update"]:
             return
-        
-        self.position = position
+
+        self.position = position        
+        if self.start_time is None:
+            self.start_time = time.clock()
+        time_ellapsed = time.clock() - self.start_time
         
         bunch = params_dict["bunch"]
         node = params_dict["node"]
         beta = bunch.getSyncParticle().beta()
         gamma = bunch.getSyncParticle().gamma()
         n_parts = bunch.getSizeGlobal()
-        if self.start_time is None:
-            self.start_time = time.clock()
-        time_ellapsed = time.clock() - self.start_time
-        
+
         # Record scalar values (position, energy, etc.)
-        if _mpi_rank == 0 and self.track_history:
+        if _mpi_rank == 0:
             self.history["position"] = position
             self.history["node"] = node.getName()
             self.history["n_parts"] = n_parts
@@ -212,7 +211,7 @@ class Monitor:
             self.history["energy"] = bunch.getSyncParticle().kinEnergy()
 
         # Record covariance matrix.
-        if self.track_history and self.track_rms:
+        if self.track_rms:
             bunch_twiss_analysis = BunchTwissAnalysis()
             order = 2
             bunch_twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
@@ -289,7 +288,7 @@ class Monitor:
                 self.writer.action(bunch, node_name=node.getName(), position=position)
 
         # Call plotting routines.
-        if self.plotter is not None and self.stride["plot_bunch"] is not None:
+        if self.plotter is not None and self.stride["plot_bunch"] is not None and _mpi_rank == 0:
             if (position - self.plotter.position) >= self.stride["plot_bunch"]:
                 info = dict()
                 for key in self.history:
@@ -300,26 +299,10 @@ class Monitor:
                 info["position"] = position
                 info["gamma"] = gamma
                 info["beta"] = beta
-                self.plotter.action(bunch, info=info, verbose=self.verbose)  # MPI?
+                self.plotter.action(bunch, info=info, verbose=self.verbose)
                 
-        # Write history to file.
-        self.write_history()
-
-    def clear_history(self):
-        """Clear history array."""
-        for key in self.history:
-            self.history[key] = None
-
-    def write_history(self):
-        """Write history to new line of file."""
-        if not self.track_history:
-            print("Nothing to write! self.track_history=False")
-            return
-        if self.file is None:
-            return
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-        if _mpi_rank == 0:
+        # Write new line to history file.
+        if _mpi_rank == 0 and self.file is not None:
             data = [self.history[key] for key in self.history]
             line = ""
             for i in range(len(data)):
