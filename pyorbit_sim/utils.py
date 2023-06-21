@@ -5,6 +5,9 @@ import subprocess
 import sys
 import time
 
+import orbit_mpi
+
+
 
 def ensure_path_exists(path):
     if not os.path.isdir(path):
@@ -73,12 +76,12 @@ def url_style(url, text=None):
 
 class ScriptManager:
     
-    def __init__(self, datadir=None, path=None):
+    def __init__(self, datadir=None, path=None, timestamp=None, datestamp=None):
         self.datadir = datadir
+        self.timestamp = timestamp
+        self.datestamp = datestamp
         self.path = path
         self.script_name = self.path.stem
-        self.datestamp = time.strftime("%Y-%m-%d")
-        self.timestamp = time.strftime("%y%m%d%H%M%S")
         self.git_hash, self.git_url = self.get_git()
         self.prefix = "{}-{}".format(self.timestamp, self.script_name)
         self.outdir = os.path.join(
@@ -86,18 +89,23 @@ class ScriptManager:
             self.path.as_posix().split("scripts/")[1].split(".py")[0], 
             self.datestamp,
         )
-        ensure_path_exists(self.outdir)
-        print("Output directory: {}".format(self.outdir))
-        print("Output file prefix: {}".format(self.prefix))
-                        
+        
+    def make_outdir(self):
+        if not os.path.exists(self.outdir):
+            os.makedirs(self.outdir)
+
     def get_git(self):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
         _git_hash = git_revision_hash()
         _git_url = "{}/commit/{}".format(git_url(), _git_hash)
-        if _git_hash and git_url and is_git_clean():
-            print("Repository is clean.")
-            print("Code should be available at {}".format(_git_url))
-        else:
-            print("Unknown git revision.")
+        if _mpi_rank == 0:
+            if _git_hash and git_url and is_git_clean():
+                print("Repository is clean.")
+                print("Code should be available at {}".format(_git_url))
+            else:
+                print("Unknown git revision.")
         return _git_hash, _git_url
     
     def get_filename(self, filename, sep="_"):
