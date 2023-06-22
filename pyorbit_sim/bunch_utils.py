@@ -126,14 +126,6 @@ def get_z_rms_deg(bunch, frequency=None, z_rms=None):
     """Convert z rms from [m] to [deg]."""
     return -get_z_to_phase_coeff(bunch, frequency) * z_rms
 
-    
-def center(bunch, verbose=False):
-    """Shift the bunch so that first-order moments are zero."""
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    bunch_twiss_analysis.analyzeBunch(bunch)
-    centroid = np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
-    return shift(bunch, delta=-centroid, verbose=verbose)
-
 
 def decorrelate_x_y_z(bunch, verbose=False):
     """Decorrelate x-y-z.
@@ -206,7 +198,7 @@ def reverse(bunch):
     return bunch
 
 
-def shift(bunch, delta=None, verbose=False):
+def shift_centroid(bunch, delta=None, verbose=False):
     """Shift the bunch centroid in phase space."""
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -228,8 +220,30 @@ def shift(bunch, delta=None, verbose=False):
         bunch.xp(i, bunch.xp(i) + delta[1])
         bunch.yp(i, bunch.yp(i) + delta[3])
         bunch.dE(i, bunch.dE(i) + delta[5])
+    if verbose and _mpi_rank == 0:
+        centroid = get_centroid(bunch)
+        print("New centroid:")
+        print("<x>  = {} [m]".format(centroid[0]))
+        print("<xp> = {} [rad]".format(centroid[0]))
+        print("<y>  = {} [m]".format(centroid[0]))
+        print("<yp> = {} [rad]".format(centroid[0]))
+        print("<z>  = {} [m]".format(centroid[0]))
+        print("<dE> = {} [GeV]".format(centroid[0]))
     return bunch
 
+
+def get_centroid(bunch):
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    bunch_twiss_analysis.analyzeBunch(bunch)
+    return np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
+
+
+def set_centroid(bunch, centroid=0.0, verbose=False):
+    if np.ndim(centroid) == 0:
+        centroid = 6 * [centroid]
+    delta = np.subtract(centroid, get_centroid(bunch))
+    return shift_centroid(bunch, delta=delta, verbose=verbose)
+    
 
 def load(
     filename=None,
