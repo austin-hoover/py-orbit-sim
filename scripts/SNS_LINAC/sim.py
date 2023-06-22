@@ -73,7 +73,7 @@ from pyorbit_sim.utils import ScriptManager
 
 settings = {
     "output": {
-        "datadir": "/home/46h/sim_data/",  # create output directory here
+        "datadir": "./scripts/SNS_LINAC/data_output",  # output directory location
         "save": True,  # no output if False
     },
     "lattice": {
@@ -96,6 +96,35 @@ settings = {
             # "HEBT1",
             # "HEBT2",
         ],
+        "rf_gap_model": RfGapTTF,
+        "overlapping_fields": {
+            "switch": True,
+            "sequences": "all",
+            "z_step": 0.002, 
+            "xml_filename": "sns_rf_fields.xml",
+        },
+        "linac_tracker": True,
+        "space_charge": {
+            "switch": True,
+            "solver": "FFT",
+            "grid_size": (64, 64, 64),
+            "n_ellipsoids": 5,
+            "path_length_min": 0.010,  # [m]
+        },
+        "apertures": {
+            "transverse": {
+                "switch": True,
+                "x_max": 0.042,  # [m]
+                "y_max": 0.042,  # [m]
+            },
+            "longitudinal": {
+                "switch": True,
+                "phase_min": -180.0, 
+                "phase_max": +180.0, 
+                "energy_min": -0.100,
+                "energy_max": +0.100,
+            },
+        },
     },
     "bunch": {
         "filename": None,
@@ -145,94 +174,95 @@ if _mpi_rank == 0 and settings["output"]["save"]:
     man.save_info()
     man.save_script_copy()
     pprint(man.get_info())
-
 file_path = os.path.dirname(os.path.realpath(__file__))
 
-
-# Print settings.
+# Derive some settings.
 settings["output"].update(**man.get_info())
+if settings["lattice"]["overlapping_fields"]["sequences"] == "all":
+    settings["lattice"]["overlapping_fields"]["sequences"] = settings["lattice"]["sequences"]
 settings["bunch"]["intensity"] = pyorbit_sim.bunch_utils.get_intensity(
     settings["bunch"]["current"], 
     settings["lattice"]["rf_frequency"]
 )
+
+# Print settings.
 if _mpi_rank == 0:
     print("Settings:")
     pprint(settings)
 
 
-# Lattice
+# Lattice 
 # --------------------------------------------------------------------------------------
 
 linac = SNS_LINAC(
-    input_dir=os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), 
-        "data_input"
-    ),
+    input_dir=os.path.join(file_path, "data_input"),
     xml_filename="sns_linac.xml",
+    rf_frequency=settings["lattice"]["rf_frequency"],
 )
+
 lattice = linac.initialize(
     sequences=settings["lattice"]["sequences"], 
     max_drift_length=settings["lattice"]["max_drift_length"],
     verbose=True,
 )
 
-if settings["output"]["save"] and _mpi_rank == 0:
-    file = open(man.get_filename("lattice_nodes.txt"), "w")
-    file.write("node position length\n")
-    for node in lattice.getNodes():
-        file.write("{} {} {}\n".format(node.getName(), node.getPosition(), node.getLength()))
-    file.close()
-    file = open(man.get_filename("lattice_structure.txt"), "w")
-    file.write(lattice.structureToText())
-    file.close()
+linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
+linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
 
-linac.set_rf_gap_model(RfGapTTF)
+linac.set_rf_gap_model(settings["lattice"]["rf_gap_model"])
 
-linac.set_overlapping_rf_and_quad_fields(
-    sequences=linac.sequences, 
-    z_step=0.002, 
-    xml_filename="sns_rf_fields.xml",
-)
+if settings["lattice"]["overlapping_fields"]["switch"]:
+    linac.set_overlapping_rf_and_quad_fields(
+        sequences=settings["lattice"]["overlapping_fields"]["sequences"],
+        z_step=settings["lattice"]["overlapping_fields"]["z_step"],
+        xml_filename=settings["lattice"]["overlapping_fields"]["xml_filename"]
+    )
+    
+linac.set_linac_tracker(settings["lattice"]["linac_tracker"])
 
-linac.set_linac_tracker(True)
+if settings["lattice"]["space_charge"]["switch"]:
+    linac.add_space_charge_nodes(
+        solver=settings["lattice"]["space_charge"]["solver"],
+        grid_size=settings["lattice"]["space_charge"]["grid_size"],
+        n_ellipsoids=settings["lattice"]["space_charge"]["n_ellipsoids"], 
+        path_length_min=settings["lattice"]["space_charge"]["path_length_min"],
+        verbose=True,
+    )
 
-
-linac.add_space_charge_nodes(
-    solver="FFT", 
-    grid_size=(64, 64, 64), 
-    n_ellipsoids=5, 
-    path_length_min=0.010, 
-    verbose=True,
-)
-
-linac.add_transverse_aperture_nodes(x_size=0.042, y_size=0.042, verbose=True)
-
-linac.add_longitudinal_apertures(
-    classes=[
-        BaseRF_Gap, 
-        AxisFieldRF_Gap, 
-        AxisField_and_Quad_RF_Gap,
-        Quad, 
-        OverlappingQuadsNode,
-    ],
-    phase_min=-180.0, 
-    phase_max=+180.0, 
-    energy_min=-0.100, 
-    energy_max=+0.100, 
-    verbose=True,
-)
-
+if settings["lattice"]["apertures"]["transverse"]["switch"]:
+    linac.add_transverse_aperture_nodes(
+        x_size=settings["lattice"]["apertures"]["transverse"]["x_max"],
+        y_size=settings["lattice"]["apertures"]["transverse"]["y_max"],
+        verbose=True
+    )
+if settings["lattice"]["apertures"]["transverse"]["switch"]:
+    linac.add_longitudinal_apertures(
+        classes=[
+            BaseRF_Gap, 
+            AxisFieldRF_Gap, 
+            AxisField_and_Quad_RF_Gap,
+            Quad, 
+            OverlappingQuadsNode,
+        ],
+        phase_min=settings["lattice"]["apertures"]["longitudinal"]["phase_min"],
+        phase_max=settings["lattice"]["apertures"]["longitudinal"]["phase_max"],
+        energy_min=settings["lattice"]["apertures"]["longitudinal"]["energy_min"],
+        energy_max=settings["lattice"]["apertures"]["longitudinal"]["energy_max"],
+        verbose=True,
+    )
+    
 lattice = linac.lattice
+aperture_nodes = linac.aperture_nodes
 
 
-# # Bunch
-# # --------------------------------------------------------------------------------------
+# Bunch
+# --------------------------------------------------------------------------------------
 
-# bunch_filename = os.path.join(
-#     "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
-#     "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08_decorr_x-y-z.dat"
-# )
-# rms_equiv_dist = None
+bunch_filename = os.path.join(
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
+    "230618191218-bunch_MEBT_Diag:WS04b_upsample_1.00e+08_decorr_x-y-z.dat"
+)
+rms_equiv_dist = None
 
 
 # # Initialize the bunch.

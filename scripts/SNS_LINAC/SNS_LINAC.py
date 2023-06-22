@@ -66,6 +66,18 @@ class SNS_LINAC:
             print("lattice length = {:.3f} [m])".format(self.lattice.getLength()))
         return self.lattice
     
+    def save_node_positions(self, filename="lattice_nodes.txt"):
+        file = open(filename, "w")
+        file.write("node position length\n")
+        for node in self.lattice.getNodes():
+            file.write("{} {} {}\n".format(node.getName(), node.getPosition(), node.getLength()))
+        file.close()
+        
+    def save_lattice_structure(self, filename="lattice_structure.txt"):
+        file = open(filename, "w")
+        file.write(self.lattice.structureToText())
+        file.close()
+    
     def set_rf_gap_model(self, rf_gap_model):
         for rf_gap in self.lattice.getRF_Gaps():
             rf_gap.setCppGapModel(rf_gap_model)
@@ -93,7 +105,14 @@ class SNS_LINAC:
         # the energy spread is large, but is slower and is not symplectic.)
         self.lattice.setLinacTracker(True)
 
-    def add_space_charge_nodes(self, solver="FFT", grid_size=(64, 64, 64), n_ellipsoids=5, path_length_min=0.010, verbose=True):
+    def add_space_charge_nodes(
+        self, 
+        solver="FFT", 
+        grid_size=(64, 64, 64), 
+        n_ellipsoids=5, 
+        path_length_min=0.010, 
+        verbose=True,
+    ):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         
