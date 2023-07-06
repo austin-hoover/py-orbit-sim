@@ -74,11 +74,33 @@ from pyorbit_sim.utils import ScriptManager
 settings = {
     "output": {
         "datadir": "./scripts/SNS_LINAC/data_output",  # output directory location
-        "save": True,  # no output if False
+        "save": False,  # no output if False
     },
     "lattice": {
-        "rf_frequency": 402.5e+06,  # [Hz]
+        "apertures": {
+            "transverse": {
+                "switch": True,
+                "x_max": 0.042,  # [m]
+                "y_max": 0.042,  # [m]
+            },
+            "longitudinal": {
+                "switch": True,
+                "energy_min": -0.100,
+                "energy_max": +0.100,
+                "phase_min": -180.0, 
+                "phase_max": +180.0, 
+            },
+        },
+        "linac_tracker": True,
         "max_drift_length": 0.010,  # [m]
+        "overlapping_fields": {
+            "switch": True,
+            "sequences": "all",
+            "xml_filename": "sns_rf_fields.xml",
+            "z_step": 0.002, 
+        },
+        "rf_frequency": 402.5e+06,  # [Hz]
+        "rf_gap_model": RfGapTTF,
         "sequences": [
             "MEBT",
             "DTL1",
@@ -96,34 +118,12 @@ settings = {
             # "HEBT1",
             # "HEBT2",
         ],
-        "rf_gap_model": RfGapTTF,
-        "overlapping_fields": {
-            "switch": True,
-            "sequences": "all",
-            "z_step": 0.002, 
-            "xml_filename": "sns_rf_fields.xml",
-        },
-        "linac_tracker": True,
         "space_charge": {
             "switch": True,
             "solver": "FFT",
             "grid_size": (64, 64, 64),
             "n_ellipsoids": 5,
             "path_length_min": 0.010,  # [m]
-        },
-        "apertures": {
-            "transverse": {
-                "switch": True,
-                "x_max": 0.042,  # [m]
-                "y_max": 0.042,  # [m]
-            },
-            "longitudinal": {
-                "switch": True,
-                "phase_min": -180.0, 
-                "phase_max": +180.0, 
-                "energy_min": -0.100,
-                "energy_max": +0.100,
-            },
         },
     },
     "bunch": {
@@ -155,7 +155,7 @@ settings = {
         "stop": None,  # (node name/position/None)
         "save_input_bunch": True,
         "save_output_bunch": True,
-        "particle_ids"; True,
+        "particle_ids": False,
         "stride": {
             "update": 0.100,  # [m]
             "write_bunch": 20.0,  # [m]
@@ -193,8 +193,6 @@ file_path = os.path.dirname(os.path.realpath(__file__))
 
 # Derive some settings.
 settings["output"].update(**man.get_info())
-if settings["lattice"]["overlapping_fields"]["sequences"] == "all":
-    settings["lattice"]["overlapping_fields"]["sequences"] = settings["lattice"]["sequences"]
 settings["bunch"]["intensity"] = pyorbit_sim.bunch_utils.get_intensity(
     settings["bunch"]["current"], 
     settings["lattice"]["rf_frequency"]
@@ -221,14 +219,18 @@ lattice = linac.initialize(
     verbose=True,
 )
 
-linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
-linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
+if settings["output"]["save"]:
+    linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
+    linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
 
 linac.set_rf_gap_model(settings["lattice"]["rf_gap_model"])
 
 if settings["lattice"]["overlapping_fields"]["switch"]:
+    sequences = settings["lattice"]["sequences"]
+    if sequences == "all":
+        sequences = settings["lattice"]["sequences"]
     linac.set_overlapping_rf_and_quad_fields(
-        sequences=settings["lattice"]["overlapping_fields"]["sequences"],
+        sequences=sequences,
         z_step=settings["lattice"]["overlapping_fields"]["z_step"],
         xml_filename=settings["lattice"]["overlapping_fields"]["xml_filename"]
     )
@@ -279,145 +281,92 @@ bunch.mass(settings["bunch"]["mass"])
 bunch.charge(settings["bunch"]["charge"])
 bunch.getSyncParticle().kinEnergy(settings["bunch"]["kin_energy"])
 
-# Load the bunch coordinates.
+# Load the bunch coordinates. If no filename is provided, generate a design bunch. 
 if settings["bunch"]["filename"] is not None:
-    if _mpi_rank == 0:
-        print("Generating bunch from file {}.".format(bunch_filename))
-    bunch.readBunch(bunch_filename)
+    bunch.readBunch(bunch_filename, verbose=True)
 else:
-    dist = settings["bunch"]["design"]["dist"]
-    mass = bunch.mass()
-    kin_energy = bunch.getSyncParticle().kinEnergy()
-    gamma = (mass + kin_energy) / mass
-    beta = math.sqrt(gamma * gamma - 1.0) / gamma
-    alpha_x = settings["bunch"]["design"]["alpha_x"]
-    alpha_y = settings["bunch"]["design"]["alpha_y"]
-    alpha_z = settings["bunch"]["design"]["alpha_z"]
-    beta_x = settings["bunch"]["design"]["beta_x"]
-    beta_y = settings["bunch"]["design"]["beta_y"]
-    beta_z = settings["bunch"]["design"]["beta_z"]
-    eps_x = settings["bunch"]["design"]["eps_x"] / (beta * gamma)  # [m * rad]
-    eps_y = settings["bunch"]["design"]["eps_y"] / (beta * gamma)  # [m * rad]
-    eps_z = settings["bunch"]["design"]["eps_z"] / (beta * gamma**3)  # [m * rad]
-    eps_z = eps_z * gamma**3 * beta**2 * bunch.mass()  # [m * GeV]
-    beta_z = beta_z / (gamma**3 * beta**2 * bunch.mass())    
-    if _mpi_rank == 0:
-        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))    
-    bunch = pyorbit_sim.bunch_utils.generate(
-        dist=dist(
-            twissX=TwissContainer(alpha_x, beta_x, eps_x),
-            twissY=TwissContainer(alpha_y, beta_y, eps_y),
-            twissZ=TwissContainer(alpha_z, beta_z, eps_z),
-        ),
-        bunch=bunch,
+    bunch = pyorbit_sim.bunch_utils.generate_from_norm_twiss(
+        dist=settings["bunch"]["design"]["dist"],
         n_parts=settings["bunch"]["design"]["n_parts"],
+        bunch=bunch,
         verbose=True,
+        alpha_x=settings["bunch"]["design"]["alpha_x"],
+        alpha_y=settings["bunch"]["design"]["alpha_y"],
+        alpha_z=settings["bunch"]["design"]["alpha_z"],
+        beta_x=settings["bunch"]["design"]["beta_x"],
+        beta_y=settings["bunch"]["design"]["beta_y"],
+        beta_z=settings["bunch"]["design"]["beta_z"],
+        eps_x=settings["bunch"]["design"]["eps_x"],
+        eps_y=settings["bunch"]["design"]["eps_y"],
+        eps_z=settings["bunch"]["design"]["eps_z"],
+        mass=bunch.mass(),
+        kin_energy=bunch.getSyncParticle().kinEnergy()
     )
     
-pyorbit_sim.bunch_utils.set_centroid(
+# Center the bunch.
+bunch = pyorbit_sim.bunch_utils.set_centroid(
     bunch, 
     centroid=settings["bunch"]["centroid"],
     verbose=True,
 )
 
+# Generate RMS equivalent bunch.
 if settings["bunch"]["rms_equiv"] is not None:
-    dist = settings["bunch"]["rms_equiv"]
-    n_parts = bunch.getSizeGlobal()
-    if _mpi_rank == 0:
-        print("Forming rms-equivalent bunch using 2D Twiss parameters and {} generator.".format(dist))
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    order = 2
-    dispersion_flag = 0
-    emit_norm_flag = 0
-    bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)    
-    eps_x = bunch_twiss_analysis.getEffectiveEmittance(0)
-    eps_y = bunch_twiss_analysis.getEffectiveEmittance(1)
-    eps_z = bunch_twiss_analysis.getEffectiveEmittance(2)
-    beta_x = bunch_twiss_analysis.getEffectiveBeta(0)
-    beta_y = bunch_twiss_analysis.getEffectiveBeta(1)
-    beta_z = bunch_twiss_analysis.getEffectiveBeta(2)
-    alpha_x = bunch_twiss_analysis.getEffectiveAlpha(0)
-    alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
-    alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)    
-    bunch = pyorbit_sim.bunch_utils.generate(
-        dist=dist(
-            twissX=TwissContainer(alpha_x, beta_x, eps_x),
-            twissY=TwissContainer(alpha_y, beta_y, eps_y),
-            twissZ=TwissContainer(alpha_z, beta_z, eps_z),
-        ),
-        n_parts=n_parts, 
+    bunch = pyorbit_sim.bunch_utils.generate_rms_equivalent_bunch(
+        dist=settings["bunch"]["rms_equiv"],
         bunch=bunch, 
         verbose=True,
     )
-    
+        
 # Downsample. (Assume the particles were randomly generated to begin with.)
 fraction_keep = settings["bunch"]["downsample"]
 if fraction_keep and fraction_keep < 1.0:
-    n = int(fraction_keep * bunch.getSize())  # on each processor
     print("(rank {}) Downsampling by factor {}.".format(_mpi_rank, 1.0 / fraction_keep))
+    n = int(fraction_keep * bunch.getSize())  # on each processor
     for i in reversed(range(n, bunch.getSize())):
         bunch.deleteParticleFast(i)
     bunch.compress()    
         
+# Decorrelate the x-x', y-y', z-z' coordinates. (No MPI.)
 if settings["bunch"]["decorrelate_x-y-z"]:
-    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)  # no MPI
-
+    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
+    
 # Set the macro-particle size.
-bunch_size_global = bunch.getSizeGlobal()
-macro_size = settings["bunch"]["intensity"] / bunch_size_global
+size_global = bunch.getSizeGlobal()
+macro_size = settings["bunch"]["intensity"] / size_global
 bunch.macroSize(macro_size)
     
-# Print bunch parameters.
-twiss_analysis = BunchTwissAnalysis()
-twiss_analysis.analyzeBunch(bunch)
-(alpha_x, beta_x, _, eps_x) = twiss_analysis.getTwiss(0)
-(alpha_y, beta_y, _, eps_y) = twiss_analysis.getTwiss(1)
-(alpha_z, beta_z, _, eps_z) = twiss_analysis.getTwiss(2)
-if _mpi_rank == 0:
-    print("Bunch parameters:")
-    print("  charge = {}".format(bunch.charge()))
-    print("  mass = {} [GeV / c^2]".format(bunch.mass()))
-    print("  kinetic energy = {} [GeV]".format(bunch.getSyncParticle().kinEnergy()))
-    print("  macrosize = {}".format(bunch.macroSize()))
-    print("  size (local) = {:.2e}".format(bunch.getSize()))
-    print("  size (global) = {:.2e}".format(bunch_size_global))    
-    print("Twiss parameters:")
-    print("  alpha_x = {}".format(alpha_x))
-    print("  alpha_y = {}".format(alpha_y))
-    print("  alpha_z = {}".format(alpha_z))
-    print("  beta_x = {}".format(beta_x))
-    print("  beta_y = {}".format(beta_y))
-    print("  beta_z = {}".format(beta_z))
-    print("  eps_x = {} [mm * mrad]".format(1.0e6 * eps_x))
-    print("  eps_y = {} [mm * mrad]".format(1.0e6 * eps_y))
-    print("  eps_z = {} [mm * MeV]".format(1.0e6 * eps_z))
-if _mpi_rank == 0:
-    print("Centroid coordinates:")
-dims = ["x", "xp", "y", "yp", "z", "dE"]
-units = ["m", "rad", "m", "rad", "m", "GeV"]
-for i, (dim, unit) in enumerate(zip(dims, units)):
-    mean = twiss_analysis.getAverage(i)
-    if _mpi_rank == 0:
-        print("  <{}> = {:.3e} [{}]".format(dim, mean, unit))
+# Print bunch parameters and statistics.
+bunch_info = pyorbit_sim.bunch_utils.get_info(bunch, display=True)
 
 
 # Tracking
 # --------------------------------------------------------------------------------------
 
+if not settings["output"]["save"]:
+    settings["sim"]["save_input_bunch"] = False
+    settings["sim"]["save_output_bunch"] = False
+    settings["sim"]["stride"]["write_bunch"] = np.inf
+    settings["sim"]["stride"]["plot_bunch"] = np.inf
+
+    
+# Add particle ids.
 if settings["sim"]["particle_ids"]:
     ParticleIdNumber.addParticleIdNumbers(bunch)
     copyCoordsToInitCoordsAttr(bunch)
 
+    
 # Create bunch writer.
 writer = pyorbit_sim.linac.BunchWriter(
     folder=man.outdir, 
     prefix=man.prefix, 
     index=0,
-)    
+)       
     
-# Create bunch plotter. (Does not currently work with MPI.)
+# Create bunch plotter. This does not currently work with MPI. The plotter is disabled
+# if not saving output.
 def transform(X):
-    X[:, :] *= 1000.0
+    X[:, :] = X[:, :] * 1000.0
     X = pyorbit_sim.bunch_utils.norm_xxp_yyp_zzp(X, scale_emittance=True)
     X = pyorbit_sim.bunch_utils.slice_sphere(
         X,
@@ -453,23 +402,17 @@ plotter.add_function(
     **plot_kws
 )
 
-# Ignore writer and plotter if not saving output.
-if not settings["output"]["save"]:
-    writer = None
-    plotter = None
-
+    
 # Create bunch monitor.
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
-    stride=stride,
+    stride=settings["sim"]["stride"],
     writer=writer,
     plotter=plotter,
     track_rms=True,
-    dispersion_flag=False,
-    emit_norm_flag=False,
+    filename=man.get_filename("history.dat"),
     rf_frequency=linac.rf_frequency,
     verbose=True,
-    filename=man.get_filename("history.dat"),  # saves every update step
 )
 
 # Record synchronous particle time of arrival at each accelerating cavity.
@@ -489,7 +432,7 @@ pyorbit_sim.linac.check_sync_part_time(
 )
     
 # Save input bunch.
-if settings["output"]["save"] and settings["sim"]["save_intput_bunch"]:
+if settings["sim"]["save_input_bunch"]:
     node_name = settings["sim"]["start"]
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -507,10 +450,10 @@ params_dict = pyorbit_sim.linac.track(
 )
     
     
-# # Save losses vs. position.
-# aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, params_dict["lostbunch"])
-# if _mpi_rank == 0:
-#     print("Total loss = {:.2e}".format(sum([loss for (node, loss) in aprt_nodes_losses])))
+# # # Save losses vs. position.
+# # aprt_nodes_losses = GetLostDistributionArr(aperture_nodes, params_dict["lostbunch"])
+# # if _mpi_rank == 0:
+# #     print("Total loss = {:.2e}".format(sum([loss for (node, loss) in aprt_nodes_losses])))
 # if save:
 #     filename = man.get_filename("losses.txt")
 #     if _mpi_rank == 0:
@@ -532,3 +475,5 @@ params_dict = pyorbit_sim.linac.track(
     
 # if _mpi_rank == 0:
 #     print("timestamp = {}".format(man.timestamp))
+
+sys.exit()
