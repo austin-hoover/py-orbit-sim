@@ -1,5 +1,9 @@
 from __future__ import print_function
+import collections
+import math
 import os
+from pprint import pprint
+from pprint import pprint
 import sys
 
 import numpy as np
@@ -30,6 +34,9 @@ from orbit_mpi import mpi_comm
 from orbit_mpi import mpi_datatype
 from orbit_mpi import mpi_op
 from orbit_utils import Matrix
+
+# Local
+import stats
 
 
 def initialize(mass=None, kin_energy=None):
@@ -243,7 +250,62 @@ def set_centroid(bunch, centroid=0.0, verbose=False):
         centroid = 6 * [centroid]
     delta = np.subtract(centroid, get_centroid(bunch))
     return shift_centroid(bunch, delta=delta, verbose=verbose)
+
+
+def get_stats(bunch, dispersion_flag=False, emit_norm_flag=False):
+    """Return bunch covariance matrix (Sigma) and centroid (mu)."""
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    order = 2
+    bunch_twiss_analysis.computeBunchMoments(bunch, order, int(dispersion_flag), int(emit_norm_flag))
+    mu = []
+    for i in range(6):
+        val = bunch_twiss_analysis.getAverage(i)
+        mu.append(val)
+    Sigma = np.zeros((6, 6))
+    for i in range(6):
+        for j in range(i + 1):
+            Sigma[i, j] = Sigma[j, i] = bunch_twiss_analysis.getCorrelation(j, i)
+    return Sigma, mu
+
     
+def get_info(bunch, display=False):
+    """Return dict with bunch parameters and stats."""
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
+    bunch_size_global = bunch.getSizeGlobal()
+    Sigma, mu = get_stats(bunch)
+    eps_x, eps_y, eps_z = stats.apparent_emittance(Sigma)
+    alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = stats.twiss(Sigma)
+    units = ["m", "rad", "m", "rad", "m", "GeV"]
+    info = {
+        "charge": {"value": bunch.charge(), "unit": "e"},
+        "mass": {"value": bunch.mass(), "unit": "GeV / c^2"},
+        "kin_energy": {"value": bunch.getSyncParticle().kinEnergy(), "unit": "GeV"},
+        "macrosize": {"value": bunch.macroSize(), "unit": None},
+        "size_local": {"value": bunch.getSize(), "unit": None},
+        "size_global": {"value": bunch_size_global, "unit": None},
+        "alpha_x": {"value": alpha_x, "unit": None},
+        "alpha_y": {"value": alpha_y, "unit": None},
+        "alpha_z": {"value": alpha_z, "unit": None},
+        "beta_x": {"value": beta_x, "unit": "{} / {}".format(units[0], units[1])},
+        "beta_y": {"value": beta_y, "unit": "{} / {}".format(units[2], units[3])},
+        "beta_z": {"value": beta_z, "unit": "{} / {}".format(units[4], units[5])},
+        "eps_x": {"value": eps_x, "unit": "{} * {}".format(units[0], units[1])},
+        "eps_y": {"value": eps_y, "unit": "{} * {}".format(units[2], units[3])},
+        "eps_z": {"value": eps_z, "unit": "{} * {}".format(units[4], units[5])},
+    }
+    for i in range(6):
+        for j in range(i + 1):
+            info["cov_{}-{}".format(j, i)] = {"value": Sigma[j, i], "unit": "{} * {}".format(units[j], units[i])}
+    for i in range(6):
+        info["mean_{}".format(i)] = {"value": mu[i], "unit": "{}".format(units[i])}
+    if display and _mpi_rank == 0:
+        print("Bunch info:")
+        pprint(info)
+    return info
+
 
 def load(
     filename=None,
@@ -272,8 +334,12 @@ def load(
     bunch : Bunch
         If None, create a new bunch; otherwise, load into this bunch.
     """
-    if verbose:
-        print("Loading bunch from file '{}'...".format(filename))
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
+    if verbose and _mpi_rank == 0:
+        print("Loading bunch from file '{}'".format(filename))
     if not os.path.isfile(filename):
         raise ValueError("File '{}' does not exist.".format(filename))
     if bunch is None:
@@ -308,29 +374,34 @@ def load(
             bunch.addParticle(x[i], xp[i], y[i], yp[i], z[i], dE[i])
     else:
         raise KeyError("Unrecognized format '{}'.".format(file_format))
-    if verbose:
+    if verbose and _mpi_rank == 0:
         print(
-            "Bunch loaded (nparts={}, macrosize={}).".format(
-                bunch.getSize(),
-                bunch.macroSize(),
+            "(rank {}) bunch loaded (nparts={}, macrosize={})".format(
+                _mpi_rank, 
+                bunch.getSize(), 
+                bunch.macroSize()
             )
         )
     return bunch
 
 
-def generate(dist=None, n_parts=0, verbose=0, bunch=None):
-    """Generate bunch from distribution generator. (MPI compatible.)
+def generate(dist=None, n_parts=0, bunch=None, verbose=True):
+    """Generate bunch from distribution generator.
     
     Parameters
     ----------
-    dist : orbit.bunch_generators.distribution_generators
+    dist : object
         Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
     n_parts : int
         The number of particles to generate.
-    verbose : bool
-        Whether to use progess bar when filling bunch.
     bunch : Bunch
         If provided, it is repopulated with `dist_gen`.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+        
+    Returns
+    -------
+    Bunch
     """
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -359,6 +430,122 @@ def generate(dist=None, n_parts=0, verbose=0, bunch=None):
     return bunch 
 
 
+def generate_rms_equivalent(dist=None, n_parts=None, bunch=None, verbose=True):
+    """Generate rms-equivalent bunch from distribution generator.
+    
+    Parameters
+    ----------
+    dist : object
+        Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
+    n_parts : int
+        The number of particles to generate. If None, use the global number of particles in `bunch`. 
+    bunch : Bunch
+        The bunch object to repopulate.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+        
+    Returns
+    -------
+    Bunch
+    """
+    if n_parts is None:
+        n_parts = bunch.getSizeGlobal()
+    if _mpi_rank == 0:
+        print("Forming rms-equivalent bunch from 2D Twiss parameters and {} generator.".format(dist))
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    order = 2
+    dispersion_flag = 0
+    emit_norm_flag = 0
+    bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)    
+    eps_x = bunch_twiss_analysis.getEffectiveEmittance(0)
+    eps_y = bunch_twiss_analysis.getEffectiveEmittance(1)
+    eps_z = bunch_twiss_analysis.getEffectiveEmittance(2)
+    beta_x = bunch_twiss_analysis.getEffectiveBeta(0)
+    beta_y = bunch_twiss_analysis.getEffectiveBeta(1)
+    beta_z = bunch_twiss_analysis.getEffectiveBeta(2)
+    alpha_x = bunch_twiss_analysis.getEffectiveAlpha(0)
+    alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
+    alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)    
+    return generate(
+        dist=dist(
+            twissX=TwissContainer(alpha_x, beta_x, eps_x),
+            twissY=TwissContainer(alpha_y, beta_y, eps_y),
+            twissZ=TwissContainer(alpha_z, beta_z, eps_z),
+        ),
+        n_parts=n_parts, 
+        bunch=bunch, 
+        verbose=verbose,
+    )
+
+
+def generate_from_norm_twiss(
+    dist=None, 
+    n_parts=0, 
+    bunch=None, 
+    verbose=True,
+    alpha_x=-1.9620,
+    alpha_y=1.7681,
+    alpha_z=-0.0196,
+    beta_x=0.1831,
+    beta_y=0.1620,
+    beta_z=0.5844,
+    eps_x=0.21e-6,
+    eps_y=0.21e-6,
+    eps_z=0.24153e-6,
+    mass=None,
+    kin_energy=None,
+):
+    """Generate bunch from distribution generator and normalized Twiss parameters.
+    
+    Parameters
+    ----------
+    dist : object
+        Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
+    n_parts : int
+        The number of particles to generate.
+    bunch : Bunch
+        If provided, it is repopulated with `dist_gen`.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+    alpha, beta, eps : float
+        Normalized Twiss parameters. Defaults are the design parameters at the SNS RFQ exit.
+    mass, kin_energy: float
+        Mass [GeV / c^2] and kinetic energy [GeV] used to unnormalize the Twiss parameters.
+        
+    Returns
+    -------
+    Bunch
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+        
+    gamma = (mass + kin_energy) / mass
+    beta = math.sqrt(gamma * gamma - 1.0) / gamma
+    eps_x = eps_x / (beta * gamma)  # [m * rad]
+    eps_y = eps_y / (beta * gamma)  # [m * rad]
+    eps_z = eps_z / (beta * gamma**3)  # [m * rad]
+    eps_z = eps_z * gamma**3 * beta**2 * mass  # [m * GeV]
+    beta_z = beta_z / (gamma**3 * beta**2 * mass)    
+    if _mpi_rank == 0:
+        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))        
+    bunch = generate(
+        dist=dist(
+            twissX=TwissContainer(alpha_x, beta_x, eps_x),
+            twissY=TwissContainer(alpha_y, beta_y, eps_y),
+            twissZ=TwissContainer(alpha_z, beta_z, eps_z),
+        ),
+        bunch=bunch,
+        n_parts=n_parts,
+        verbose=verbose,
+    )    
+    bunch.mass(mass)
+    bunch.getSyncParticle().kinEnergy(kin_energy)
+    return bunch    
+
+
+# Point cloud manipulation
+
 def get_radii(X):
     return np.linalg.norm(X, axis=1)
 
@@ -369,7 +556,7 @@ def get_ellipsoid_radii(X):
     return transform(X, func)
 
 
-def enclosing_sphere(X, axis=None, fraction=1.0):
+def get_enclosing_sphere_radius(X, axis=None, fraction=1.0):
     """Scales sphere until it contains some fraction of points.
 
     Parameters
@@ -392,7 +579,7 @@ def enclosing_sphere(X, axis=None, fraction=1.0):
     return radii[index]
 
 
-def enclosing_ellipsoid(X, axis=None, fraction=1.0):
+def get_enclosing_ellipsoid_radius(X, axis=None, fraction=1.0):
     """Scale the rms ellipsoid until it contains some fraction of points.
 
     Parameters
