@@ -36,7 +36,7 @@ from orbit_mpi import mpi_op
 from orbit_utils import Matrix
 
 # Local
-import stats
+import pyorbit_sim.stats
 
 
 def initialize(mass=None, kin_energy=None):
@@ -231,11 +231,11 @@ def shift_centroid(bunch, delta=None, verbose=False):
         centroid = get_centroid(bunch)
         print("New centroid:")
         print("<x>  = {} [m]".format(centroid[0]))
-        print("<xp> = {} [rad]".format(centroid[0]))
-        print("<y>  = {} [m]".format(centroid[0]))
-        print("<yp> = {} [rad]".format(centroid[0]))
-        print("<z>  = {} [m]".format(centroid[0]))
-        print("<dE> = {} [GeV]".format(centroid[0]))
+        print("<xp> = {} [rad]".format(centroid[1]))
+        print("<y>  = {} [m]".format(centroid[2]))
+        print("<yp> = {} [rad]".format(centroid[3]))
+        print("<z>  = {} [m]".format(centroid[4]))
+        print("<dE> = {} [GeV]".format(centroid[5]))
     return bunch
 
 
@@ -276,8 +276,8 @@ def get_info(bunch, display=False):
 
     bunch_size_global = bunch.getSizeGlobal()
     Sigma, mu = get_stats(bunch)
-    eps_x, eps_y, eps_z = stats.apparent_emittance(Sigma)
-    alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = stats.twiss(Sigma)
+    eps_x, eps_y, eps_z = pyorbit_sim.stats.apparent_emittance(Sigma)
+    alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = pyorbit_sim.stats.twiss(Sigma)
     units = ["m", "rad", "m", "rad", "m", "GeV"]
     info = {
         "charge": {"value": bunch.charge(), "unit": "e"},
@@ -482,7 +482,8 @@ def generate_from_norm_twiss(
     dist=None, 
     n_parts=0, 
     bunch=None, 
-    verbose=True,
+    mass=None,
+    kin_energy=None,
     alpha_x=-1.9620,
     alpha_y=1.7681,
     alpha_z=-0.0196,
@@ -492,8 +493,7 @@ def generate_from_norm_twiss(
     eps_x=0.21e-6,
     eps_y=0.21e-6,
     eps_z=0.24153e-6,
-    mass=None,
-    kin_energy=None,
+    verbose=True,
 ):
     """Generate bunch from distribution generator and normalized Twiss parameters.
     
@@ -518,7 +518,9 @@ def generate_from_norm_twiss(
     """
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    
+    if verbose and _mpi_rank == 0:
+        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))   
         
     gamma = (mass + kin_energy) / mass
     beta = math.sqrt(gamma * gamma - 1.0) / gamma
@@ -527,8 +529,6 @@ def generate_from_norm_twiss(
     eps_z = eps_z / (beta * gamma**3)  # [m * rad]
     eps_z = eps_z * gamma**3 * beta**2 * mass  # [m * GeV]
     beta_z = beta_z / (gamma**3 * beta**2 * mass)    
-    if _mpi_rank == 0:
-        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))        
     bunch = generate(
         dist=dist(
             twissX=TwissContainer(alpha_x, beta_x, eps_x),
