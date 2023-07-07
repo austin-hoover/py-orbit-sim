@@ -171,22 +171,57 @@ def decorrelate_xy_z(bunch, verbose=False):
     return bunch
 
 
-def downsample(bunch, samples=1, verbose=False):
-    if verbose:
-        print('Downsampling bunch (samples={})...'.format(samples))
-    X = get_coords(bunch)
-
-    if 0 < samples < 1:
-        samples = samples * X.shape[0]
-    samples = int(np.clip(samples, 1, X.shape[0]))
-    idx = np.random.choice(X.shape[0], samples, replace=False)
-    X = X[idx, :]
-
-    new_bunch = Bunch()
-    bunch.copyEmptyBunchTo(new_bunch)
-    new_bunch = set_coords(new_bunch, X)
-    new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
-    new_bunch.copyBunchTo(bunch)
+def downsample(bunch, n=1, verbose=False, method="random"):
+    """Downsample the bunch to `n` particles.
+    
+    Parameters
+    ----------
+    n : int or float
+        The number of particles to keep. Can also be a float between 0 and 1, 
+        indicating the fraction of particles to keep.
+    method : str
+        "random": Selects a random group of n particles from the bunch. This does 
+        not work with MPI.
+        "first": Keeps the first n particles in the bunch. This works with MPI; the
+        first (n / n_proc) particles are kept on each processor, where n_proc is
+        the number of processors. This method assumes the particles were randomly
+        generated to begin with.
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    
+    n_old = bunch.getSizeGlobal()
+    
+    if n >= n_old:
+        return bunch
+    
+    if verbose and _mpi_rank == 0:
+        print('Downsampling bunch (n={})...'.format(n))
+    if method == "random":
+        # Randomly select n particles.
+        X = get_coords(bunch)
+        if 0 < n < 1:
+            n = n * X.shape[0]
+        n = int(np.clip(n, 1, X.shape[0]))
+        idx = np.random.choice(X.shape[0], n, replace=False)
+        X = X[idx, :]
+        # Edit the bunch coordinates.
+        new_bunch = Bunch()
+        bunch.copyEmptyBunchTo(new_bunch)
+        new_bunch = set_coords(new_bunch, X)
+        new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
+        new_bunch.copyBunchTo(bunch)
+    elif method == "first":
+        n_old = bunch.getSizeGlobal()
+        fraction = float(n) / float(n_old)
+        n_proc_old = bunch.getSize()
+        n_proc = int(fraction * n_proc_old)  # on each processor            
+        if verbose:
+            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_proc_old, n_old))
+        for i in reversed(range(n_proc, n_proc_old)):
+            bunch.deleteParticleFast(i)
+        bunch.compress()    
     if verbose:
         print('Downsampling complete.')
     return bunch
@@ -203,6 +238,12 @@ def reverse(bunch):
         bunch.yp(i, -bunch.yp(i))
         bunch.z(i, -bunch.z(i))
     return bunch
+
+
+def get_centroid(bunch):
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    bunch_twiss_analysis.analyzeBunch(bunch)
+    return np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
 
 
 def shift_centroid(bunch, delta=None, verbose=False):
@@ -239,16 +280,11 @@ def shift_centroid(bunch, delta=None, verbose=False):
     return bunch
 
 
-def get_centroid(bunch):
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    bunch_twiss_analysis.analyzeBunch(bunch)
-    return np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
-
-
 def set_centroid(bunch, centroid=0.0, verbose=False):
     if np.ndim(centroid) == 0:
         centroid = 6 * [centroid]
-    delta = np.subtract(centroid, get_centroid(bunch))
+    old_centroid = get_centroid(bunch)
+    delta = np.subtract(centroid, old_centroid)
     return shift_centroid(bunch, delta=delta, verbose=verbose)
 
 
@@ -268,14 +304,14 @@ def get_stats(bunch, dispersion_flag=False, emit_norm_flag=False):
     return Sigma, mu
 
     
-def get_info(bunch, display=False):
+def get_info(bunch):
     """Return dict with bunch parameters and stats."""
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-    bunch_size_global = bunch.getSizeGlobal()
-    Sigma, mu = get_stats(bunch)
+    size_global = bunch.getSizeGlobal()
+    Sigma, mu = get_stats(bunch)    
     eps_x, eps_y, eps_z = pyorbit_sim.stats.apparent_emittance(Sigma)
     alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = pyorbit_sim.stats.twiss(Sigma)
     units = ["m", "rad", "m", "rad", "m", "GeV"]
@@ -285,7 +321,7 @@ def get_info(bunch, display=False):
         "kin_energy": {"value": bunch.getSyncParticle().kinEnergy(), "unit": "GeV"},
         "macrosize": {"value": bunch.macroSize(), "unit": None},
         "size_local": {"value": bunch.getSize(), "unit": None},
-        "size_global": {"value": bunch_size_global, "unit": None},
+        "size_global": {"value": size_global, "unit": None},
         "alpha_x": {"value": alpha_x, "unit": None},
         "alpha_y": {"value": alpha_y, "unit": None},
         "alpha_z": {"value": alpha_z, "unit": None},
@@ -301,45 +337,43 @@ def get_info(bunch, display=False):
             info["cov_{}-{}".format(j, i)] = {"value": Sigma[j, i], "unit": "{} * {}".format(units[j], units[i])}
     for i in range(6):
         info["mean_{}".format(i)] = {"value": mu[i], "unit": "{}".format(units[i])}
-    if display and _mpi_rank == 0:
-        print("Bunch info:")
-        pprint(info)
     return info
 
 
 def load(
     filename=None,
-    file_format='pyorbit',
+    file_format="pyorbit",
     bunch=None,
-    verbose=False,
+    verbose=True,
 ):
-    """Load bunch from coordinates file.
-
+    """
     Parameters
     ----------
     filename : str
         Path the file.
     file_format : str
-        'pyorbit':
+        "pyorbit":
             The expected header format is:
-        'parmteq':
+        "parmteq":
             The expected header format is:
                 Number of particles    =
                 Beam current           =
                 RF Frequency           =
                 The input file particle coordinates were written in double precision.
                 x(cm)             xpr(=dx/ds)       y(cm)             ypr(=dy/ds)       phi(radian)        W(MeV)
-    verbose : bool
-        Whether to print intro/exit messages.
     bunch : Bunch
-        If None, create a new bunch; otherwise, load into this bunch.
+        Create a new bunch if None, otherwise modify this bunch.
+
+    Returns
+    -------
+    Bunch
     """
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
     if verbose and _mpi_rank == 0:
-        print("Loading bunch from file '{}'".format(filename))
+        print("Loading bunch from file '{}'".format(filename))        
     if not os.path.isfile(filename):
         raise ValueError("File '{}' does not exist.".format(filename))
     if bunch is None:
@@ -349,28 +383,27 @@ def load(
     elif file_format == "parmteq":
         # Read data.
         header = np.genfromtxt(filename, max_rows=3, usecols=[0, 1, 2, 3, 4], dtype=str)
-        n_parts = int(header[0, 4])
+        n = int(header[0, 4])
         current = np.float(header[1, 3])
         freq = np.float(header[2, 3]) * 1e6  # MHz to Hz
         data = np.loadtxt(filename, skiprows=5)
 
         # Trim off-energy particles.
         kin_energy = np.mean(data[:, 5])  # center energy [MeV]
-        ind = np.where(np.abs(data[:, 5] - kin_energy) < (0.05 * kin_energy))[0]
-        n_parts = len(ind)
-        bunch.getSyncParticle().kinEnergy(kin_energy * 1e-3)
+        idx, = np.where(np.abs(data[:, 5] - kin_energy) < (0.05 * kin_energy))
+        bunch.getSyncParticle().kinEnergy(kin_energy * 1.0e-3)
 
         # Unit conversion.
-        dE = (data[ind, 5] - kin_energy) * 1e-3  # MeV to GeV
-        x = data[ind, 0] * 1e-2  # cm to m
-        xp = data[ind, 1]  # radians
-        y = data[ind, 2] * 1e-2  # cm to m
-        yp = data[ind, 3]  # radians
-        phi = data[ind, 4]  # radians
+        x = data[idx, 0] * 1.0e-02  # [cm] -> [m]
+        xp = data[idx, 1]
+        y = data[idx, 2] * 1.0e-02  # [cm] -> [m]
+        yp = data[idx, 3]
+        phi = data[idx, 4]  # radians
         z = np.rad2deg(phi) / get_z_to_phase_coeff(bunch, freq=freq)
-
+        dE = (data[idx, 5] - kin_energy) * 1.0e-3  # [MeV] -> [GeV]
+        
         # Add particles.
-        for i in range(n_parts):
+        for i in range(n):
             bunch.addParticle(x[i], xp[i], y[i], yp[i], z[i], dE[i])
     else:
         raise KeyError("Unrecognized format '{}'.".format(file_format))
@@ -385,14 +418,14 @@ def load(
     return bunch
 
 
-def generate(dist=None, n_parts=0, bunch=None, verbose=True):
+def generate(dist=None, n=0, bunch=None, verbose=True):
     """Generate bunch from distribution generator.
     
     Parameters
     ----------
     dist : object
         Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
-    n_parts : int
+    n : int
         The number of particles to generate.
     bunch : Bunch
         If provided, it is repopulated with `dist_gen`.
@@ -414,7 +447,7 @@ def generate(dist=None, n_parts=0, bunch=None, verbose=True):
     else:
         bunch.deleteAllParticles()
         
-    _range = range(n_parts)
+    _range = range(n)
     if verbose:
         _range = tqdm(_range)
     for i in _range:
@@ -430,14 +463,14 @@ def generate(dist=None, n_parts=0, bunch=None, verbose=True):
     return bunch 
 
 
-def generate_rms_equivalent(dist=None, n_parts=None, bunch=None, verbose=True):
+def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
     """Generate rms-equivalent bunch from distribution generator.
     
     Parameters
     ----------
     dist : object
         Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
-    n_parts : int
+    n : int
         The number of particles to generate. If None, use the global number of particles in `bunch`. 
     bunch : Bunch
         The bunch object to repopulate.
@@ -448,8 +481,8 @@ def generate_rms_equivalent(dist=None, n_parts=None, bunch=None, verbose=True):
     -------
     Bunch
     """
-    if n_parts is None:
-        n_parts = bunch.getSizeGlobal()
+    if n is None:
+        n = bunch.getSizeGlobal()
     if _mpi_rank == 0:
         print("Forming rms-equivalent bunch from 2D Twiss parameters and {} generator.".format(dist))
     bunch_twiss_analysis = BunchTwissAnalysis()
@@ -472,7 +505,7 @@ def generate_rms_equivalent(dist=None, n_parts=None, bunch=None, verbose=True):
             twissY=TwissContainer(alpha_y, beta_y, eps_y),
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
         ),
-        n_parts=n_parts, 
+        n=n, 
         bunch=bunch, 
         verbose=verbose,
     )
@@ -480,10 +513,8 @@ def generate_rms_equivalent(dist=None, n_parts=None, bunch=None, verbose=True):
 
 def generate_from_norm_twiss(
     dist=None, 
-    n_parts=0, 
+    n=0, 
     bunch=None, 
-    mass=None,
-    kin_energy=None,
     alpha_x=-1.9620,
     alpha_y=1.7681,
     alpha_z=-0.0196,
@@ -501,7 +532,7 @@ def generate_from_norm_twiss(
     ----------
     dist : object
         Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
-    n_parts : int
+    n : int
         The number of particles to generate.
     bunch : Bunch
         If provided, it is repopulated with `dist_gen`.
@@ -522,6 +553,8 @@ def generate_from_norm_twiss(
     if verbose and _mpi_rank == 0:
         print("Generating bunch from design Twiss parameters and {} generator.".format(dist))   
         
+    mass = bunch.mass()
+    kin_energy = bunch.getSyncParticle().kinEnergy()
     gamma = (mass + kin_energy) / mass
     beta = math.sqrt(gamma * gamma - 1.0) / gamma
     eps_x = eps_x / (beta * gamma)  # [m * rad]
@@ -536,277 +569,7 @@ def generate_from_norm_twiss(
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
         ),
         bunch=bunch,
-        n_parts=n_parts,
+        n=n,
         verbose=verbose,
     )    
-    bunch.mass(mass)
-    bunch.getSyncParticle().kinEnergy(kin_energy)
     return bunch    
-
-
-# Point cloud manipulation
-
-def get_radii(X):
-    return np.linalg.norm(X, axis=1)
-
-
-def get_ellipsoid_radii(X):
-    Sigma_inv = np.linalg.inv(np.cov(X.T))
-    func = lambda point: np.sqrt(np.linalg.multi_dot([point.T, Sigma_inv, point]))
-    return transform(X, func)
-
-
-def get_enclosing_sphere_radius(X, axis=None, fraction=1.0):
-    """Scales sphere until it contains some fraction of points.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        The distribution is projected onto this axis before proceeding. The
-        ellipsoid is defined in this subspace.
-    fraction : float
-        Fraction of points in sphere.
-
-    Returns
-    -------
-    radius : float
-        The sphere radius.
-    """
-    radii = np.sort(get_radii(X[:, axis]))
-    index = int(np.round(X.shape[0] * fraction)) - 1
-    return radii[index]
-
-
-def get_enclosing_ellipsoid_radius(X, axis=None, fraction=1.0):
-    """Scale the rms ellipsoid until it contains some fraction of points.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        The distribution is projected onto this axis before proceeding. The
-        ellipsoid is defined in this subspace.
-    fraction : float
-        Fraction of points enclosed.
-
-    Returns
-    -------
-    float
-        The ellipsoid "radius" (x^T Sigma^-1 x) relative to the rms ellipsoid.
-    """
-    radii = np.sort(get_ellipsoid_radii(X[:, axis]))
-    index = int(np.round(X.shape[0] * fraction)) - 1
-    return radii[index]
-
-
-def transform(X, func=None, **kws):
-    """Apply a nonlinear transformation.
-
-    This function just calls `np.apply_along_axis`.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    function : callable
-        Function applied to each point in X. Call signature is
-        `function(point, **kws)` where `point` is an n-dimensional
-        point given by one row of `X`.
-    **kws
-        Key word arguments for
-
-    Returns
-    -------
-    ndarray, shape (n, d)
-        The transformed distribution.
-    """
-    return np.apply_along_axis(lambda point: func(point, **kws), 1, X)
-
-
-def transform_linear(X, M):
-    """Apply a linear transformation.
-
-    This function just calls `np.apply_along_axis`.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    M : ndarray, shape (d, d)
-        A linear transfer matrix.
-
-    Returns
-    -------
-    ndarray, shape (n, d)
-        The transformed distribution.
-    """
-    func = lambda point: np.matmul(M, point)
-    return transform(X, lambda point: np.matmul(M, point))
-
-
-def norm_xxp_yyp_zzp(X, scale_emittance=False):
-    Sigma = np.cov(X.T)
-    Xn = np.zeros(X.shape)
-    for i in range(0, X.shape[1], 2):
-        _Sigma = Sigma[i : i + 2, i : i + 2]
-        eps = np.sqrt(np.linalg.det(_Sigma))
-        alpha = -_Sigma[0, 1] / eps
-        beta = _Sigma[0, 0] / eps
-        Xn[:, i] = X[:, i] / np.sqrt(beta)
-        Xn[:, i + 1] = (np.sqrt(beta) * X[:, i + 1]) + (alpha * X[:, i] / np.sqrt(beta))
-        if scale_emittance:
-            Xn[:, i : i + 2] = Xn[:, i : i + 2] / np.sqrt(eps)
-    return Xn
-
-
-def slice_planar(X, axis=None, center=None, width=None, limits=None):
-    """Return points within a planar slice.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        Slice axes. For example, (0, 1) will slice along the first and
-        second axes of the array.
-    center : ndarray, shape (n,)
-        The center of the box.
-    width : ndarray, shape (d,)
-        The width of the box along each axis.
-    limits : ndarray, shape (d, 2)
-        The (min, max) along each axis. Overrides `center` and `edges` if provided.
-
-    Returns
-    -------
-    ndarray, shape (?, n)
-        The points within the box.
-    """
-    n, d = X.shape
-    if not array_like(axis):
-        axis = (axis,)
-    if limits is None:
-        if not array_like(center):
-            center = np.full(d, center)
-        if not array_like(width):
-            width = np.full(d, width)
-        center = np.array(center)
-        width = np.array(width)
-        limits = list(zip(center - 0.5 * width, center + 0.5 * width))  
-    limits = np.array(limits)
-    if limits.ndim == 0:
-        limits = limits[None, :]
-    conditions = []
-    for j, (umin, umax) in zip(axis, limits):
-        conditions.append(X[:, j] > umin)
-        conditions.append(X[:, j] < umax)
-    idx = np.logical_and.reduce(conditions)
-    return X[idx, :]
-
-
-def slice_sphere(X, axis=None, rmin=0.0, rmax=None):
-    """Return points within a spherical shell slice.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        The subspace in which to define the sphere.
-    rmin, rmax : float
-        Inner/outer radius of spherical shell.
-
-    Returns
-    -------
-    ndarray, shape (?, d)
-        The points within the sphere.
-    """
-    if rmax is None:
-        rmax = np.inf
-    radii = get_radii(X[:, axis])
-    idx = np.logical_and(radii > rmin, radii < rmax)
-    return X[idx, :]
-
-
-def slice_ellipsoid(X, axis=None, rmin=0.0, rmax=None):
-    """Return points within an ellipsoidal shell slice.
-
-    The ellipsoid is defined by the covariance matrix of the
-    distribution.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        The subspace in which to define the ellipsoid.
-    rmin, rmax : list[float]
-        Min/max "radius" (x^T Sigma^-1 x). relative to covariance matrix.
-
-    Returns
-    -------
-    ndarray, shape (?, d)
-        Points within the shell.
-    """
-    if rmax is None:
-        rmax = np.inf
-    radii = get_ellipsoid_radii(X[:, axis])
-    idx = np.logical_and(rmin < radii, radii < rmax)
-    return X[idx, :]
-
-
-def slice_contour(X, axis=None, lmin=0.0, lmax=1.0, interp=True, **hist_kws):
-    """Return points within a contour shell slice.
-
-    The slice is defined by the density contours in the subspace defined by
-    `axis`.
-
-    Parameters
-    ----------
-    X : ndarray, shape (n, d)
-        Coordinates of n points in d-dimensional space.
-    axis : tuple
-        The subspace in which to define the density contours.
-    lmin, lmax : list[float]
-        If `f` is the density in the subspace defined by `axis`, then we select
-        points where lmin <= f / max(f) <= lmax.
-    interp : bool
-        If True, compute the histogram, then interpolate and evaluate the
-        resulting function at each point in `X`. Otherwise we keep track
-        of the indices in which each point lands when it is binned,
-        and accept the point if it's bin has a value within fmin and fmax.
-        The latter is a lot slower.
-
-    Returns
-    -------
-    ndarray, shape (?, d)
-        Points within the shell.
-    """
-    _X = X[:, axis]
-    hist, edges = histogram(_X, **hist_kws)
-    hist = hist / np.max(hist)
-    centers = [0.5 * (e[:-1] + e[1:]) for e in edges]
-    if interp:
-        fint = scipy.interpolate.RegularGridInterpolator(
-            centers,
-            hist,
-            method="linear",
-            bounds_error=False,
-            fill_value=0.0,
-        )
-        values = fint(_X)
-        idx = np.logical_and(lmin <= values, values <= lmax)
-    else:
-        valid_indices = np.vstack(
-            np.where(np.logical_and(lmin <= hist, hist <= lmax))
-        ).T
-        indices = np.vstack(
-            [np.digitize(_X[:, k], edges[k]) for k in range(_X.shape[1])]
-        ).T
-        idx = []
-        for i in range(len(indices)):
-            if indices[i].tolist() in valid_indices.tolist():
-                idx.append(i)
-    return X[idx, :]
