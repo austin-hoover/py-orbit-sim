@@ -48,15 +48,34 @@ class SNS_LINAC:
         self.input_dir = input_dir
         self.xml_filename = os.path.join(self.input_dir, xml_filename)
         self.lattice = None
-        self.sequences = None
         self.rf_frequency = rf_frequency
         self.aperture_nodes = []
-        
-    def initialize(self, sequences=None, max_drift_length=0.010, verbose=True):
+        self.sc_nodes = []
+        self.sequences = None
+        self._sequences = [
+            "MEBT",
+            "DTL1",
+            "DTL2",
+            "DTL3",
+            "DTL4",
+            "DTL5",
+            "DTL6",
+            "CCL1",
+            "CCL2",
+            "CCL3",
+            "CCL4",
+            "SCLMed",
+            "SCLHigh",
+            "HEBT1",
+            "HEBT2",
+        ]
+                        
+    def initialize(self, sequence_start=None, sequence_stop=None, max_drift_length=0.010, verbose=True):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        self.sequences = sequences
+        lo = self._sequences.index(sequence_start)
+        hi = self._sequences.index(sequence_stop)
+        self.sequences = self._sequences[lo : hi + 1]
         sns_linac_factory = SNS_LinacLatticeFactory()
         sns_linac_factory.setMaxDriftLength(max_drift_length)
         self.lattice = sns_linac_factory.getLinacAccLattice(self.sequences, self.xml_filename)
@@ -80,7 +99,7 @@ class SNS_LINAC:
     
     def set_rf_gap_model(self, rf_gap_model):
         for rf_gap in self.lattice.getRF_Gaps():
-            rf_gap.setCppGapModel(rf_gap_model)
+            rf_gap.setCppGapModel(rf_gap_model())
             
     def set_overlapping_rf_and_quad_fields(self, sequences=None, z_step=0.002, xml_filename="sns_rf_fields.xml"):
         if sequences is None:
@@ -101,9 +120,11 @@ class SNS_LINAC:
                 node.setUseLongitudinalFieldOfQuad
 
     def set_linac_tracker(self, setting):
-        # Use linac-style quads and drifts instead of TEAPOT style. (Useful when 
-        # the energy spread is large, but is slower and is not symplectic.)
-        self.lattice.setLinacTracker(True)
+        """Use linac-style quads and drifts instead of TEAPOT-style. 
+        
+        This is useful when the energy spread is large, but is slower and is not symplectic.
+        """
+        self.lattice.setLinacTracker(setting)
 
     def add_space_charge_nodes(
         self, 
@@ -115,8 +136,7 @@ class SNS_LINAC:
     ):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-        
-        sc_nodes = None
+        sc_nodes = []
         if solver == "FFT":
             calc = SpaceChargeCalc3D(*grid_size)
             sc_nodes = setSC3DAccNodes(self.lattice, path_length_min, calc)
@@ -130,7 +150,7 @@ class SNS_LINAC:
             print("Added {} space charge nodes (solver={})".format(len(sc_nodes), solver))
             print("min length = {}".format(min_length))
             print("max length = {}".format(max_length))
-        return sc_nodes
+        self.sc_nodes = sc_nodes
     
     def add_transverse_aperture_nodes(self, x_size=0.042, y_size=0.042, verbose=True):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
