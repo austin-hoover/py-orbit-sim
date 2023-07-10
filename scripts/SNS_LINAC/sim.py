@@ -71,11 +71,11 @@ from SNS_LINAC import SNS_LINAC
 # --------------------------------------------------------------------------------------
 
 switches = {
-    "save": False,
+    "save": True,
     "lattice": {
         "apertures": {
             "transverse": True,
-            "longitudinal": False,
+            "longitudinal": True,
         },
         "linac_tracker": False,
         "overlapping_fields": False,
@@ -86,7 +86,8 @@ switches = {
         "decorrelate_x_y_z": False,
     },
     "sim": {
-        "particle_ids": False,
+        "init_coords_attr": False,
+        "particle_ids": True,
         "save_input_bunch": True,
         "save_output_bunch": True,
         "save_losses": True,
@@ -136,7 +137,7 @@ linac = SNS_LINAC(
 )
 lattice = linac.initialize(
     sequence_start="MEBT",
-    sequence_stop="DTL2",
+    sequence_stop="DTL5",
     max_drift_length=0.010,
     verbose=True,
 )
@@ -172,13 +173,13 @@ for sc_node in linac.sc_nodes:
             
 # Apertures
 if switches["lattice"]["apertures"]["transverse"]:
-    linac.add_transverse_aperture_nodes(
+    linac.add_aperture_nodes_transverse(
         x_size=0.042,
         y_size=0.042,
         verbose=True
     )
 if switches["lattice"]["apertures"]["longitudinal"]:
-    linac.add_longitudinal_apertures(
+    linac.add_aperture_nodes_longitudinal(
         classes=[
             BaseRF_Gap, 
             AxisFieldRF_Gap, 
@@ -204,8 +205,8 @@ filename = None  # use design bunch if None
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.042  # [A]
-n_parts = int(1e5)  # max number of particles
+current = 0.038  # [A]
+n_parts = 100000  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -217,7 +218,7 @@ bunch.getSyncParticle().kinEnergy(kin_energy)
 if filename is not None:
     bunch.readBunch(bunch_filename, verbose=True)
 else:
-    bunch = pyorbit_sim.bunch_utils.generate_from_norm_twiss(
+    bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
         dist=WaterBagDist3D,
         n=n_parts,
         bunch=bunch,
@@ -232,7 +233,7 @@ else:
         eps_y=0.21e-06,
         eps_z=0.24153e-06,
     )
-        
+    
 # Set the bunch centroid.
 bunch = pyorbit_sim.bunch_utils.set_centroid(
     bunch, 
@@ -250,12 +251,14 @@ if switches["bunch"]["rms_equivalent_dist"]:
             
 # Downsample. (Assume the particles were randomly generated to begin with.)
 if n_parts is not None:
-    bunch = pyorbit_sim.bunch_utils.downsample(
-        bunch, 
-        n=n_parts,
-        method="first", 
-        verbose=True,
-    )
+    size_global = bunch.getSizeGlobal()
+    if n_parts < size_global:
+        bunch = pyorbit_sim.bunch_utils.downsample(
+            bunch, 
+            n=n_parts,
+            method="first", 
+            verbose=True,
+        )
 
 # Decorrelate the x-x', y-y', z-z' coordinates. (No MPI.)
 if switches["bunch"]["decorrelate_x_y_z"]:
@@ -356,6 +359,7 @@ monitor = pyorbit_sim.linac.Monitor(
 # Add particle ids.
 if switches["sim"]["particle_ids"]:
     ParticleIdNumber.addParticleIdNumbers(bunch)
+if switches["sim"]["init_coords_attr"]:
     copyCoordsToInitCoordsAttr(bunch)
     
     

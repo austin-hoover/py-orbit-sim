@@ -70,15 +70,17 @@ class SNS_LINAC:
             "HEBT2",
         ]
                         
-    def initialize(self, sequence_start=None, sequence_stop=None, max_drift_length=0.010, verbose=True):
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    def initialize(self, sequence_start=None, sequence_stop=None, max_drift_length=0.010, verbose=True):    
         lo = self._sequences.index(sequence_start)
         hi = self._sequences.index(sequence_stop)
         self.sequences = self._sequences[lo : hi + 1]
+        
         sns_linac_factory = SNS_LinacLatticeFactory()
         sns_linac_factory.setMaxDriftLength(max_drift_length)
         self.lattice = sns_linac_factory.getLinacAccLattice(self.sequences, self.xml_filename)
+        
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if _mpi_rank == 0 and verbose:
             print("Initialized lattice.")
             print("XML filename = {}".format(self.xml_filename))
@@ -98,6 +100,17 @@ class SNS_LINAC:
         file.close()
     
     def set_rf_gap_model(self, rf_gap_model):
+        """Set the RF gap model.
+        
+        Parameters
+        ----------
+        rf_gap_model : class
+            - {BaseRfGap, BaseRfGap_slow} uses only E0TL * cos(phi) * J0(kr) with E0TL = const.
+            - {MatrixRfGap,MatrixRfGap_slow} uses a matrix approach like envelope codes.
+            - {RfGapTTF, RfGapTTF_slow} uses Transit Time Factors (TTF) like PARMILA.
+            
+            The slow variants update all RF gap parameters individually for each particle in the bunch.
+        """
         for rf_gap in self.lattice.getRF_Gaps():
             rf_gap.setCppGapModel(rf_gap_model())
             
@@ -152,21 +165,19 @@ class SNS_LINAC:
             print("max length = {}".format(max_length))
         self.sc_nodes = sc_nodes
     
-    def add_transverse_aperture_nodes(self, x_size=0.042, y_size=0.042, verbose=True):
+    def add_aperture_nodes_transverse(self, x_size=0.042, y_size=0.042, verbose=True):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
         aperture_nodes = Add_quad_apertures_to_lattice(self.lattice)
         aperture_nodes = Add_rfgap_apertures_to_lattice(self.lattice, aperture_nodes)
         aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(self.lattice, aperture_nodes)
         aperture_nodes = AddScrapersAperturesToLattice(self.lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
         aperture_nodes = AddScrapersAperturesToLattice(self.lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
-        n_transverse_aperture_nodes = len(aperture_nodes)
+        self.aperture_nodes.extend(aperture_nodes)
         if _mpi_rank == 0 and verbose:
             print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
-        self.aperture_nodes.extend(aperture_nodes)
-    
-    def add_longitudinal_apertures(
+        
+    def add_aperture_nodes_longitudinal(
         self, 
         classes=None, 
         phase_min=-180.0, 
@@ -206,6 +217,7 @@ class SNS_LINAC:
                 aperture_node.setSequence(node.getSequence())
                 node.addChildNode(aperture_node, node.EXIT)
                 aperture_nodes.append(aperture_node)
+                
         if _mpi_rank == 0 and verbose:
             print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes)))
         self.aperture_nodes.extend(aperture_nodes)
