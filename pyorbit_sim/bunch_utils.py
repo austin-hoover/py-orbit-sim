@@ -112,7 +112,7 @@ def set_coords(bunch, X, start_index=0):
 
 
 def get_intensity(current=None, frequency=None, charge=-1.0):
-    return (current / frequency) / (charge * consts.charge_electron)
+    return (current / frequency) / (abs(charge) * consts.charge_electron)
 
 
 def set_current(bunch, current=None, frequency=None):
@@ -441,12 +441,10 @@ def generate(dist=None, n=0, bunch=None, verbose=True):
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     data_type = mpi_datatype.MPI_DOUBLE
     main_rank = 0
-    
     if bunch is None:
         bunch = Bunch()
     else:
         bunch.deleteAllParticles()
-        
     _range = range(n)
     if verbose:
         _range = tqdm(_range)
@@ -511,7 +509,7 @@ def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
     )
 
 
-def generate_from_norm_twiss(
+def generate_norm_twiss(
     dist=None, 
     n=0, 
     bunch=None, 
@@ -559,8 +557,8 @@ def generate_from_norm_twiss(
     beta = math.sqrt(gamma * gamma - 1.0) / gamma
     eps_x = eps_x / (beta * gamma)  # [m * rad]
     eps_y = eps_y / (beta * gamma)  # [m * rad]
-    eps_z = eps_z / (beta * gamma**3)  # [m * rad]
-    eps_z = eps_z * gamma**3 * beta**2 * mass  # [m * GeV]
+    eps_z = eps_z / (beta * gamma**3)  # [m * rad]    
+    eps_z = eps_z * (gamma**3 * beta**2 * mass)  # [m * GeV]
     beta_z = beta_z / (gamma**3 * beta**2 * mass)    
     bunch = generate(
         dist=dist(
