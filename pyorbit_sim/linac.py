@@ -185,23 +185,25 @@ class Monitor:
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         
-        # Update position; decide whether to proceed.        
+        # Update position; decide whether to proceed. 
         position = params_dict["path_length"] + self.position_offset
-        if (position - self.position) < self.stride["update"]:
+        if self.step > 0 and (position - self.position) < self.stride["update"]:
             return
-
-        self.position = position        
+        self.position = position       
+        
+        # Update clock.
         if self.start_time is None:
             self.start_time = time.clock()
         time_ellapsed = time.clock() - self.start_time
         
+        # Get bunch and node.
         bunch = params_dict["bunch"]
         node = params_dict["node"]
+
+        # Record scalar values (position, energy, etc.)
         beta = bunch.getSyncParticle().beta()
         gamma = bunch.getSyncParticle().gamma()
         n_parts = bunch.getSizeGlobal()
-
-        # Record scalar values (position, energy, etc.)
         if _mpi_rank == 0:
             self.history["position"] = position
             self.history["node"] = node.getName()
@@ -242,10 +244,10 @@ class Monitor:
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
             if self.track_rms:
-                fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.3e} | {} "
+                fstr = "{:>5} | {:>10.2f} | {:>10.5f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.0f} | {} "
                 if self.step == 0:
                     print(
-                        "{:<5} | {:<10} | {:<7} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
+                        "{:<5} | {:<10} | {:<10} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
                         .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
                     )
                     print(115 * "-")
@@ -263,10 +265,10 @@ class Monitor:
                     )
                 )
             else:
-                fstr = "{:>5} | {:>10.2f} | {:>7.3f} | {:>8.4f} | {:<9.3e} | {} "
+                fstr = "{:>5} | {:>10.2f} | {:>10.3f} | {:>8.4f} | {:<9.0f} | {} "
                 if self.step == 0:
                     print(
-                        "{:<5} | {:<10} | {:<7} | {:<10} | {:<9} | {}"
+                        "{:<5} | {:<10} | {:<10} | {:<10} | {:<9} | {}"
                         .format("step", "time [s]", "s [m]", "T [MeV]", "nparts", "node")
                     )
                     print(80 * "-")
@@ -381,12 +383,14 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     start = get_node_info(start, lattice)
     stop = get_node_info(stop, lattice)
     
-    # Add monitor.
+    # Add actions.
     action_container = AccActionsContainer("monitor")
     if monitor is not None:
         monitor.position_offset = start["s0"]
+        action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
         action_container.addAction(monitor.action, AccActionsContainer.EXIT)
         
+    # Create params dict and lost bunch.
     params_dict = dict()
     params_dict["lostbunch"] = Bunch()
 
