@@ -86,8 +86,8 @@ switches = {
         "decorrelate_x_y_z": False,
     },
     "sim": {
-        "init_coords_attr": False,
-        "particle_ids": True,
+        "save_init_coords_attr": False,
+        "save_particle_ids": True,
         "save_input_bunch": True,
         "save_output_bunch": True,
         "save_losses": True,
@@ -137,7 +137,7 @@ linac = SNS_LINAC(
 )
 lattice = linac.initialize(
     sequence_start="MEBT",
-    sequence_stop="DTL5",
+    sequence_stop="DTL2",
     max_drift_length=0.010,
     verbose=True,
 )
@@ -201,12 +201,15 @@ lattice = linac.lattice
 # --------------------------------------------------------------------------------------
 
 # Settings
-filename = None  # use design bunch if None
+filename = os.path.join(
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
+    "230618191218-bunch_MEBT_Diag:WS04b_8.56e+06.dat"
+)
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.038  # [A]
-n_parts = 100000  # max number of particles
+current = 0.042  # [A]
+n_parts = int(8.00e+06)  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -216,7 +219,11 @@ bunch.getSyncParticle().kinEnergy(kin_energy)
 
 # Load the bunch coordinates or generate from Twiss parameters.
 if filename is not None:
-    bunch.readBunch(bunch_filename, verbose=True)
+    pyorbit_sim.bunch_utils.load(
+        filename=filename,
+        bunch=bunch,
+        verbose=True,
+    )
 else:
     bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
         dist=WaterBagDist3D,
@@ -357,9 +364,9 @@ monitor = pyorbit_sim.linac.Monitor(
 
 
 # Add particle ids.
-if switches["sim"]["particle_ids"]:
+if switches["sim"]["save_particle_ids"]:
     ParticleIdNumber.addParticleIdNumbers(bunch)
-if switches["sim"]["init_coords_attr"]:
+if switches["sim"]["save_init_coords_attr"]:
     copyCoordsToInitCoordsAttr(bunch)
     
     
@@ -367,7 +374,7 @@ if switches["sim"]["init_coords_attr"]:
 # --------------------------------------------------------------------------------------
 
 # Settings
-start = 0.0  # (node name/position/None)
+start = "MEBT_Diag:WS04b"  # (node name/position/None)
 stop = None  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
@@ -376,7 +383,7 @@ if _mpi_rank == 0:
 design_bunch = lattice.trackDesignBunch(bunch)
 if _mpi_rank == 0:
     print("Design bunch tracking complete.")
-    
+
 # Check the synchronous particle time.
 pyorbit_sim.linac.check_sync_part_time(
     bunch, 
@@ -403,23 +410,28 @@ params_dict = pyorbit_sim.linac.track(
     verbose=True
 )
         
-# Collect lost particles.
+# Save loss statistics.
 if len(linac.aperture_nodes) > 0:
     aprt_nodes_losses = GetLostDistributionArr(linac.aperture_nodes, params_dict["lostbunch"])
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
         print("Total loss = {:.2e}".format(total_loss))
-
-# Save lost particles.
-if switches["sim"]["save_losses"]:
-    filename = man.get_filename("losses.txt")
-    if _mpi_rank == 0:
-        print("Saving loss vs. node array to {}".format(filename))
-    file = open(filename, "w")
-    file.write("node position loss\n")
-    for (node, loss) in aprt_nodes_losses:
-        file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
-    file.close()
+    if switches["sim"]["save_losses"]:
+        filename = man.get_filename("losses.txt")
+        if _mpi_rank == 0:
+            print("Saving loss vs. node array to {}".format(filename))
+        file = open(filename, "w")
+        file.write("node position loss\n")
+        for (node, loss) in aprt_nodes_losses:
+            file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
+        file.close()
+    
+# Save lost bunch.
+filename = man.get_filename("lostbunch.dat")
+if _mpi_rank == 0:
+    print("Writing lostbunch to file {}".format(filename))
+lostbunch = params_dict["lostbunch"]
+lostbunch.dumpBunch(filename)
 
 # Save the bunch.
 if switches["sim"]["save_output_bunch"]:
