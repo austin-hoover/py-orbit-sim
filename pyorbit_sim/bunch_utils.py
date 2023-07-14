@@ -218,7 +218,7 @@ def downsample(bunch, n=1, verbose=False, method="random"):
         n_proc_old = bunch.getSize()
         n_proc = int(fraction * n_proc_old)  # on each processor            
         if verbose:
-            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_proc_old, n_old))
+            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_proc_old, n_proc))
         for i in reversed(range(n_proc, n_proc_old)):
             bunch.deleteParticleFast(i)
         bunch.compress()    
