@@ -77,8 +77,8 @@ switches = {
             "transverse": True,
             "longitudinal": True,
         },
-        "linac_tracker": False,
-        "overlapping_fields": False,
+        "linac_tracker": True,
+        "overlapping_fields": True,
         "space_charge": True,
     },
     "bunch": {
@@ -174,8 +174,8 @@ for sc_node in linac.sc_nodes:
 # Apertures
 if switches["lattice"]["apertures"]["transverse"]:
     linac.add_aperture_nodes_transverse(
-        x_size=0.042,
-        y_size=0.042,
+        scrape_x=0.042,
+        scrape_y=0.042,
         verbose=True
     )
 if switches["lattice"]["apertures"]["longitudinal"]:

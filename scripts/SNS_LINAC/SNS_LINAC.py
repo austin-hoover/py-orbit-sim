@@ -165,14 +165,18 @@ class SNS_LINAC:
             print("max length = {}".format(max_length))
         self.sc_nodes = sc_nodes
     
-    def add_aperture_nodes_transverse(self, x_size=0.042, y_size=0.042, verbose=True):
+    def add_aperture_nodes_transverse(self, scrape_x=0.042, scrape_y=0.042, verbose=True):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         aperture_nodes = Add_quad_apertures_to_lattice(self.lattice)
         aperture_nodes = Add_rfgap_apertures_to_lattice(self.lattice, aperture_nodes)
         aperture_nodes = AddMEBTChopperPlatesAperturesToSNS_Lattice(self.lattice, aperture_nodes)
-        aperture_nodes = AddScrapersAperturesToLattice(self.lattice, "MEBT_Diag:H_SCRP", x_size, y_size, aperture_nodes)
-        aperture_nodes = AddScrapersAperturesToLattice(self.lattice, "MEBT_Diag:V_SCRP", x_size, y_size, aperture_nodes)
+        aperture_nodes = AddScrapersAperturesToLattice(
+            self.lattice, "MEBT_Diag:H_SCRP", scrape_x, scrape_y, aperture_nodes
+        )
+        aperture_nodes = AddScrapersAperturesToLattice(
+            self.lattice, "MEBT_Diag:V_SCRP", scrape_x, scrape_y, aperture_nodes
+        )
         self.aperture_nodes.extend(aperture_nodes)
         if _mpi_rank == 0 and verbose:
             print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
