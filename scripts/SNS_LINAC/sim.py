@@ -77,8 +77,8 @@ switches = {
             "transverse": True,
             "longitudinal": True,
         },
-        "linac_tracker": True,
-        "overlapping_fields": True,
+        "linac_tracker": False,
+        "overlapping_fields": False,
         "space_charge": True,
     },
     "bunch": {
@@ -137,7 +137,7 @@ linac = SNS_LINAC(
 )
 lattice = linac.initialize(
     sequence_start="MEBT",
-    sequence_stop="DTL2",
+    sequence_stop="DTL6",
     max_drift_length=0.010,
     verbose=True,
 )
@@ -187,8 +187,8 @@ if switches["lattice"]["apertures"]["longitudinal"]:
             Quad, 
             OverlappingQuadsNode,
         ],
-        phase_min=-180.0,
-        phase_max=+180.0,
+        phase_min=-90.0,
+        phase_max=+90.0,
         energy_min=-0.100,
         energy_max=+0.100,
         verbose=True,
@@ -202,14 +202,14 @@ lattice = linac.lattice
 
 # Settings
 filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-06-18_RFQ-WS04b_PARMTEQ/data/derived/",
-    "230618191218-bunch_MEBT_Diag:WS04b_8.56e+06.dat"
+    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_8.56e+06.dat"
 )
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = int(8.00e+06)  # max number of particles
+n_parts = None  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -290,7 +290,7 @@ if _mpi_rank == 0:
 # Settings
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": 20.0,  # [m]
+    "write_bunch": 5.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
@@ -374,7 +374,7 @@ if switches["sim"]["save_init_coords_attr"]:
 # --------------------------------------------------------------------------------------
 
 # Settings
-start = "MEBT_Diag:WS04b"  # (node name/position/None)
+start = None  # (node name/position/None)
 stop = None  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
