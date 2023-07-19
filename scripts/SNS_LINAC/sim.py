@@ -202,8 +202,8 @@ lattice = linac.lattice
 
 # Settings
 filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_8.56e+06.dat"
+    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-07-19_RFQ-WS04b/data/",
+    "230719174556-sim_bunch_0001_MEBT_Diag:WS04b.dat",
 )
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
@@ -374,7 +374,7 @@ if switches["sim"]["save_init_coords_attr"]:
 # --------------------------------------------------------------------------------------
 
 # Settings
-start = None  # (node name/position/None)
+start = "MEBT_Diag:WS04b"  # (node name/position/None)
 stop = None  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
