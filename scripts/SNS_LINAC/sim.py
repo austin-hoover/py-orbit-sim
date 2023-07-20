@@ -164,7 +164,7 @@ linac.set_linac_tracker(switches["lattice"]["linac_tracker"])
 # Space charge
 linac.add_space_charge_nodes(
     solver="FFT",
-    grid_size=(64, 64, 64),
+    grid_size=(128, 128, 128),
     path_length_min=0.010,
     verbose=True,
 )
