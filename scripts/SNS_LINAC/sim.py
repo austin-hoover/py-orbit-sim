@@ -70,8 +70,9 @@ from SNS_LINAC import SNS_LINAC
 # Setup
 # --------------------------------------------------------------------------------------
 
+# For convenience. We can also define switches/settings at the start of each section.
 switches = {
-    "save": True,
+    "save": False,
     "lattice": {
         "apertures": {
             "transverse": True,
@@ -85,15 +86,8 @@ switches = {
     "bunch": {
         "rms_equivalent_dist": False,
         "decorrelate_x_y_z": False,
-    },
-    "sim": {
-        "save_init_coords_attr": False, 
-        "save_particle_ids": True,  # 
-        "save_input_bunch": True,
-        "save_output_bunch": True,
-        "save_losses": True,
         "set_design_sync_time": True,
-    }
+    },
 }
 
 # Settings
@@ -236,11 +230,12 @@ filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
     "bunch_RFQ_output_8.56e+06.dat",
 )
+filename = None
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = None  # max number of particles
+n_parts = int(1e5)  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -319,17 +314,18 @@ if _mpi_rank == 0:
 # --------------------------------------------------------------------------------------
 
 # Settings
+save_input_bunch = save_output_bunch = True
+save_particle_ids = True
+save_init_coords_attr = False
+save_losses = True
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": 2.0,  # [m]
+    "write_bunch": np.inf,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
 # Configure saving based on global `save`.
 if not switches["save"]:
-    switches["sim"]["save_input_bunch"] = False
-    switches["sim"]["save_output_bunch"] = False
-    switches["sim"]["save_losses"] = False
     stride["write_bunch"] = np.inf
     stride["plot_bunch"] = np.inf
         
@@ -395,9 +391,9 @@ monitor = pyorbit_sim.linac.Monitor(
 
 
 # Add particle ids.
-if switches["sim"]["save_particle_ids"]:
+if save_particle_ids:
     ParticleIdNumber.addParticleIdNumbers(bunch)
-if switches["sim"]["save_init_coords_attr"]:
+if save_init_coords_attr:
     copyCoordsToInitCoordsAttr(bunch)
     
     
@@ -420,12 +416,12 @@ pyorbit_sim.linac.check_sync_part_time(
     bunch, 
     lattice, 
     start=start,
-    set_design=switches["sim"]["set_design_sync_time"],
+    set_design=switches["bunch"]["set_design_sync_time"],
     verbose=True
 )
     
 # Save the bunch.
-if switches["sim"]["save_input_bunch"]:
+if switches["save"] and save_input_bunch:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -447,7 +443,7 @@ if len(linac.aperture_nodes) > 0:
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
         print("Total loss = {:.2e}".format(total_loss))
-    if switches["sim"]["save_losses"]:
+    if switches["save"] and save_losses:
         filename = man.get_filename("losses.txt")
         if _mpi_rank == 0:
             print("Saving loss vs. node array to {}".format(filename))
@@ -458,14 +454,15 @@ if len(linac.aperture_nodes) > 0:
         file.close()
     
 # Save lost bunch.
-filename = man.get_filename("lostbunch.dat")
-if _mpi_rank == 0:
-    print("Writing lostbunch to file {}".format(filename))
-lostbunch = params_dict["lostbunch"]
-lostbunch.dumpBunch(filename)
+if switches["save"] and save_losses:
+    filename = man.get_filename("lostbunch.dat")
+    if _mpi_rank == 0:
+        print("Writing lostbunch to file {}".format(filename))
+    lostbunch = params_dict["lostbunch"]
+    lostbunch.dumpBunch(filename)
 
 # Save the bunch.
-if switches["sim"]["save_output_bunch"]:
+if switches["save"] and save_output_bunch:
     node_name = stop 
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"

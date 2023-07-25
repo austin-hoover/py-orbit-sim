@@ -16,6 +16,7 @@ from orbit.py_linac.lattice import BaseLinacNode
 from orbit.teapot import DriftTEAPOT
 import orbit.utils.consts as consts
 import orbit_mpi
+from orbit_utils import BunchExtremaCalculator
 
 import pyorbit_sim.bunch_utils
 
@@ -214,21 +215,22 @@ class Monitor:
 
         # Record covariance matrix.
         if self.track_rms:
-            bunch_twiss_analysis = BunchTwissAnalysis()
+            twiss_analysis = BunchTwissAnalysis()
             order = 2
-            bunch_twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
+            twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
             for i in range(6):
                 key = "mean_{}".format(i)
-                value = bunch_twiss_analysis.getAverage(i)
+                value = twiss_analysis.getAverage(i)
                 if _mpi_rank == 0:
                     self.history[key] = value
             for i in range(6):
                 for j in range(i + 1):
                     key = "cov_{}-{}".format(j, i)
-                    value = bunch_twiss_analysis.getCorrelation(j, i)
+                    value = twiss_analysis.getCorrelation(j, i)
                     if _mpi_rank == 0:
                         self.history[key] = value
-                               
+                                                   
+        # Update history array with standard deviations.
         if _mpi_rank == 0 and self.track_rms:
             x_rms = np.sqrt(self.history["cov_0-0"])
             y_rms = np.sqrt(self.history["cov_2-2"])
@@ -240,7 +242,18 @@ class Monitor:
             self.history["z_rms"] = z_rms
             self.history["z_rms_deg"] = z_rms_deg
             self.history["z_to_phase_coeff"] = z_to_phase_coeff
-                        
+            
+        # Extrema calculations.
+        extrema_calculator = BunchExtremaCalculator()
+        (x_min, x_max, y_min, y_max, z_min, z_max) = extrema_calculator.extremaXYZ(bunch)
+        if _mpi_rank == 0:
+            self.history["x_min"] = x_min
+            self.history["x_max"] = x_max
+            self.history["y_min"] = y_min
+            self.history["y_max"] = y_max
+            self.history["z_min"] = z_min
+            self.history["z_max"] = z_max
+                                
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
             if self.track_rms:
