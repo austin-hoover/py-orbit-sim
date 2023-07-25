@@ -24,6 +24,7 @@ from orbit.py_linac.lattice import LinacEnergyApertureNode
 from orbit.py_linac.lattice import LinacPhaseApertureNode
 from orbit.py_linac.lattice import OverlappingQuadsNode 
 from orbit.py_linac.lattice import Quad
+from orbit.py_linac.lattice_modifications import Add_drift_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_rfgap_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import AddMEBTChopperPlatesAperturesToSNS_Lattice
@@ -165,7 +166,7 @@ class SNS_LINAC:
             print("max length = {}".format(max_length))
         self.sc_nodes = sc_nodes
     
-    def add_aperture_nodes_transverse(self, scrape_x=0.042, scrape_y=0.042, verbose=True):
+    def add_transverse_aperture_nodes(self, scrape_x=0.042, scrape_y=0.042, verbose=True):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         aperture_nodes = Add_quad_apertures_to_lattice(self.lattice)
@@ -180,19 +181,201 @@ class SNS_LINAC:
         self.aperture_nodes.extend(aperture_nodes)
         if _mpi_rank == 0 and verbose:
             print("Added {} transverse aperture nodes.".format(len(aperture_nodes)))
-        
-    def add_aperture_nodes_longitudinal(
-        self, 
-        classes=None, 
-        phase_min=-180.0, 
-        phase_max=+180.0, 
-        energy_min=-0.100, 
-        energy_max=+0.100, 
-        verbose=True
+            
+    def add_transverse_aperture_nodes_drifts(
+        self, start=0.0, stop=None, step=1.0, radius=0.042, verbose=True,
+    ):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if stop is None:
+            stop = self.lattice.getLength()
+        diameter = 2.0 * radius
+        aperture_nodes = Add_drift_apertures_to_lattice(self.lattice, start, stop, step, diameter)
+        self.aperture_nodes.extend(aperture_nodes)
+        if _mpi_rank == 0 and verbose:
+            print("Added {} transverse aperture nodes (drift spaces).".format(len(aperture_nodes)))
+        return aperture_nodes
+            
+    def add_phase_aperture_nodes(
+        self,
+        phase_min=-180.0,  # [GeV]
+        phase_max=+180.0,  # [GeV]
+        classes=None,
+        nametag="phase_aprt",
+        verbose=True,
+    ):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if classes is None:
+            classes = [
+                BaseRF_Gap, 
+                AxisFieldRF_Gap, 
+                AxisField_and_Quad_RF_Gap,
+                Quad, 
+                OverlappingQuadsNode,
+            ]
+
+        def func(**kws):
+            phase_min = kws["phase_min"]
+            phase_max = kws["phase_max"]
+            aperture_node = LinacPhaseApertureNode(frequency=self.rf_frequency)
+            aperture_node.setMinMaxPhase(phase_min, phase_max)  # [deg]
+            return aperture_node
+                
+        aperture_nodes = self._add_aperture_nodes_classes(
+            classes=classes,
+            nametag=nametag,
+            func=func,
+            func_kws={
+                "phase_min": phase_min,
+                "phase_max": phase_max,
+            }
+        )
+        self.aperture_nodes.extend(aperture_nodes)
+        if _mpi_rank == 0 and verbose:
+            print("Added {} phase aperture nodes.".format(len(aperture_nodes)))
+        return aperture_nodes
+    
+    def add_phase_aperture_nodes_drifts(
+        self,
+        phase_min=-180.0,  # [deg]
+        phase_max=+180.0,  # [deg]
+        start=None,
+        stop=None,
+        step=1.0,
+        verbose=True,
     ):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
+        def func(**kws):
+            phase_min = kws["phase_min"]
+            phase_max = kws["phase_max"]
+            aperture_node = LinacPhaseApertureNode(frequency=self.rf_frequency)
+            aperture_node.setMinMaxPhase(phase_min, phase_max)  # [deg]
+            return aperture_node
+                
+        aperture_nodes = self._add_aperture_nodes_drifts(
+            start=start,
+            stop=stop,
+            step=step,
+            nametag="phase_aprt",
+            func=func,
+            func_kws={
+                "phase_min": phase_min,
+                "phase_max": phase_max,
+            }
+        )
+        self.aperture_nodes.extend(aperture_nodes)
+        if _mpi_rank == 0 and verbose:
+            print("Added {} phase aperture nodes (drift spaces).".format(len(aperture_nodes)))
+        return aperture_nodes
+            
+    def add_energy_aperture_nodes(
+        self,
+        energy_min=-0.100,  # [GeV]
+        energy_max=+0.100,  # [GeV]
+        classes=None,
+        nametag="energy_aprt",
+        verbose=True,
+    ):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if classes is None:
+            classes = [
+                BaseRF_Gap, 
+                AxisFieldRF_Gap, 
+                AxisField_and_Quad_RF_Gap,
+                Quad, 
+                OverlappingQuadsNode,
+            ]
+
+        def func(**kws):
+            energy_min = kws["energy_min"]
+            energy_max = kws["energy_max"]
+            aperture_node = LinacEnergyApertureNode()
+            aperture_node.setMinMaxEnergy(energy_min, energy_max)  # [GeV]
+            return aperture_node
+                
+        aperture_nodes = self._add_aperture_nodes_classes(
+            classes=classes,
+            nametag=nametag,
+            func=func,
+            func_kws={
+                "energy_min": energy_min,
+                "energy_max": energy_max,
+            }
+        )
+        self.aperture_nodes.extend(aperture_nodes)
+        if _mpi_rank == 0 and verbose:
+            print("Added {} energy aperture nodes.".format(len(aperture_nodes)))
+        return aperture_nodes
+                    
+    def add_energy_aperture_nodes_drifts(
+        self,
+        energy_min=-0.100,  # [GeV]
+        energy_max=+0.100,  # [GeV]
+        start=None,
+        stop=None,
+        step=1.0,
+        verbose=True,
+    ):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
+        def func(**kws):
+            energy_min = kws["energy_min"]
+            energy_max = kws["energy_max"]
+            aperture_node = LinacEnergyApertureNode()
+            aperture_node.setMinMaxEnergy(energy_min, energy_max)  # [GeV]
+            return aperture_node
+                
+        aperture_nodes = self._add_aperture_nodes_drifts(
+            start=start,
+            stop=stop,
+            step=step,
+            nametag="energy_aprt",
+            func=func,
+            func_kws={
+                "energy_min": energy_min,
+                "energy_max": energy_max,
+            }
+        )
+        self.aperture_nodes.extend(aperture_nodes)
+        if _mpi_rank == 0 and verbose:
+            print("Added {} energy aperture nodes (drift spaces).".format(len(aperture_nodes)))
+        return aperture_nodes
+    
+    def _add_aperture_nodes_classes(
+        self,
+        classes=None,
+        nametag="aprt",
+        func=None,
+        func_kws=None,
+    ):
+        """Add aperture nodes to all nodes of a specified class (or classes).
+        
+        This function is not meant to be called directly. It does not extend
+        `self.aperture_nodes`.
+        
+        Parameters
+        ----------
+        classes : list
+            Parent node classes.
+        nametag : str
+            Nodes are named "{parent_node_name}_{nametag}_in" and "{parent_node_name}_{nametag}_out".
+        func : callable
+            Returns an aperture node.
+        func_kws : dict
+            Key word arguments for `func`. (`aperture_node = func(**func_kws)`).
+            
+        Returns
+        -------
+        list[Node]
+            The aperture nodes added to the lattice.
+        """
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if classes is None:
             classes = [
                 BaseRF_Gap, 
@@ -205,23 +388,73 @@ class SNS_LINAC:
         aperture_nodes = []
         for node in self.lattice.getNodesOfClasses(classes):
             if node.hasParam("aperture") and node.hasParam("aprt_type"):
-                position_start, position_stop = node_pos_dict[node]
-
-                aperture_node = LinacPhaseApertureNode(frequency=self.rf_frequency, name="{}_phase_aprt_out".format(node.getName()))
-                aperture_node.setMinMaxPhase(phase_min, phase_max)  # [deg]
-                aperture_node.setPosition(position_stop)
-                aperture_node.setSequence(node.getSequence())
-                node.addChildNode(aperture_node, node.EXIT)
-                aperture_nodes.append(aperture_node)
-
-                # Energy apertures are probably unnecessary, but add them anyway.
-                aperture_node = LinacEnergyApertureNode(name="{}_energy_aprt_out".format(node.getName()))
-                aperture_node.setMinMaxEnergy(energy_min, energy_max)  # [GeV]
-                aperture_node.setPosition(position_stop)
-                aperture_node.setSequence(node.getSequence())
-                node.addChildNode(aperture_node, node.EXIT)
-                aperture_nodes.append(aperture_node)
-                
-        if _mpi_rank == 0 and verbose:
-            print("Added {} longitudinal aperture nodes.".format(len(aperture_nodes)))
-        self.aperture_nodes.extend(aperture_nodes)
+                for location, suffix, position in zip([node.ENTRANCE, node.EXIT], ["in", "out"], node_pos_dict[node]):
+                    aperture_node = func(**func_kws)
+                    aperture_node.setName("{}_{}_{}".format(node.getName(), nametag, suffix))
+                    aperture_node.setPosition(position)
+                    aperture_node.setSequence(node.getSequence())
+                    node.addChildNode(aperture_node, location)
+                    aperture_nodes.append(aperture_node)
+        return aperture_nodes
+            
+    def _add_aperture_nodes_drifts(
+        self,
+        start=0.0,
+        stop=None,
+        step=1.0,
+        nametag="aprt",
+        func=None,
+        func_kws=None,
+    ):
+        """Add aperture nodes to drift spaces as child nodes.
+        
+        This function is not meant to be called directly. It does not extend
+        `self.aperture_nodes`.
+        
+        Parameters
+        ----------
+        start, stop, stop. : float
+            Nodes are added between `start` [m] and `stop` [m] with spacing `step` [m].
+        nametag : str
+            Nodes are named "{parent_node_name}:{part_index}_{nametag}".
+        func : callable
+            Returns an aperture node.
+        func_kws : dict
+            Key word arguments for `func`. (`aperture_node = func(**func_kws)`).
+            
+        Returns
+        -------
+        list[Node]
+            The aperture nodes added to the lattice.
+        """
+        if func is None:
+            return
+        if func_kws is None:
+            func_kws = dict()
+        if stop is None:
+            stop = self.lattice.getLength()
+            
+        node_pos_dict = self.lattice.getNodePositionsDict()
+        parent_nodes = self.lattice.getNodesOfClasses([Drift])
+        last_position, _ = node_pos_dict[parent_nodes[0]]
+        last_position = last_position - 2.0 * step        
+        child_nodes = []
+        for parent_node in parent_nodes:            
+            position, _ = node_pos_dict[parent_node]
+            if position > stop:
+                break
+            for index in range(parent_node.getnParts()):
+                if start <= position <= stop:
+                    if position >= last_position + step:
+                        child_node = func(**func_kws)
+                        name = "{}".format(parent_node.getName())
+                        if parent_node.getnParts() > 1:
+                            name = "{}:{}".format(name, index)
+                        child_node.setName("{}_{}".format(name, nametag))
+                        child_node.setPosition(position)
+                        child_node.setSequence(parent_node.getSequence())
+                        parent_node.addChildNode(child_node, parent_node.BODY, index, parent_node.BEFORE)
+                        child_nodes.append(child_node)
+                        last_position = position
+                position += parent_node.getLength(index)   
+        return child_nodes

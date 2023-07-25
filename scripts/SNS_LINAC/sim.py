@@ -75,9 +75,10 @@ switches = {
     "lattice": {
         "apertures": {
             "transverse": True,
-            "longitudinal": True,
+            "phase": True,
+            "energy": False,
         },
-        "linac_tracker": False,
+        "linac_tracker": True,
         "overlapping_fields": False,
         "space_charge": True,
     },
@@ -86,8 +87,8 @@ switches = {
         "decorrelate_x_y_z": False,
     },
     "sim": {
-        "save_init_coords_attr": False,
-        "save_particle_ids": True,
+        "save_init_coords_attr": False, 
+        "save_particle_ids": True,  # 
         "save_input_bunch": True,
         "save_output_bunch": True,
         "save_losses": True,
@@ -164,7 +165,7 @@ linac.set_linac_tracker(switches["lattice"]["linac_tracker"])
 # Space charge
 linac.add_space_charge_nodes(
     solver="FFT",
-    grid_size=(128, 128, 128),
+    grid_size=(64, 64, 64),
     path_length_min=0.010,
     verbose=True,
 )
@@ -173,13 +174,15 @@ for sc_node in linac.sc_nodes:
             
 # Apertures
 if switches["lattice"]["apertures"]["transverse"]:
-    linac.add_aperture_nodes_transverse(
+    linac.add_transverse_aperture_nodes(
         scrape_x=0.042,
         scrape_y=0.042,
         verbose=True
     )
-if switches["lattice"]["apertures"]["longitudinal"]:
-    linac.add_aperture_nodes_longitudinal(
+if switches["lattice"]["apertures"]["phase"]:
+    phase_min = -90.0  # [deg]
+    phase_max = +90.0  # [deg]
+    linac.add_phase_aperture_nodes(
         classes=[
             BaseRF_Gap, 
             AxisFieldRF_Gap, 
@@ -187,12 +190,40 @@ if switches["lattice"]["apertures"]["longitudinal"]:
             Quad, 
             OverlappingQuadsNode,
         ],
-        phase_min=-90.0,
-        phase_max=+90.0,
-        energy_min=-0.100,
-        energy_max=+0.100,
+        phase_min=phase_min,
+        phase_max=phase_max,
         verbose=True,
     )
+    _nodes = linac.add_phase_aperture_nodes_drifts(
+        phase_min=phase_min,
+        phase_max=phase_max,
+        start=0.0,
+        stop=4.0,
+        step=0.050,  # [m]
+        verbose=True,
+    )
+if switches["lattice"]["apertures"]["energy"]:
+    energy_min = -0.100  # [GeV]
+    energy_max = +0.100  # [GeV]
+    linac.add_energy_aperture_nodes(
+        classes=[
+            BaseRF_Gap, 
+            AxisFieldRF_Gap, 
+            AxisField_and_Quad_RF_Gap,
+            Quad, 
+            OverlappingQuadsNode,
+        ],
+        energy_min=energy_min,
+        energy_max=energy_max,
+        verbose=True,
+    )
+    linac.add_energy_aperture_nodes_drifts(
+        energy_min=energy_min,
+        energy_max=energy_max,
+        step=0.1,  # [m]
+        verbose=True,
+    )
+
     
 lattice = linac.lattice
 
@@ -202,8 +233,8 @@ lattice = linac.lattice
 
 # Settings
 filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_LINAC/2023-07-19_RFQ-WS04b/data/",
-    "230719174556-sim_bunch_0001_MEBT_Diag:WS04b.dat",
+    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_8.56e+06.dat",
 )
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
@@ -290,7 +321,7 @@ if _mpi_rank == 0:
 # Settings
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": 5.0,  # [m]
+    "write_bunch": 2.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
@@ -374,8 +405,8 @@ if switches["sim"]["save_init_coords_attr"]:
 # --------------------------------------------------------------------------------------
 
 # Settings
-start = "MEBT_Diag:WS04b"  # (node name/position/None)
-stop = None  # (node name/position/None)
+start = None  # (node name/position/None)
+stop = 15.0  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:
