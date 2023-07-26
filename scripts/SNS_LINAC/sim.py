@@ -229,7 +229,7 @@ lattice = linac.lattice
 # Settings
 filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_8.56e+06.dat",
+    "bunch_RFQ_output_8.56e+06_decorr_x-y-z.dat",
 )
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
