@@ -160,7 +160,7 @@ linac.set_linac_tracker(switches["lattice"]["linac_tracker"])
 # Space charge
 linac.add_space_charge_nodes(
     solver="FFT",
-    grid_size=(64, 64, 64),
+    grid_size=(128, 128, 128),
     path_length_min=0.010,
     verbose=True,
 )
@@ -234,7 +234,7 @@ filename = os.path.join(
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.042  # [A]
+current = 0.084  # [A]
 n_parts = None  # max number of particles
 
 # Initialize the bunch.
@@ -251,6 +251,8 @@ if filename is not None:
         verbose=True,
     )
 else:
+    if n_parts is None:
+        n_parts = int(1e4)
     bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
         dist=WaterBagDist3D,
         n=n_parts,
@@ -320,7 +322,7 @@ save_init_coords_attr = False  # append initial coordinates to each bunch file
 save_losses = True
 stride = {
     "update": 0.100,  # [m]
-    "write_bunch": np.inf,  # [m]
+    "write_bunch": 6.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 
@@ -402,7 +404,7 @@ if save_init_coords_attr:
 
 # Settings
 start = None  # (node name/position/None)
-stop = 15.0  # (node name/position/None)
+stop = None  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:
