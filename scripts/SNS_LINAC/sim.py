@@ -70,9 +70,10 @@ from SNS_LINAC import SNS_LINAC
 # Setup
 # --------------------------------------------------------------------------------------
 
-# For convenience. We can also define switches/settings at the start of each section.
+# These are defined here for convenience. We can also define them at the start of each 
+# section, along with the settings.
 switches = {
-    "save": False,
+    "save": True,
     "lattice": {
         "apertures": {
             "transverse": True,
@@ -90,7 +91,7 @@ switches = {
     },
 }
 
-# Settings
+# Set input directories.
 output_dir = "/home/46h/sim_data/"  # parent directory for output
 file_dir = os.path.dirname(os.path.realpath(__file__))  # directory of this file
 input_dir = os.path.join(file_dir, "data_input")  # lattice input data
@@ -188,7 +189,7 @@ if switches["lattice"]["apertures"]["phase"]:
         phase_max=phase_max,
         verbose=True,
     )
-    _nodes = linac.add_phase_aperture_nodes_drifts(
+    linac.add_phase_aperture_nodes_drifts(
         phase_min=phase_min,
         phase_max=phase_max,
         start=0.0,
@@ -230,12 +231,11 @@ filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
     "bunch_RFQ_output_8.56e+06.dat",
 )
-filename = None
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = int(1e5)  # max number of particles
+n_parts = None  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -315,8 +315,8 @@ if _mpi_rank == 0:
 
 # Settings
 save_input_bunch = save_output_bunch = True
-save_particle_ids = True
-save_init_coords_attr = False
+save_particle_ids = True  # append particle ids to each bunch file
+save_init_coords_attr = False  # append initial coordinates to each bunch file
 save_losses = True
 stride = {
     "update": 0.100,  # [m]
