@@ -164,12 +164,19 @@ class Monitor:
                 "z_rms",
                 "z_rms_deg",
                 "z_to_phase_coeff",
+                "x_min",
+                "x_max",
+                "y_min",
+                "y_max",
+                "z_min",
+                "z_max",
             ]
             for i in range(6):
                 keys.append("mean_{}".format(i))
             for i in range(6):
                 for j in range(i + 1):
                     keys.append("cov_{}-{}".format(j, i))
+                    
             self.history = dict()
             for key in keys:
                 self.history[key] = None
