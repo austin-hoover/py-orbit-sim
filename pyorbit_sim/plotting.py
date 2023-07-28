@@ -20,8 +20,21 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 from bunch import Bunch
-from orbit.diagnostics.diagnostics import get_bunch_coords
 
+
+def get_bunch_coords(bunch):
+    """Return bunch coordinate array (no MPI)."""
+    X = np.zeros((bunch.getSize(), 6))
+    for i in range(X.shape[0]):
+        X[i, :] = [
+            bunch.x(i),
+            bunch.xp(i), 
+            bunch.y(i), 
+            bunch.yp(i), 
+            bunch.z(i), 
+            bunch.dE(i)
+        ]
+    return X
 
 
 # General matplotlib plotting functions.
