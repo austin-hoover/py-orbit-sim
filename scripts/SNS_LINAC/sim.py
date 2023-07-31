@@ -86,8 +86,16 @@ switches = {
     },
     "bunch": {
         "rms_equivalent_dist": False,
-        "decorrelate_x_y_z": False,
+        "decorrelate_x-y-z": False,
         "set_design_sync_time": True,
+    },
+    "diagnostics": {
+        "save_input_bunch": True,
+        "save_output_bunch": True,
+        "save_init_coords_attr": False,
+        "save_particle_ids": True,
+        "save_lostbunch": True,  
+        "save_losses": True,
     },
 }
 
@@ -126,22 +134,14 @@ if _mpi_rank == 0 and switches["save"]:
 # --------------------------------------------------------------------------------------
 
 # Create the lattice.
-linac = SNS_LINAC(
-    input_dir=input_dir,
-    xml_filename="sns_linac.xml",
-    rf_frequency=402.5e+06,
-)
+linac = SNS_LINAC(rf_frequency=402.5e+06)
 lattice = linac.initialize(
+    xml_filename=os.path.join(input_dir, "sns_linac.xml")
     sequence_start="MEBT",
     sequence_stop="DTL6",
     max_drift_length=0.010,
     verbose=True,
 )
-
-# Save lattice info.
-if switches["save"]:
-    linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
-    linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
 
 # Set RF gap model.
 linac.set_rf_gap_model(RfGapTTF)
@@ -151,12 +151,9 @@ if switches["lattice"]["overlapping_fields"]:
     linac.set_overlapping_rf_and_quad_fields(
         sequences=linac.sequences,
         z_step=0.002,
-        xml_filename="sns_rf_fields.xml",
+        xml_filename=os.path.join(input_dir, "sns_rf_fields.xml"),
     )
     
-# Set linac tracker.
-linac.set_linac_tracker(switches["lattice"]["linac_tracker"])
-
 # Space charge
 linac.add_space_charge_nodes(
     solver="FFT",
@@ -218,8 +215,16 @@ if switches["lattice"]["apertures"]["energy"]:
         step=0.1,  # [m]
         verbose=True,
     )
-
     
+# Set linac tracker.
+linac.set_linac_tracker(switches["lattice"]["linac_tracker"])
+
+# Save lattice info.
+if switches["save"]:
+    linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
+    linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
+
+
 lattice = linac.lattice
 
 
@@ -234,7 +239,7 @@ filename = os.path.join(
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.084  # [A]
+current = 0.042  # [A]
 n_parts = None  # max number of particles
 
 # Initialize the bunch.
@@ -296,7 +301,7 @@ if n_parts is not None:
         )
 
 # Decorrelate the x-x', y-y', z-z' coordinates. (No MPI.)
-if switches["bunch"]["decorrelate_x_y_z"]:
+if switches["bunch"]["decorrelate_x-y-z"]:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
         
 # Set the macro-particle size.
@@ -315,18 +320,11 @@ if _mpi_rank == 0:
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
-# Settings
-save_input_bunch = save_output_bunch = True
-save_particle_ids = True  # append particle ids to each bunch file
-save_init_coords_attr = False  # append initial coordinates to each bunch file
-save_losses = True
 stride = {
     "update": 0.100,  # [m]
     "write_bunch": 6.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
-
-# Configure saving based on global `save`.
 if not switches["save"]:
     stride["write_bunch"] = np.inf
     stride["plot_bunch"] = np.inf
@@ -392,10 +390,12 @@ monitor = pyorbit_sim.linac.Monitor(
 )
 
 
-# Add particle ids.
-if save_particle_ids:
+# Write particle ids in column 7 of each bunch file.
+if switches["diagnostics"]["save_particle_ids"]:
     ParticleIdNumber.addParticleIdNumbers(bunch)
-if save_init_coords_attr:
+    
+# Write initial 6D coordinates to columns 8-13 of each bunch file.
+if switches["diagnostics"]["save_init_coords_attr"]:
     copyCoordsToInitCoordsAttr(bunch)
     
     
@@ -423,7 +423,7 @@ pyorbit_sim.linac.check_sync_part_time(
 )
     
 # Save the bunch.
-if switches["save"] and save_input_bunch:
+if switches["save"] and switches["save_input_bunch"]:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -445,7 +445,7 @@ if len(linac.aperture_nodes) > 0:
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
         print("Total loss = {:.2e}".format(total_loss))
-    if switches["save"] and save_losses:
+    if switches["save"] and switches["save_losses"]:
         filename = man.get_filename("losses.txt")
         if _mpi_rank == 0:
             print("Saving loss vs. node array to {}".format(filename))
@@ -456,7 +456,7 @@ if len(linac.aperture_nodes) > 0:
         file.close()
     
 # Save lost bunch.
-if switches["save"] and save_losses:
+if switches["save"] and switches["save_lostbunch"]:
     filename = man.get_filename("lostbunch.dat")
     if _mpi_rank == 0:
         print("Writing lostbunch to file {}".format(filename))
@@ -464,7 +464,7 @@ if switches["save"] and save_losses:
     lostbunch.dumpBunch(filename)
 
 # Save the bunch.
-if switches["save"] and save_output_bunch:
+if switches["save"] and switches["save_output_bunch"]:
     node_name = stop 
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"

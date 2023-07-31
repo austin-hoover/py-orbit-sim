@@ -1,4 +1,4 @@
-"""SNS linac simulation."""
+"""SNS linear accelerator."""
 from __future__ import print_function
 import os
 import sys
@@ -45,9 +45,7 @@ from spacecharge import SpaceChargeCalcUnifEllipse
 
 
 class SNS_LINAC:
-    def __init__(self, input_dir=None, xml_filename=None, rf_frequency=402.5e+06):
-        self.input_dir = input_dir
-        self.xml_filename = os.path.join(self.input_dir, xml_filename)
+    def __init__(self, rf_frequency=402.5e+06):
         self.lattice = None
         self.rf_frequency = rf_frequency
         self.aperture_nodes = []
@@ -71,20 +69,27 @@ class SNS_LINAC:
             "HEBT2",
         ]
                         
-    def initialize(self, sequence_start=None, sequence_stop=None, max_drift_length=0.010, verbose=True):    
+    def initialize(
+        self, 
+        xml_filename=None,
+        sequence_start=None, 
+        sequence_stop=None, 
+        max_drift_length=0.010, 
+        verbose=True
+    ):    
         lo = self._sequences.index(sequence_start)
         hi = self._sequences.index(sequence_stop)
         self.sequences = self._sequences[lo : hi + 1]
         
         sns_linac_factory = SNS_LinacLatticeFactory()
         sns_linac_factory.setMaxDriftLength(max_drift_length)
-        self.lattice = sns_linac_factory.getLinacAccLattice(self.sequences, self.xml_filename)
+        self.lattice = sns_linac_factory.getLinacAccLattice(self.sequences, xml_filename)
         
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if _mpi_rank == 0 and verbose:
             print("Initialized lattice.")
-            print("XML filename = {}".format(self.xml_filename))
+            print("XML filename = {}".format(xml_filename))
             print("lattice length = {:.3f} [m])".format(self.lattice.getLength()))
         return self.lattice
     
@@ -115,7 +120,9 @@ class SNS_LINAC:
         for rf_gap in self.lattice.getRF_Gaps():
             rf_gap.setCppGapModel(rf_gap_model())
             
-    def set_overlapping_rf_and_quad_fields(self, sequences=None, z_step=0.002, xml_filename="sns_rf_fields.xml"):
+    def set_overlapping_rf_and_quad_fields(
+        self, sequences=None, z_step=0.002, xml_filename="sns_rf_fields.xml"
+    ):
         if sequences is None:
             sequences = self.sequences    
         fields_filename = os.path.join(self.input_dir, xml_filename)
