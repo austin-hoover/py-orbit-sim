@@ -180,19 +180,15 @@ def downsample(bunch, n=1, verbose=False, method="random"):
         The number of particles to keep. Can also be a float between 0 and 1, 
         indicating the fraction of particles to keep.
     method : str
-        "random": Selects a random group of n particles from the bunch. This does 
-        not work with MPI.
-        "first": Keeps the first n particles in the bunch. This works with MPI; the
-        first (n / n_proc) particles are kept on each processor, where n_proc is
-        the number of processors. This method assumes the particles were randomly
-        generated to begin with.
+        "random": Selects a random group of n particles from the bunch.
+        "first": Keeps the first n particles in the bunch. This method assumes
+        the particles were randomly generated to begin with.
     """
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     
-    n_old = bunch.getSizeGlobal()
-    
+    n_old = bunch.getSize()
     if n >= n_old:
         return bunch
     
@@ -212,14 +208,10 @@ def downsample(bunch, n=1, verbose=False, method="random"):
         new_bunch = set_coords(new_bunch, X)
         new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
         new_bunch.copyBunchTo(bunch)
-    elif method == "first":
-        n_old = bunch.getSizeGlobal()
-        fraction = float(n) / float(n_old)
-        n_proc_old = bunch.getSize()
-        n_proc = int(fraction * n_proc_old)  # on each processor            
+    elif method == "first":        
         if verbose:
-            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_proc_old, n_proc))
-        for i in reversed(range(n_proc, n_proc_old)):
+            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_old, n))
+        for i in reversed(range(n, n_old)):
             bunch.deleteParticleFast(i)
         bunch.compress()    
     if verbose:
@@ -250,7 +242,6 @@ def shift_centroid(bunch, delta=None, verbose=False):
     """Shift the bunch centroid in phase space."""
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
     x, xp, y, yp, z, dE = delta
     if _mpi_rank == 0 and verbose:
@@ -268,7 +259,7 @@ def shift_centroid(bunch, delta=None, verbose=False):
         bunch.xp(i, bunch.xp(i) + delta[1])
         bunch.yp(i, bunch.yp(i) + delta[3])
         bunch.dE(i, bunch.dE(i) + delta[5])
-    if verbose and _mpi_rank == 0:
+    if verbose:
         centroid = get_centroid(bunch)
         print("New centroid:")
         print("<x>  = {} [m]".format(centroid[0]))
@@ -290,38 +281,38 @@ def set_centroid(bunch, centroid=0.0, verbose=False):
 
 def get_stats(bunch, dispersion_flag=False, emit_norm_flag=False):
     """Return bunch covariance matrix (Sigma) and centroid (mu)."""
-    bunch_twiss_analysis = BunchTwissAnalysis()
     order = 2
-    bunch_twiss_analysis.computeBunchMoments(bunch, order, int(dispersion_flag), int(emit_norm_flag))
+    bunch_twiss_analysis = BunchTwissAnalysis()
+    bunch_twiss_analysis.computeBunchMoments(
+        bunch, 
+        order, 
+        int(dispersion_flag), 
+        int(emit_norm_flag)
+    )
     mu = []
     for i in range(6):
-        val = bunch_twiss_analysis.getAverage(i)
-        mu.append(val)
+        value = bunch_twiss_analysis.getAverage(i)
+        mu.append(value)
     Sigma = np.zeros((6, 6))
     for i in range(6):
         for j in range(i + 1):
-            Sigma[i, j] = Sigma[j, i] = bunch_twiss_analysis.getCorrelation(j, i)
+            value = bunch_twiss_analysis.getCorrelation(j, i)
+            Sigma[i, j] = Sigma[j, i] = value
     return Sigma, mu
 
     
 def get_info(bunch):
     """Return dict with bunch parameters and stats."""
-    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
-
-    size_global = bunch.getSizeGlobal()
-    Sigma, mu = get_stats(bunch)    
+    Sigma, mu = get_stats(bunch)
     eps_x, eps_y, eps_z = pyorbit_sim.stats.apparent_emittance(Sigma)
     alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = pyorbit_sim.stats.twiss(Sigma)
     units = ["m", "rad", "m", "rad", "m", "GeV"]
     info = {
         "charge": {"value": bunch.charge(), "unit": "e"},
         "mass": {"value": bunch.mass(), "unit": "GeV / c^2"},
-        "kin_energy": {"value": bunch.getSyncParticle().kinEnergy(), "unit": "GeV"},
+        # "kin_energy": {"value": bunch.getSyncParticle().kinEnergy(), "unit": "GeV"},
         "macrosize": {"value": bunch.macroSize(), "unit": None},
-        "size_local": {"value": bunch.getSize(), "unit": None},
-        "size_global": {"value": size_global, "unit": None},
+        # "size_local": {"value": bunch.getSize(), "unit": None},
         "alpha_x": {"value": alpha_x, "unit": None},
         "alpha_y": {"value": alpha_y, "unit": None},
         "alpha_z": {"value": alpha_z, "unit": None},
@@ -334,9 +325,17 @@ def get_info(bunch):
     }
     for i in range(6):
         for j in range(i + 1):
-            info["cov_{}-{}".format(j, i)] = {"value": Sigma[j, i], "unit": "{} * {}".format(units[j], units[i])}
+            key = "cov_{}-{}".format(j, i)
+            info[key] = {
+                "value": Sigma[j, i], 
+                "unit": "{} * {}".format(units[j], units[i])
+            }
     for i in range(6):
-        info["mean_{}".format(i)] = {"value": mu[i], "unit": "{}".format(units[i])}
+        key = "mean_{}".format(i)
+        info[key] = {
+            "value": mu[i], 
+            "unit": "{}".format(units[i])
+        }
     return info
 
 
