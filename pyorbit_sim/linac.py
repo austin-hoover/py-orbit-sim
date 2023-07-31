@@ -189,14 +189,16 @@ class Monitor:
                 line = line[:-1] + "\n"
                 self.file.write(line)
             
-    def action(self, params_dict):
+    def action(self, params_dict, force_update=False):
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         
         # Update position; decide whether to proceed. 
         position = params_dict["path_length"] + self.position_offset
-        if self.step > 0 and (position - self.position) < self.stride["update"]:
-            return
+        if not force_update:
+            if self.step > 0:
+                if (position - self.position) < self.stride["update"]:
+                    return
         self.position = position       
         
         # Update clock.
@@ -398,10 +400,11 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
     # Get start/stop node names, indices, and positions.
+    nodes = lattice.getNodes()
     if stop is None:
-        stop = lattice.getLength()
+        stop = nodes[-1].getName()
     start = get_node_info(start, lattice)
-    stop = get_node_info(stop, lattice)
+    stop = get_node_info(stop, lattice)    
     
     # Add actions.
     action_container = AccActionsContainer("monitor")
@@ -432,6 +435,7 @@ def track(bunch, lattice, monitor=None, start=0.0, stop=None, verbose=True):
         index_start=start["index"],
         index_stop=stop["index"],
     )
+    monitor.action(params_dict, force_update=True)
     
     if verbose and _mpi_rank == 0:
         print("time = {:.3f} [sec]".format(time.clock() - time_start))
