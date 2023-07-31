@@ -73,7 +73,7 @@ switches = {
     "apertures": True,
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
-    "overlapping_fields": True,
+    "overlapping_fields": False,
     "rms_equivalent_dist": False,
     "save": True,
     "save_init_coords_attr": False,
