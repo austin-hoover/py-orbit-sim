@@ -1,17 +1,17 @@
-"""Test Danilov distribution envelope matching."""
+"""Test {2, 2} Danilov distribution envelope matching."""
 from __future__ import print_function
 
 import numpy as np
 
 from bunch import Bunch
-from orbit.envelope import DanilovEnvelope
+from orbit.envelope import DanilovEnvelope22
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
 from orbit.space_charge.envelope import DanilovEnvSolverNode
 from orbit.space_charge.envelope import setDanilovEnvSolverNodes
 from orbit.teapot import teapot
 from orbit.utils import consts
-from spacecharge import DanilovEnvSolver
+from spacecharge import DanilovEnvSolver22
 
 
 # Create FODO lattice.
@@ -51,14 +51,14 @@ lattice.initialize()
 # Set envelope parameters.
 mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
-intensity = 1.00e14
+intensity = 0.5e+14
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
 mode = 1  # {1, 2} determines sign of vorticity
 eps_l = 20.0e-06  # nonzero intrinsic emittance [m * rad]
 eps_x_frac = 0.5  # eps_x / eps_l
 
 # Create envelope matched to bare lattice.
-envelope = DanilovEnvelope(
+envelope = DanilovEnvelope22(
     eps_l=eps_l,
     mode=mode,
     eps_x_frac=eps_x_frac,
@@ -72,9 +72,19 @@ envelope.match_bare(lattice, method="2D", solver_nodes=None)
 # Match to the lattice with space charge.
 envelope.set_intensity(intensity)
 env_solver_nodes = setDanilovEnvSolverNodes(
-    lattice, perveance=envelope.perveance, max_sep=0.1, min_sep=1.00e-06
+    lattice, 
+    calc=DanilovEnvSolver22, 
+    perveance=envelope.perveance, 
+    max_sep=0.1, 
+    min_sep=1.00e-06
 )
-envelope._match_lsq(lattice, verbose=2)
+envelope.match(
+    lattice,
+    solver_nodes=env_solver_nodes, 
+    method="lsq", 
+    tol=1.00e-04,
+    verbose=2
+)
 
 # Print the real-space moments after each period.
 n_periods = 20
