@@ -66,8 +66,8 @@ mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
 intensity = 1.0e+15
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
-eps_x = 10.0e-06 # [mrad]
-eps_y = 10.0e-06 # [mrad]
+eps_x = 10.0e-06  # [mrad]
+eps_y = 10.0e-06  # [mrad]
 
 # Create envelope matched to bare lattice.
 envelope = DanilovEnvelope20(
@@ -118,9 +118,10 @@ calc = SpaceChargeCalc2p5D(128, 128, 1)
 sc_nodes = setSC2p5DAccNodes(lattice, path_length_min, calc)
 
 print("Generating bunch")
-envelope.params = init_envelope_params
+envelope.set_params(init_envelope_params)
 bunch, params_dict = envelope.to_bunch(n_parts=int(1e5), no_env=True)
 bunch_twiss_analysis = BunchTwissAnalysis()
+bunch_twiss_analysis.computeBunchMoments(bunch, 2, 0, 0)
 
 print("Tracking bunch")
 print("period | x_rms      | y_rms      | x_rms diff | y_rms diff")

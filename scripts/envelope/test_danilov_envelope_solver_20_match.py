@@ -61,7 +61,7 @@ lattice = create_lattice(lattice_length, lattice_fill_fac, lattice_kq)
 # Create envelope.
 mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
-intensity = 1.0e+16
+intensity = 1.0e+15
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
 eps_x = 10.0e-06 # [mrad]
 eps_y = 10.0e-06 # [mrad]
@@ -87,7 +87,8 @@ solver_nodes = set_danilov_envelope_solver_nodes_20(
 envelope.match_bare(lattice, solver_nodes=solver_nodes)
 
 # Match with space charge.
-envelope.match_lsq_ramp_intensity(lattice, solver_nodes=solver_nodes, n_steps=15, verbose=2)
+envelope.match_lsq(lattice, verbose=2)
+envelope.match_lsq_ramp_intensity(lattice, solver_nodes=solver_nodes, n_steps=10, verbose=2)
 
 # Print the envelope size/slope after each period.
 n_periods = 20
