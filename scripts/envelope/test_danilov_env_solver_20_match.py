@@ -1,20 +1,17 @@
-"""Test {2, 2} Danilov distribution envelope matching."""
+"""Test KV distribution ({2, 0} Danilov distribution) envelope matching."""
 from __future__ import print_function
 
 import numpy as np
 
 from bunch import Bunch
-from bunch import BunchTwissAnalysis
-from orbit.envelope import DanilovEnvelope22
-from orbit.envelope import DanilovEnvelopeSolverNode22
-from orbit.envelope import set_danilov_envelope_solver_nodes_22
+from envelope import DanilovEnvelopeSolver20
+from orbit.envelope import DanilovEnvelope20
+from orbit.envelope import DanilovEnvelopeSolverNode20
+from orbit.envelope import set_danilov_envelope_solver_nodes_20
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
-from orbit.space_charge.sc2p5d import setSC2p5DAccNodes
 from orbit.teapot import teapot
 from orbit.utils import consts
-import orbit_mpi
-from spacecharge import SpaceChargeCalc2p5D
 
 
 def create_lattice(length=5.0, fill_fac=0.5, kq=0.5):
@@ -47,7 +44,7 @@ def create_lattice(length=5.0, fill_fac=0.5, kq=0.5):
         node.setUsageFringeFieldOUT(False)
     lattice.initialize()
     
-    max_length = 0.010
+    max_length = 0.01
     for node in lattice.getNodes():
         if node.getLength() > max_length:
             node.setnParts(1 + int(node.getLength() / max_length))
@@ -61,19 +58,16 @@ lattice_fill_fac = 0.5
 lattice_kq = 0.5
 lattice = create_lattice(lattice_length, lattice_fill_fac, lattice_kq)
 
-# Create {2, 2} Danilov distribution envelope.
+# Create envelope.
 mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
-intensity = 1.00e+15
+intensity = 1.0e+16
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
-mode = 1  # {1, 2} determines sign of vorticity
-eps_l = 20.0e-06  # nonzero intrinsic emittance [m * rad]
-eps_x_frac = 0.5  # eps_x / eps_l
-
-envelope = DanilovEnvelope22(
-    eps_l=eps_l,
-    mode=mode,
-    eps_x_frac=eps_x_frac,
+eps_x = 10.0e-06 # [mrad]
+eps_y = 10.0e-06 # [mrad]
+envelope = DanilovEnvelope20(
+    eps_x=eps_x,
+    eps_y=eps_y,
     mass=mass,
     kin_energy=kin_energy,
     length=bunch_length,
@@ -81,34 +75,26 @@ envelope = DanilovEnvelope22(
 )
 
 # Add envelope solver nodes.
-path_length_min = 0.010
-solver_nodes = set_danilov_envelope_solver_nodes_22(
-    lattice,
-    path_length_max=None,
-    path_length_min=path_length_min,
+solver_nodes = set_danilov_envelope_solver_nodes_20(
+    lattice, 
+    path_length_min=0.010,
     perveance=envelope.perveance,
+    eps_x=envelope.eps_x,
+    eps_y=envelope.eps_y,
 )
 
 # Match to the bare lattice.
-envelope.match_bare(lattice, method="2D", solver_nodes=solver_nodes)
+envelope.match_bare(lattice, solver_nodes=solver_nodes)
 
-# Compute the matched envelope.
-envelope.match(
-    lattice, 
-    solver_nodes=solver_nodes, 
-    method="replace_avg", 
-    tol=1.00e-04, 
-    verbose=2
-)
+# Match with space charge.
+envelope.match_lsq_ramp_intensity(lattice, solver_nodes=solver_nodes, n_steps=15, verbose=2)
 
-# Print the real-space moments after each period.
+# Print the envelope size/slope after each period.
 n_periods = 20
-print("Tracking envelope")
-print("period | <xx>      | <yy>      | <xy>")
-print("--------------------------------------------")
+print("period | cx         | cxp        | cy         | cyp")
+print("-----------------------------------------------------------")
 for index in range(n_periods + 1):
-    Sigma = envelope.cov()
-    Sigma *= 1.00e+06
-    print("{:>6} | {:.6f} | {:.6f} | {:.6f}".format(index, Sigma[0, 0], Sigma[2, 2], Sigma[0, 2]))
-    
+    (cx, cxp, cy, cyp) = 1000.0 * envelope.params
+    fstr = "{:>6} | {:>10.6f} | {:>10.6f} | {:>10.6f} | {:>10.6f}"
+    print(fstr.format(index, cx, cxp, cy, cyp))
     envelope.track(lattice)

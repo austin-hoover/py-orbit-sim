@@ -1,13 +1,13 @@
-"""Test {2, 2} Danilov distribution envelope tracking."""
+"""Test KV distribution ({2, 0} Danilov distribution) envelope tracking."""
 from __future__ import print_function
 
 import numpy as np
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
-from orbit.envelope import DanilovEnvelope22
-from orbit.envelope import DanilovEnvelopeSolverNode22
-from orbit.envelope import set_danilov_envelope_solver_nodes_22
+from orbit.envelope import DanilovEnvelope20
+from orbit.envelope import DanilovEnvelopeSolverNode20
+from orbit.envelope import set_danilov_envelope_solver_nodes_20
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
 from orbit.space_charge.sc2p5d import setSC2p5DAccNodes
@@ -47,7 +47,7 @@ def create_lattice(length=5.0, fill_fac=0.5, kq=0.5):
         node.setUsageFringeFieldOUT(False)
     lattice.initialize()
     
-    max_length = 0.010
+    max_length = 0.01
     for node in lattice.getNodes():
         if node.getLength() > max_length:
             node.setnParts(1 + int(node.getLength() / max_length))
@@ -64,17 +64,15 @@ lattice = create_lattice(lattice_length, lattice_fill_fac, lattice_kq)
 # Set envelope parameters.
 mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
-intensity = 1.00e+15
+intensity = 1.0e+15
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
-mode = 1  # {1, 2} determines sign of vorticity
-eps_l = 20.0e-06  # nonzero intrinsic emittance [m * rad]
-eps_x_frac = 0.5  # eps_x / eps_l
+eps_x = 10.0e-06 # [mrad]
+eps_y = 10.0e-06 # [mrad]
 
-# Create {2, 2} Danilov distribution envelope.
-envelope = DanilovEnvelope22(
-    eps_l=eps_l,
-    mode=mode,
-    eps_x_frac=eps_x_frac,
+# Create envelope matched to bare lattice.
+envelope = DanilovEnvelope20(
+    eps_x=eps_x,
+    eps_y=eps_y,
     mass=mass,
     kin_energy=kin_energy,
     length=bunch_length,
@@ -83,31 +81,35 @@ envelope = DanilovEnvelope22(
 
 # Add envelope solver nodes.
 path_length_min = 0.010
-solver_nodes = set_danilov_envelope_solver_nodes_22(
-    lattice,
-    path_length_max=None,
+env_solver_nodes = set_danilov_envelope_solver_nodes_20(
+    lattice, 
     path_length_min=path_length_min,
     perveance=envelope.perveance,
+    eps_x=envelope.eps_x,
+    eps_y=envelope.eps_y,
 )
-
-# Match to bare lattice.
-envelope.match_bare(lattice, method="2D", solver_nodes=solver_nodes)
 
 # Save initial envelope parameters.
 init_envelope_params = np.copy(envelope.params)
 
 # Print the real-space moments after each period.
 n_periods = 20
-Sigmas_env = []
+sizes_env = []
 print("Tracking envelope")
-print("period | <xx>      | <yy>      | <xy>")
-print("--------------------------------------------")
+print("period | <xx>       | <yy>")
+print("---------------------------------")
 for index in range(n_periods + 1):
-    Sigma = envelope.cov()
-    Sigma *= 1.00e+06
-    Sigmas_env.append(Sigma)    
-    print("{:>6} | {:.6f} | {:.6f} | {:.6f}".format(index, Sigma[0, 0], Sigma[2, 2], Sigma[0, 2]))
+    cx, cxp, cy, cyp = envelope.params
+    sig_x = 0.5 * cx
+    sig_y = 0.5 * cy
+    sig_x = sig_x * 1000.0
+    sig_y = sig_y * 1000.0
+    sizes_env.append([sig_x, sig_y])    
+    print("{:>6} | {:>10.6f} | {:>10.6f}".format(index, sig_x, sig_y))
+    
     envelope.track(lattice)
+    
+    
     
 # PIC tracking
 
@@ -117,12 +119,12 @@ sc_nodes = setSC2p5DAccNodes(lattice, path_length_min, calc)
 
 print("Generating bunch")
 envelope.params = init_envelope_params
-bunch, params_dict = envelope.to_bunch(n_parts=int(1.00e+05), no_env=True)
+bunch, params_dict = envelope.to_bunch(n_parts=int(1e5), no_env=True)
 bunch_twiss_analysis = BunchTwissAnalysis()
 
 print("Tracking bunch")
-print("period | | <xx>      | <yy>      | <xy>       | <xx> diff  | <yy> diff  | <xy> diff ")
-print("------------------------------------------------------------------------------------")
+print("period | x_rms      | y_rms      | x_rms diff | y_rms diff")
+print("-----------------------------------------------------------")
 for index in range(n_periods + 1):
     order = 2
     dispersion_flag = False
@@ -133,16 +135,16 @@ for index in range(n_periods + 1):
         for j in range(i + 1):
             Sigma[i, j] = Sigma[j, i] = bunch_twiss_analysis.getCorrelation(i, j)
     Sigma *= 1.00e+06
-    Sigma_delta = Sigma - Sigmas_env[index]
+    sizes = [np.sqrt(Sigma[0, 0]), np.sqrt(Sigma[2, 2])]
+    sizes_delta = np.subtract(sizes, sizes_env[index])
     print(
-        "{:>6} | {:>10.6f} | {:>10.6f} | {:>10.6f} | {:>10.6f} | {:>10.6f} | {:>10.6f}".format(
+        "{:>6} | {:>10.6f} | {:>10.6f} | {:>10.6f} | {:>10.6f}".format(
             index, 
-            Sigma[0, 0], 
-            Sigma[2, 2], 
-            Sigma[0, 2],
-            Sigma_delta[0, 0], 
-            Sigma_delta[2, 2], 
-            Sigma_delta[0, 2],
+            sizes[0],
+            sizes[1],
+            sizes_delta[0],
+            sizes_delta[1], 
         )
     )
+    
     lattice.trackBunch(bunch, params_dict)
