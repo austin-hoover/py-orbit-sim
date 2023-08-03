@@ -19,6 +19,7 @@ from orbit.teapot import TEAPOT_MATRIX_Lattice_Coupled
 from orbit.utils import consts
 import orbit_mpi
 
+# sys.path.append("../..")
 from pyorbit_sim.utils import ScriptManager
 
 from SNS_RING import SNS_RING
