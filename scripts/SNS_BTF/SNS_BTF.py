@@ -190,7 +190,7 @@ class SNS_BTF:
         self.pipe_diameter = PIPE_DIAMETER
         self.slit_widths = SLIT_WIDTHS
         self.rf_frequency = rf_frequency
-        
+                
     def save_node_positions(self, filename="lattice_nodes.txt"):
         file = open(filename, "w")
         file.write("node position length\n")

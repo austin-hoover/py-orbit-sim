@@ -19,6 +19,9 @@ from orbit.envelope import set_danilov_envelope_solver_nodes_20
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
+from orbit.py_linac.lattice import LinacAccLattice
+from orbit.py_linac.lattice import OverlappingQuadsNode 
+from orbit.py_linac.lattice import Quad
 import orbit_mpi
 
 sys.path.append("../../")
@@ -35,15 +38,15 @@ linac = SNS_BTF(
     coef_filename="data_input/magnets/default_i2gl_coeff.csv",
     rf_frequency=402.5e06,
 )
-linac.init_lattice(
+lattice = linac.init_lattice(
     xml_filename="data_input/xml/btf_lattice_straight.xml",
     sequences=["MEBT1", "MEBT2"],
     max_drift_length=0.010,
 )
-linac.set_linac_tracker(True)
+lattice.setLinacTracker(False)
 
 
-# Load the initial bunch.
+# Initial bunch settings
 filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
     "bunch_RFQ_output_1.00e+05.dat",
@@ -55,6 +58,7 @@ current = 0.040  # [A]
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
 n_parts = int(5.0e04)  # max number of particles
 
+# Load initial bunch.
 bunch = Bunch()
 bunch.mass(mass)
 bunch.charge(charge)
@@ -72,12 +76,14 @@ bunch.macroSize(macro_size)
 # Track the bunch to the matching section.
 print("Tracking to MEBT:VS06")
 index_start = 0
-index_stop = linac.lattice.getNodeIndex(linac.lattice.getNodeForName("MEBT:VS06"))
-linac.lattice.trackBunch(bunch, index_start=index_start, index_stop=index_stop)
+index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:VS06"))
+lattice.trackBunch(bunch, index_start=index_start, index_stop=index_stop)
 
 
-# Matching
+# Envelope matching
 # --------------------------------------------------------------------------------------
+
+print("Computing matched envelope...")
 
 # Generate rms-equivalent KV distribution envelope.
 cov, mean = pyorbit_sim.bunch_utils.get_stats(bunch)
@@ -101,20 +107,12 @@ print("Created envelope")
 print("Envelope twiss:", envelope.twiss())
 print("Bunch twiss:   ", pyorbit_sim.stats.twiss(cov[:4, :4]))
 
-# Use TEAPOT tracking module.
-linac.set_linac_tracker(False)
-
-# Turn off nonlinear fields.
-for node in linac.lattice.getNodes():
-    try:
-        node.setUsageFringeFieldIN(False)
-        node.setUsageFringeFieldOUT(False)
-    except:
-        pass
+# Save envelope parameters.
+envelope_params_init = np.copy(envelope.params)
 
 # Add envelope solver nodes to the lattice.
 solver_nodes = set_danilov_envelope_solver_nodes_20(
-    linac.lattice,
+    lattice,
     path_length_min=0.001,
     path_length_max=0.005,
     perveance=envelope.perveance,
@@ -122,17 +120,17 @@ solver_nodes = set_danilov_envelope_solver_nodes_20(
     eps_y=envelope.eps_y,
 )
 
-
-# Save initial envelope parameters.
-envelope_params_init = np.copy(envelope.params)
+# Turn off nonlinear quadrupole fringe fields.
+for node in lattice.getNodes():
+    try:
+        node.setUsageFringeFieldIN(False)
+        node.setUsageFringeFieldOUT(False)
+    except:
+        pass
 
 # Update start/stop node indices to beginning/end of FODO line.
-print("Computing matched envelope...")
 index_start = index_stop + 1
-index_stop = linac.lattice.getNodeIndex(linac.lattice.getNodeForName("MEBT:QH30"))
-
-
-# Create optics controller to vary matching quads.
+index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 
 class OpticsController:
@@ -140,7 +138,6 @@ class OpticsController:
         self.lattice = lattice
         self.quad_names = quad_names
         self.quads = [lattice.getNodeForName(name) for name in quad_names]
-        self.counter = 0
 
     def get_quad_strengths(self):
         return [quad.getParam("dB/dr") for quad in self.quads]
@@ -148,21 +145,17 @@ class OpticsController:
     def set_quad_strengths(self, x):
         for i, quad in enumerate(self.quads):
             quad.setParam("dB/dr", x[i])
-        self.counter += 1
 
-    def get_quad_bounds(self):
+    def get_quad_bounds(self, factor=0.5):
         bounds = []
         for kq in self.get_quad_strengths():
-            lb = 0.5 * kq
-            ub = 1.5 * kq  # estimate as twice current value
+            lb = (1.0 - factor) * kq
+            ub = (1.0 + factor) * kq
             if ub < lb:
-                lb, ub = ub, lb
+                (lb, ub) = (ub, lb)
             bounds.append([lb, ub])
         return np.array(bounds).T
-
-
-# We will watch observe the beam size at each FODO quad.
-
+    
 
 class Monitor:
     def __init__(self, node_names):
@@ -170,9 +163,10 @@ class Monitor:
         self.history = []
 
     def evaluate(self, bunch):
-        cx = bunch.x(0)
-        cy = bunch.y(0)
-        return 1.00e06 * cx * cy
+        cx = 1000.0 * bunch.x(0)
+        cy = 1000.0 * bunch.y(0)
+        metric = cx
+        return metric
 
     def action(self, params_dict):
         bunch = params_dict["bunch"]
@@ -180,12 +174,7 @@ class Monitor:
         position = params_dict["path_length"]
         if node.getName() in self.node_names:
             metric = self.evaluate(bunch)
-            self.history.append(metric)
-            # print(
-            #     "node={}, s={:.3f}, cx={:.3f}, cy={:.3f}".format(
-            #         node.getName(), position, 1000.0 * bunch.x(0), 1000.0 * bunch.y(0),
-            #     )
-            # )
+            self.history.append(metric)            
             
             
 matching_quad_names = [
@@ -194,67 +183,80 @@ matching_quad_names = [
     "MEBT:QV09",
     "MEBT:QH10",
 ]
-optics_controller = OpticsController(lattice=linac.lattice, quad_names=matching_quad_names)
+optics_controller = OpticsController(lattice, matching_quad_names)
         
 
-##### Create an objective function
-# fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
 fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
 
 
-class Dummy:
-    def __init__(self):
+class Optimizer:
+    def __init__(self, lattice=None, optics_controller=None, save_freq=None):
+        self.lattice = lattice
+        self.optics_controller = optics_controller
+        self.monitors = [Monitor(fodo_quad_names[i::2]) for i in range(2)]
         self.count = 0
         self.ymax = None
+        self.save_freq = save_freq
+        
+    def save_quad_strengths(self, filename=None):
+        file = open(filename, "w")
+        file.write("quad_name dB/dr\n")
+        for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
+            file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
+        file.close()
+        
+    def plot(self, filename=None):
+        yvals = []
+        for y1, y2 in zip(self.monitors[0].history, self.monitors[1].history):
+            yvals.extend([y1, y2])
+            
+        fig, ax = plt.subplots()
+        ax.plot(yvals, marker=".", lw=1.5, color="black")
+        if self.count == 0:
+            self.ymax = ax.get_ylim()[1]
+        ax.set_ylim((0.0, self.ymax))
+        plt.savefig(filename)
+        plt.close()
+        
+    def save_data(self):
+        filename = "./data_output/metric_{:06.0f}.png".format(self.count)
+        self.plot(filename)
 
+        filename = "./data_output/quad_strengths_{:06.0f}.dat".format(self.count)
+        self.save_quad_strengths(filename)
+                                    
     def objective(self, x):    
-        optics_controller.set_quad_strengths(x)
+        self.optics_controller.set_quad_strengths(x)
 
-        monitors = []
         action_container = AccActionsContainer()
-        for i in range(2):
-            monitor = Monitor(fodo_quad_names[i::2])
-            action_container.addAction(monitor.action, AccActionsContainer.EXIT)
-            monitors.append(monitor)
+        for monitor in self.monitors:
+            action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
 
         envelope.set_params(envelope_params_init)
         _bunch, _params_dict = envelope.to_bunch()
-        linac.lattice.trackBunch(
+        
+        self.lattice.trackBunch(
             _bunch,
+            paramsDict=_params_dict,
             actionContainer=action_container,
             index_start=index_start,
             index_stop=index_stop,
-            paramsDict=_params_dict,
         )
+        
+        if self.save_freq and (self.count % self.save_freq == 0):
+            self.save_data()
 
         cost = 0.0
-        for monitor in monitors:
+        for monitor in self.monitors:
             cost += np.var(monitor.history)
-
-        if self.count % 1000 == 0:
-            fig, ax = plt.subplots()
-            _hist = []
-            for h1, h2 in zip(monitors[0].history, monitors[1].history):
-                _hist.extend([h1, h2])
-            if self.count == 0:
-                self.ymax = np.max(_hist)
-            for monitor in monitors:
-                ax.plot(np.arange(len(_hist)), _hist, marker=".", lw=1.5, color="black")
-            if self.count == 0:
-                self.ymax = ax.get_ylim()[1]
-            ax.set_ylim((0.0, self.ymax))
-            filename = "./data_output/envelope_{:06.0f}".format(self.count)
-            plt.savefig(filename)
-            plt.close()
+            monitor.history = []
+            
         self.count += 1
-
         return cost
 
     
-dummy = Dummy()
-objective = dummy.objective
-
-
+optimizer = Optimizer(lattice, optics_controller, save_freq=50)
+objective = optimizer.objective
 x0 = optics_controller.get_quad_strengths()
 bounds = optics_controller.get_quad_bounds()
 result = scipy.optimize.least_squares(
@@ -262,5 +264,6 @@ result = scipy.optimize.least_squares(
     x0,
     bounds=bounds,
     verbose=2,
-    max_nfev=50000,
+    max_nfev=5000,
 )
+optimizer.save_data()
