@@ -1,6 +1,7 @@
 """Match the beam to the FODO line."""
 from __future__ import print_function
 import os
+from pprint import pprint
 import sys
 
 import matplotlib
@@ -8,6 +9,7 @@ import matplotlib
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scipy.optimize
 
 
@@ -20,7 +22,7 @@ from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
 from orbit.py_linac.lattice import LinacAccLattice
-from orbit.py_linac.lattice import OverlappingQuadsNode 
+from orbit.py_linac.lattice import OverlappingQuadsNode
 from orbit.py_linac.lattice import Quad
 import orbit_mpi
 
@@ -44,7 +46,7 @@ lattice = linac.init_lattice(
     max_drift_length=0.010,
 )
 lattice.setLinacTracker(False)
-
+node_positions_dict = lattice.getNodePositionsDict()
 
 # Initial bunch settings
 filename = os.path.join(
@@ -137,16 +139,17 @@ class OpticsController:
     def __init__(self, lattice=None, quad_names=None):
         self.lattice = lattice
         self.quad_names = quad_names
-        self.quads = [lattice.getNodeForName(name) for name in quad_names]
+        self.quad_nodes = [lattice.getNodeForName(name) for name in quad_names]
 
     def get_quad_strengths(self):
-        return [quad.getParam("dB/dr") for quad in self.quads]
+        return [node.getParam("dB/dr") for node in self.quad_nodes]
 
     def set_quad_strengths(self, x):
-        for i, quad in enumerate(self.quads):
-            quad.setParam("dB/dr", x[i])
+        for i, node in enumerate(self.quad_nodes):
+            node.setParam("dB/dr", x[i])
 
     def get_quad_bounds(self, factor=0.5):
+        """Return (lower_bounds, upper_bounds) for quad strengths."""
         bounds = []
         for kq in self.get_quad_strengths():
             lb = (1.0 - factor) * kq
@@ -156,27 +159,127 @@ class OpticsController:
             bounds.append([lb, ub])
         return np.array(bounds).T
     
-
+        
 class Monitor:
-    def __init__(self, node_names):
+    def __init__(self, node_names=None, position_offset=0.0):
         self.node_names = node_names
+        self.position_offset = position_offset
         self.history = []
 
-    def evaluate(self, bunch):
-        cx = 1000.0 * bunch.x(0)
-        cy = 1000.0 * bunch.y(0)
-        metric = cx
-        return metric
+    def reset(self):
+        self.history = []
 
     def action(self, params_dict):
         bunch = params_dict["bunch"]
         node = params_dict["node"]
-        position = params_dict["path_length"]
-        if node.getName() in self.node_names:
-            metric = self.evaluate(bunch)
-            self.history.append(metric)            
+        position = params_dict["path_length"] + self.position_offset
+        if self.node_names and (node.getName() not in self.node_names):
+            return
+        cx = 1000.0 * bunch.x(0)
+        cy = 1000.0 * bunch.y(0)
+        self.history.append([position, cx, cy])
+        
+        
+class Optimizer:
+    def __init__(
+        self,
+        lattice=None,
+        optics_controller=None,
+        fodo_quad_names=None,
+        save_freq=None,
+        index_start=0,
+        index_stop=-1,
+    ):
+        self.lattice = lattice
+        self.optics_controller = optics_controller
+        self.fodo_quad_names = fodo_quad_names
+        self.count = 0
+        self.ymax = None
+        self.save_freq = save_freq
+        self.index_start = index_start
+        self.index_stop = index_stop
+        self.position_offset, _ = node_positions_dict[lattice.getNodes()[index_start]]
+
+    def track_envelope(self, dense=False):
+        """Return (x_rms, y_rms) at each FODO quad."""
+        envelope.set_params(envelope_params_init)
+        _bunch, _params_dict = envelope.to_bunch()
+        
+        monitor_node_names = None if dense else fodo_quad_names
+        monitor = Monitor(node_names=monitor_node_names, position_offset=self.position_offset)
+        action_container = AccActionsContainer()
+        action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
+        
+        self.lattice.trackBunch(
+            _bunch,
+            paramsDict=_params_dict,
+            actionContainer=action_container,
+            index_start=self.index_start,
+            index_stop=self.index_stop,
+        )
+        return np.array(monitor.history)
+
+    def save_data(self):
+        # Save quadrupole strengths.
+        filename = "./data_output/quad_strengths_{:06.0f}.dat".format(self.count)
+        file = open(filename, "w")
+        file.write("quad_name dB/dr\n")
+        for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
+            file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
+        file.close()
+        
+        # Save envelope trajectory.
+        history = self.track_envelope(dense=True)       
+        history = pd.DataFrame(history, columns=["position", "x_rms", "y_rms"])
+        history["x_rms"] = 0.5 * history["x_rms"]
+        history["y_rms"] = 0.5 * history["y_rms"]
+        filename = "./data_output/envelope_trajectory_{:06.0f}.dat".format(self.count)
+        history.to_csv(filename, sep=" ")
+        
+        # Plot beam size evolution.
+        positions = history.loc[:, "position"].values
+        x_rms = history.loc[:, "x_rms"].values
+        y_rms = history.loc[:, "y_rms"].values
+        
+        fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)
+        kws = dict()
+        ax.plot(positions, x_rms, label="x", **kws)
+        ax.plot(positions, y_rms, label="y", **kws)
+        if self.count == 0:
+            self.ymax = ax.get_ylim()[1]
+        ax.set_ylim((0.0, self.ymax))
+        
+        node_start = self.lattice.getNodes()[self.index_start]
+        for node in optics_controller.quad_nodes:
+            start, stop = node_positions_dict[node]
+            ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")
+          
+        ax.set_xlabel("Position [m]")
+        ax.set_ylabel("RMS size [mm]")
+        ax.legend(loc="upper right")
+        filename = "./data_output/envelope_{:06.0f}.png".format(self.count)
+        plt.savefig(filename, dpi=100)
+        plt.close()
+
+    def objective(self, x):
+        self.optics_controller.set_quad_strengths(x)
+        history = self.track_envelope(dense=False)
+        
+        cost = 0.0        
+        cx = history[:, 1]
+        cy = history[:, 2]
+        for i in range(2):
+            cost += np.var(cx[i::2])
+            cost += np.var(cy[i::2])
+
+        if self.save_freq and (self.count % self.save_freq == 0):
+            self.save_data()
             
-            
+        self.count += 1
+        return cost
+
+
+fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
 matching_quad_names = [
     "MEBT:QV07",
     "MEBT:QH08",
@@ -184,79 +287,17 @@ matching_quad_names = [
     "MEBT:QH10",
 ]
 optics_controller = OpticsController(lattice, matching_quad_names)
-        
 
-fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
-
-
-class Optimizer:
-    def __init__(self, lattice=None, optics_controller=None, save_freq=None):
-        self.lattice = lattice
-        self.optics_controller = optics_controller
-        self.monitors = [Monitor(fodo_quad_names[i::2]) for i in range(2)]
-        self.count = 0
-        self.ymax = None
-        self.save_freq = save_freq
-        
-    def save_quad_strengths(self, filename=None):
-        file = open(filename, "w")
-        file.write("quad_name dB/dr\n")
-        for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
-            file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
-        file.close()
-        
-    def plot(self, filename=None):
-        yvals = []
-        for y1, y2 in zip(self.monitors[0].history, self.monitors[1].history):
-            yvals.extend([y1, y2])
-            
-        fig, ax = plt.subplots()
-        ax.plot(yvals, marker=".", lw=1.5, color="black")
-        if self.count == 0:
-            self.ymax = ax.get_ylim()[1]
-        ax.set_ylim((0.0, self.ymax))
-        plt.savefig(filename)
-        plt.close()
-        
-    def save_data(self):
-        filename = "./data_output/metric_{:06.0f}.png".format(self.count)
-        self.plot(filename)
-
-        filename = "./data_output/quad_strengths_{:06.0f}.dat".format(self.count)
-        self.save_quad_strengths(filename)
-                                    
-    def objective(self, x):    
-        self.optics_controller.set_quad_strengths(x)
-
-        action_container = AccActionsContainer()
-        for monitor in self.monitors:
-            action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
-
-        envelope.set_params(envelope_params_init)
-        _bunch, _params_dict = envelope.to_bunch()
-        
-        self.lattice.trackBunch(
-            _bunch,
-            paramsDict=_params_dict,
-            actionContainer=action_container,
-            index_start=index_start,
-            index_stop=index_stop,
-        )
-        
-        if self.save_freq and (self.count % self.save_freq == 0):
-            self.save_data()
-
-        cost = 0.0
-        for monitor in self.monitors:
-            cost += np.var(monitor.history)
-            monitor.history = []
-            
-        self.count += 1
-        return cost
-
-    
-optimizer = Optimizer(lattice, optics_controller, save_freq=50)
+optimizer = Optimizer(
+    lattice, 
+    optics_controller=optics_controller, 
+    fodo_quad_names=fodo_quad_names, 
+    save_freq=300,
+    index_start=index_start,
+    index_stop=index_stop,
+)
 objective = optimizer.objective
+
 x0 = optics_controller.get_quad_strengths()
 bounds = optics_controller.get_quad_bounds()
 result = scipy.optimize.least_squares(
@@ -264,6 +305,6 @@ result = scipy.optimize.least_squares(
     x0,
     bounds=bounds,
     verbose=2,
-    max_nfev=5000,
+    max_nfev=10000,
 )
 optimizer.save_data()
