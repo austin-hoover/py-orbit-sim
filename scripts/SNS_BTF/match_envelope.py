@@ -186,11 +186,11 @@ class OpticsController:
         bounds = []
         for kq in self.get_quad_strengths():
             sign = np.sign(kq)
-            lb = (1.0 - factor) * np.abs(kq)
+            lb = 0.0
             ub = (1.0 + factor) * np.abs(kq)
-            lb = max(0.0, lb)
             if sign < 0:
-                (lb, ub) = (-ub, -lb)
+                lb = -ub
+                ub = 0.0
             bounds.append([lb, ub])
         return np.array(bounds).T
     
