@@ -176,18 +176,16 @@ class OpticsController:
         for i, node in enumerate(self.quad_nodes):
             node.setParam("dB/dr", x[i])
 
-    def get_quad_bounds(self, factor=0.5):
+    def get_quad_bounds(self, scale=0.5):
         """Return (lower_bounds, upper_bounds) for quad strengths.
         
-        `factor` determines boundaries relative to current set point.
-        So if factor=0.3, then lf=0.7, ub=1.3 as a fraction of the 
-        current set point.
+        `scale` determines the max strength relative to current set point.
         """
         bounds = []
         for kq in self.get_quad_strengths():
             sign = np.sign(kq)
             lb = 0.0
-            ub = (1.0 + factor) * np.abs(kq)
+            ub = scale * np.abs(kq)
             if sign < 0:
                 lb = -ub
                 ub = 0.0
@@ -342,7 +340,7 @@ optimizer = Optimizer(
 )
 objective = optimizer.objective
 x0 = optics_controller.get_quad_strengths()
-bounds = optics_controller.get_quad_bounds(factor=0.5)
+bounds = optics_controller.get_quad_bounds(scale=1.1)
 
 print("x0 =", x0)
 print("lb =", bounds[0])
