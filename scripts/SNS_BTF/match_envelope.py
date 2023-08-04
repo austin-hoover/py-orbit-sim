@@ -1,11 +1,12 @@
 """Match the beam to the FODO line."""
 from __future__ import print_function
 import os
+import pathlib
 from pprint import pprint
 import sys
+import time
 
 import matplotlib
-
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,7 +27,6 @@ from orbit.py_linac.lattice import OverlappingQuadsNode
 from orbit.py_linac.lattice import Quad
 import orbit_mpi
 
-sys.path.append("../../")
 import pyorbit_sim
 
 from SNS_BTF import SNS_BTF
@@ -35,20 +35,48 @@ from SNS_BTF import SNS_BTF
 # Setup
 # --------------------------------------------------------------------------------------
 
-# Create the lattice.
+save = True
+
+# Set up directories.
+output_dir = "/home/46h/sim_data/"  # parent directory for output
+file_dir = os.path.dirname(os.path.realpath(__file__))  # directory of this file
+input_dir = os.path.join(file_dir, "data_input")  # lattice input data
+
+# Create output directory and save script info.
+man = pyorbit_sim.utils.ScriptManager(
+    datadir=output_dir,
+    path=pathlib.Path(__file__), 
+    datestamp=time.strftime("%Y-%m-%d"),
+    timestamp=time.strftime("%y%m%d%H%M%S"),
+)
+if save:
+    man.make_outdir()
+    man.save_info()
+    man.save_script_copy()
+    pprint(man.get_info())
+    
+    
+# Transport to FODO line.
+# --------------------------------------------------------------------------------------
+
+# Create the BTF lattice.
 linac = SNS_BTF(
-    coef_filename="data_input/magnets/default_i2gl_coeff.csv",
+    coef_filename=os.path.join(input_dir, "magnets/default_i2gl_coeff.csv"),
     rf_frequency=402.5e06,
 )
 lattice = linac.init_lattice(
-    xml_filename="data_input/xml/btf_lattice_straight.xml",
+    xml_filename=os.path.join(input_dir, "xml/btf_lattice_straight.xml"),
     sequences=["MEBT1", "MEBT2"],
     max_drift_length=0.010,
 )
-lattice.setLinacTracker(False)
+lattice.setLinacTracker(True)
 node_positions_dict = lattice.getNodePositionsDict()
 
-# Initial bunch settings
+
+# Load the initial bunch.
+#
+# We do not need very many particles because we just need the correct
+# phase space covariance matrix.
 filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
     "bunch_RFQ_output_1.00e+05.dat",
@@ -58,17 +86,13 @@ charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.040  # [A]
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
-n_parts = int(5.0e04)  # max number of particles
+n_parts = int(1.00e+05)  # max number of particles (just need correct rms)
 
-# Load initial bunch.
 bunch = Bunch()
 bunch.mass(mass)
 bunch.charge(charge)
 bunch.getSyncParticle().kinEnergy(kin_energy)
-bunch = pyorbit_sim.bunch_utils.load(
-    filename=filename,
-    bunch=bunch,
-)
+bunch = pyorbit_sim.bunch_utils.load(filename=filename, bunch=bunch)
 bunch = pyorbit_sim.bunch_utils.downsample(bunch, n=n_parts, verbose=True)
 bunch = pyorbit_sim.bunch_utils.set_centroid(bunch, centroid=0.0)
 bunch_size_global = bunch.getSizeGlobal()
@@ -105,7 +129,7 @@ envelope = DanilovEnvelope20(
     intensity=intensity,
     params=[cx, cxp, cy, cyp],
 )
-print("Created envelope")
+print("Created rms-equivalent KV distribution envelope")
 print("Envelope twiss:", envelope.twiss())
 print("Bunch twiss:   ", pyorbit_sim.stats.twiss(cov[:4, :4]))
 
@@ -122,20 +146,24 @@ solver_nodes = set_danilov_envelope_solver_nodes_20(
     eps_y=envelope.eps_y,
 )
 
-# Turn off nonlinear quadrupole fringe fields.
+# Turn off nonlinear quadrupole fringe fields. 
 for node in lattice.getNodes():
     try:
         node.setUsageFringeFieldIN(False)
         node.setUsageFringeFieldOUT(False)
     except:
         pass
+    
+# Use TEAPOT tracking module.
+lattice.setLinacTracker(False)
 
-# Update start/stop node indices to beginning/end of FODO line.
+# Update start/stop node indices.
 index_start = index_stop + 1
 index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 
 class OpticsController:
+    """Sets quadrupole strengths."""
     def __init__(self, lattice=None, quad_names=None):
         self.lattice = lattice
         self.quad_names = quad_names
@@ -149,30 +177,38 @@ class OpticsController:
             node.setParam("dB/dr", x[i])
 
     def get_quad_bounds(self, factor=0.5):
-        """Return (lower_bounds, upper_bounds) for quad strengths."""
+        """Return (lower_bounds, upper_bounds) for quad strengths.
+        
+        `factor` determines boundaries relative to current set point.
+        So if factor=0.3, then lf=0.7, ub=1.3 as a fraction of the 
+        current set point.
+        """
         bounds = []
         for kq in self.get_quad_strengths():
-            lb = (1.0 - factor) * kq
-            ub = (1.0 + factor) * kq
-            if ub < lb:
-                (lb, ub) = (ub, lb)
+            sign = np.sign(kq)
+            lb = (1.0 - factor) * np.abs(kq)
+            ub = (1.0 + factor) * np.abs(kq)
+            lb = max(0.0, lb)
+            if sign < 0:
+                (lb, ub) = (-ub, -lb)
             bounds.append([lb, ub])
         return np.array(bounds).T
     
         
 class Monitor:
+    """Tracks the envelope trajectory."""
     def __init__(self, node_names=None, position_offset=0.0):
+        """
+        node_names : list
+            List of node names to observe. If None, use every step.
+        """
         self.node_names = node_names
-        self.position_offset = position_offset
-        self.history = []
-
-    def reset(self):
         self.history = []
 
     def action(self, params_dict):
         bunch = params_dict["bunch"]
         node = params_dict["node"]
-        position = params_dict["path_length"] + self.position_offset
+        position = params_dict["path_length"]
         if self.node_names and (node.getName() not in self.node_names):
             return
         cx = 1000.0 * bunch.x(0)
@@ -181,6 +217,7 @@ class Monitor:
         
         
 class Optimizer:
+    """Matches the envelope to the FODO line by varying matching quadsd."""
     def __init__(
         self,
         lattice=None,
@@ -221,7 +258,8 @@ class Optimizer:
 
     def save_data(self):
         # Save quadrupole strengths.
-        filename = "./data_output/quad_strengths_{:06.0f}.dat".format(self.count)
+        filename = "quad_strengths_{:06.0f}.dat".format(self.count)
+        filename = man.get_filename(filename)
         file = open(filename, "w")
         file.write("quad_name dB/dr\n")
         for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
@@ -231,9 +269,11 @@ class Optimizer:
         # Save envelope trajectory.
         history = self.track_envelope(dense=True)       
         history = pd.DataFrame(history, columns=["position", "x_rms", "y_rms"])
+        history["position"] = history["position"] + self.position_offset
         history["x_rms"] = 0.5 * history["x_rms"]
         history["y_rms"] = 0.5 * history["y_rms"]
-        filename = "./data_output/envelope_trajectory_{:06.0f}.dat".format(self.count)
+        filename = "envelope_trajectory_{:06.0f}.dat".format(self.count)
+        filename = man.get_filename(filename)
         history.to_csv(filename, sep=" ")
         
         # Plot beam size evolution.
@@ -257,11 +297,16 @@ class Optimizer:
         ax.set_xlabel("Position [m]")
         ax.set_ylabel("RMS size [mm]")
         ax.legend(loc="upper right")
-        filename = "./data_output/envelope_{:06.0f}.png".format(self.count)
+        filename = "envelope_{:06.0f}.png".format(self.count)
+        filename = man.get_filename(filename)
         plt.savefig(filename, dpi=100)
         plt.close()
 
     def objective(self, x):
+        """Return variance of period-by-period beam sizes.
+        
+        Also save data.
+        """
         self.optics_controller.set_quad_strengths(x)
         history = self.track_envelope(dense=False)
         
@@ -287,7 +332,6 @@ matching_quad_names = [
     "MEBT:QH10",
 ]
 optics_controller = OpticsController(lattice, matching_quad_names)
-
 optimizer = Optimizer(
     lattice, 
     optics_controller=optics_controller, 
@@ -297,9 +341,13 @@ optimizer = Optimizer(
     index_stop=index_stop,
 )
 objective = optimizer.objective
-
 x0 = optics_controller.get_quad_strengths()
-bounds = optics_controller.get_quad_bounds()
+bounds = optics_controller.get_quad_bounds(factor=0.5)
+
+print("x0 =", x0)
+print("lb =", bounds[0])
+print("ub =", bounds[1])
+
 result = scipy.optimize.least_squares(
     objective,
     x0,
@@ -308,3 +356,6 @@ result = scipy.optimize.least_squares(
     max_nfev=10000,
 )
 optimizer.save_data()
+
+
+print("timestamp = {}".format(man.timestamp))
