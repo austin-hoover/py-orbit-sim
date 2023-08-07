@@ -23,6 +23,8 @@ from orbit.py_linac.lattice import LinacAccLattice
 from orbit.py_linac.lattice import OverlappingQuadsNode
 from orbit.py_linac.lattice import Quad
 import orbit_mpi
+from orbit_mpi import mpi_datatype
+from orbit_mpi import mpi_op
 
 from SNS_BTF import SNS_BTF
 
@@ -106,7 +108,7 @@ filename = os.path.join(
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.040  # [A]
+current = 0.042  # [A]
 n_parts = int(1.00e+04)  # max number of particles
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
 
@@ -160,9 +162,7 @@ class Monitor:
         sig_yy = twiss_analysis.getCorrelation(2, 2)
         x_rms = 1000.0 * np.sqrt(sig_xx)
         y_rms = 1000.0 * np.sqrt(sig_yy)
-        
         n_parts = bunch.getSizeGlobal()
-        
         if _mpi_rank == 0 and self.verbose:
             print("s={:<7.3f} xrms={:<7.3f} yrms={:<7.3f} nparts={}".format(position, x_rms, y_rms, n_parts))
             
@@ -205,17 +205,17 @@ class OpticsController:
         
         `scale` determines the max strength relative to current set point.
         """
-        bounds = []
+        lb, ub = [], []
         for kq in self.get_quad_strengths():
             sign = np.sign(kq)
-            lb = 0.0
-            ub = scale * np.abs(kq)
+            lo = 0.0
+            hi = scale * np.abs(kq)
             if sign < 0:
-                lb = -ub
-                ub = 0.0
-            bounds.append([lb, ub])
-        return np.array(bounds).T
-    
+                lo = -hi
+                hi = 0.0
+            lb.append(lo)
+            ub.append(hi)
+        return (lb, ub)
     
 class Monitor:
     """Tracks the rms beam envelope oscillations."""
@@ -242,103 +242,10 @@ class Monitor:
         x_rms = 1000.0 * np.sqrt(sig_xx)
         y_rms = 1000.0 * np.sqrt(sig_yy)
         self.history.append([position, x_rms, y_rms])
-        if self.verbose:
-            print("xrms={:<7.3f} yrms={:<7.3f} node={}".format(x_rms, y_rms, node.getName()))
+        if _mpi_rank == 0:
+            if self.verbose:
+                print("xrms={:<7.3f} yrms={:<7.3f} node={}".format(x_rms, y_rms, node.getName()))
         
-        
-class Optimizer:
-    """Matches the beam to the FODO channel."""
-    def __init__(
-        self,
-        lattice=None,
-        optics_controller=None,
-        fodo_quad_names=None,
-        index_start=0,
-        index_stop=-1,
-        save_freq=None,
-        verbose=False,
-    ):
-        self.lattice = lattice
-        self.optics_controller = optics_controller
-        self.fodo_quad_names = fodo_quad_names
-        self.count = 0
-        self.index_start = index_start
-        self.index_stop = index_stop
-        self.position_offset, _ = lattice.getNodePositionsDict()[lattice.getNodes()[index_start]]
-        self.save_freq = save_freq
-        self.verbose = verbose
-
-    def track(self, dense=False, verbose=False):
-        """Return (x_rms, y_rms) at each FODO quad."""
-        bunch_in = Bunch()
-        bunch.copyBunchTo(bunch_in)
-        
-        monitor_node_names = None if dense else fodo_quad_names
-        monitor = Monitor(
-            node_names=monitor_node_names, 
-            position_offset=self.position_offset, 
-            verbose=verbose
-        )
-        action_container = AccActionsContainer()
-        action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
-        self.lattice.trackBunch(
-            bunch_in,
-            actionContainer=action_container,
-            index_start=self.index_start,
-            index_stop=self.index_stop,
-        )
-        return np.array(monitor.history)
-    
-    def save_data(self):
-        history = self.track(dense=True, verbose=False)
-        positions, x_rms, y_rms = history.T
-        
-        fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)
-        kws = dict()
-        ax.plot(positions, x_rms, label="x", **kws)
-        ax.plot(positions, y_rms, label="y", **kws)
-        if self.count == 0:
-            self.ymax = ax.get_ylim()[1]
-        ax.set_ylim((0.0, self.ymax))
-
-        node_start = self.lattice.getNodes()[self.index_start]
-        for node in optics_controller.quad_nodes:
-            start, stop = self.lattice.getNodePositionsDict()[node]
-            ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")
-
-        ax.set_xlabel("Position [m]")
-        ax.set_ylabel("RMS size [mm]")
-        ax.legend(loc="upper right")
-        filename = "envelope_{:06.0f}.png".format(self.count)
-        filename = man.get_filename(filename)
-        plt.savefig(filename, dpi=100)
-        plt.close()
-
-    def objective(self, x):
-        """Return variance of period-by-period beam sizes.
-        
-        Also save data.
-        """
-        self.optics_controller.set_quad_strengths(x)
-        history = self.track(dense=False, verbose=self.verbose)
-        positions = history[:, 0]
-        x_rms = history[:, 1]
-        y_rms = history[:, 2]
-        
-        cost = 0.0  
-        for i in range(2):            
-            cost += np.var(x_rms[i::2])
-            cost += np.var(y_rms[i::2])
-        
-        if self.save_freq and (self.count % self.save_freq == 0):
-            self.save_data()
-        
-        self.count += 1
-        if self.verbose:
-            print("cost={}".format(cost))
-            print()
-        return cost
-
 
 # Create a new lattice with uniform ellipsoid space charge nodes (we cannot
 # remove the original space charge nodes, and we cannot add new child nodes
@@ -358,8 +265,7 @@ lattice = linac.lattice
 
 # Update start/stop node indices.
 index_start = lattice.getNodeIndex(lattice.getNodeForName("MEBT:VS06")) + 1
-# index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
-index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:FQ21"))
+index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 # Set up optimizer.
 fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
@@ -370,34 +276,65 @@ matching_quad_names = [
     "MEBT:QH10",
 ]
 optics_controller = OpticsController(lattice, matching_quad_names)
-optimizer = Optimizer(
-    lattice, 
-    optics_controller=optics_controller, 
-    fodo_quad_names=fodo_quad_names, 
-    index_start=index_start,
-    index_stop=index_stop,
-    save_freq=5,
-    verbose=False
-)
 
-# Match the beam.
-objective = optimizer.objective
+
+def objective(x, stop):
+    """Return variance of period-by-period beam sizes."""
+    stop = orbit_mpi.MPI_Bcast(stop, mpi_datatype.MPI_INT, 0, _mpi_comm)    
+    cost = 0.0
+    if stop == 0:
+        x = orbit_mpi.MPI_Bcast(x.tolist(), mpi_datatype.MPI_DOUBLE, 0, _mpi_comm) 
+        
+        optics_controller.set_quad_strengths(x)
+
+        bunch_in = Bunch()
+        bunch.copyBunchTo(bunch_in)
+        monitor = Monitor(
+            node_names=fodo_quad_names, 
+            verbose=False,
+        )
+        action_container = AccActionsContainer()
+        action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
+        lattice.trackBunch(
+            bunch_in,
+            actionContainer=action_container,
+            index_start=index_start,
+            index_stop=index_stop,
+        )
+        
+        history = np.array(monitor.history)
+        positions, x_rms, y_rms = history.T
+
+        cost_ = 0.0
+        if _mpi_rank == 0:
+            for i in range(2):
+                cost_ += np.var(x_rms[i::2])
+                cost_ += np.var(y_rms[i::2])
+                
+        cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
+        if _mpi_rank == 0:
+            # print("cost={}".format(cost))
+            pass
+    return cost
+
+
 x0 = optics_controller.get_quad_strengths()
-(lb, ub) = optics_controller.get_quad_bounds(scale=1.1)
+x0 = np.array(x0)
+lb, ub = optics_controller.get_quad_bounds()
+if _mpi_rank == 0:
+    stop = 0
+    x = scipy.optimize.minimize(
+        objective, 
+        x0,
+        method="trust-constr", 
+        args=(stop), 
+        bounds=scipy.optimize.Bounds(lb, ub),
+        options=dict(verbose=2)
+    )
+    stop = 1
+    objective(x0, stop)
 
-result = scipy.optimize.least_squares(
-    objective,
-    x0,
-    bounds=(lb, ub),
-    xtol=1.00e-12,
-    ftol=1.00e-12,
-    gtol=1.00e-12,
-    verbose=2,
-)
-
-# result = scipy.optimize.minimize(
-#     objective,
-#     x0,
-#     method="trust-constr",
-#     bounds=scipy.optimize.Bounds(lb, ub),
-# )
+else:
+    stop = 0
+    while stop == 0:
+        objective(x0, stop)
