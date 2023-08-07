@@ -190,7 +190,7 @@ class SNS_BTF:
         self.pipe_diameter = PIPE_DIAMETER
         self.slit_widths = SLIT_WIDTHS
         self.rf_frequency = rf_frequency
-        
+                
     def save_node_positions(self, filename="lattice_nodes.txt"):
         file = open(filename, "w")
         file.write("node position length\n")
@@ -336,6 +336,21 @@ class SNS_BTF:
             setpoints = quad_setpoints_from_mstate(filename)
         for quad_name, value in setpoints.items():
             self.update_quad(quad_name, value, value_type=value_type, verbose=verbose)
+            
+    def update_quads_from_file(self, filename=None, verbose=True):
+        """Update quadrupole dB/dr from file.
+        
+        Each line gives "quad_name dB/dr". The first line is skipped.
+        """
+        file = open(filename)
+        for i, line in enumerate(file):
+            if i > 0:
+                name, value = line.rstrip().split(" ")
+                value = float(value)
+                node = self.lattice.getNodeForName(name)
+                node.setParam("dB/dr", value)
+                if verbose:
+                    print("Updated {} dB/dr={}".format(node.getName(), value))
 
     def update_pmq(self, quad_name=None, value=None, field="gradient"):
         if quad_name not in self.quads:

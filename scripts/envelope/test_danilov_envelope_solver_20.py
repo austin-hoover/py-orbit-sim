@@ -66,13 +66,13 @@ mass = consts.mass_proton  # [GeV/c^2]
 kin_energy = 1.0  # [GeV]
 intensity = 1.0e+15
 bunch_length = (45.0 / 64.0) * 248.0  # [m]
-eps_x = 10.0e-06  # [mrad]
-eps_y = 10.0e-06  # [mrad]
+eps_x_rms = 10.0e-06  # [mrad]
+eps_y_rms = 10.0e-06  # [mrad]
 
 # Create envelope matched to bare lattice.
 envelope = DanilovEnvelope20(
-    eps_x=eps_x,
-    eps_y=eps_y,
+    eps_x_rms=eps_x_rms,
+    eps_y_rms=eps_y_rms,
     mass=mass,
     kin_energy=kin_energy,
     length=bunch_length,
