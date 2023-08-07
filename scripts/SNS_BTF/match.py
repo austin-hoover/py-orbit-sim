@@ -152,6 +152,7 @@ class Monitor:
             return
         self.position = position
 
+        node = params_dict["node"]
         bunch = params_dict["bunch"]
         twiss_analysis = BunchTwissAnalysis()
         order = 2
@@ -164,13 +165,20 @@ class Monitor:
         n_parts = bunch.getSizeGlobal()
         
         if _mpi_rank == 0 and self.verbose:
-            print("s={:<7.3f} xrms={:<7.3f} yrms={:<7.3f} nparts={}".format(position, x_rms, y_rms, n_parts))
+            print(
+                "s={:<7.3f} xrms={:<7.3f} yrms={:<7.3f} nparts={:07.0f} node={}".format(
+                    position, x_rms, y_rms, n_parts, node.getName()
+                )
+            )
             
             
-stop_node_name = "MEBT:VS06"
+# stop_node_name = "MEBT:VS06"
+stop_node_name = "MEBT:VT06"
+index_start = 0
 index_stop = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name))
 if _mpi_rank == 0:
     print("Tracking through {}".format(lattice.getNodes()[index_stop].getName()))
+    
 monitor = Monitor(verbose=True, stride=0.100)
 action_container = AccActionsContainer()
 action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
@@ -178,7 +186,7 @@ action_container.addAction(monitor.action, AccActionsContainer.EXIT)
 lattice.trackBunch(
     bunch,
     actionContainer=action_container,
-    index_start=0,
+    index_start=index_start,
     index_stop=index_stop,
 )
 
@@ -357,18 +365,23 @@ linac.set_linac_tracker(False)
 lattice = linac.lattice
 
 # Update start/stop node indices.
-index_start = lattice.getNodeIndex(lattice.getNodeForName("MEBT:VS06")) + 1
-# index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
-index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:FQ21"))
+index_start = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name)) + 1
+index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
+
+# Identify FODO quads.
+fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
+
+# Identify matching quads.
+match_index_start = index_start
+match_index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH10"))
+matching_quad_names = []
+for node in lattice.getNodes()[match_index_start : match_index_stop + 1]:
+    if isinstance(node, Quad):
+        matching_quad_names.append(node.getName())
+print("Matching quads:")
+print(matching_quad_names)
 
 # Set up optimizer.
-fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
-matching_quad_names = [
-    "MEBT:QV07",
-    "MEBT:QH08",
-    "MEBT:QV09",
-    "MEBT:QH10",
-]
 optics_controller = OpticsController(lattice, matching_quad_names)
 optimizer = Optimizer(
     lattice, 
@@ -376,7 +389,7 @@ optimizer = Optimizer(
     fodo_quad_names=fodo_quad_names, 
     index_start=index_start,
     index_stop=index_stop,
-    save_freq=5,
+    save_freq=25,
     verbose=False
 )
 
@@ -393,6 +406,7 @@ result = scipy.optimize.least_squares(
     ftol=1.00e-12,
     gtol=1.00e-12,
     verbose=2,
+    max_nfev=2000,
 )
 
 # result = scipy.optimize.minimize(
