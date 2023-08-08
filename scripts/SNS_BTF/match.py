@@ -172,8 +172,9 @@ class Monitor:
             )
             
             
-# stop_node_name = "MEBT:VS06"
-stop_node_name = "MEBT:VT06"
+stop_node_name = "MEBT:VS06"
+# stop_node_name = "MEBT:VT06"
+
 index_start = 0
 index_stop = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name))
 if _mpi_rank == 0:

@@ -109,7 +109,7 @@ mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = int(1.00e+04)  # max number of particles
+n_parts = int(1.00e+05)  # max number of particles
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
 
 # Initialize the bunch.
@@ -175,10 +175,18 @@ class Monitor:
             
 # stop_node_name = "MEBT:VS06"
 stop_node_name = "MEBT:VT06"
+# stop_node_name = "MEBT:VT04"
+# stop_node_name = lattice.getNodes()[2].getName()
+
 index_start = 0
 index_stop = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name))
 if _mpi_rank == 0:
-    print("Tracking through {}".format(lattice.getNodes()[index_stop].getName()))
+    print(
+        "Tracking from {} to {}".format(
+            lattice.getNodes()[index_start].getName(),
+            lattice.getNodes()[index_stop].getName(),
+        )
+    )
 
 monitor = Monitor(verbose=True, stride=0.100)
 action_container = AccActionsContainer()
@@ -195,6 +203,10 @@ lattice.trackBunch(
 # Matching to FODO channel
 # ------------------------------------------------------------------------------
 
+if _mpi_rank == 0:
+    print("Matching to FODO channel")
+    
+
 class OpticsController:
     """Sets quadrupole strengths."""
     def __init__(self, lattice=None, quad_names=None):
@@ -209,22 +221,32 @@ class OpticsController:
         for i, node in enumerate(self.quad_nodes):
             node.setParam("dB/dr", x[i])
 
-    def get_quad_bounds(self, scale=0.5):
+    def get_quad_bounds(self, scale=1.5):
         """Return (lower_bounds, upper_bounds) for quad strengths.
         
         `scale` determines the max strength relative to current set point.
         """
         lb, ub = [], []
-        for kq in self.get_quad_strengths():
-            sign = np.sign(kq)
+        for kq, name in zip(self.get_quad_strengths(), self.quad_names):
+            
             lo = 0.0
-            hi = scale * np.abs(kq)
+            hi = scale * np.abs(kq)  
+            # lo = 0.0
+            # hi = 30.0
+            
+            # sign = np.sign(kq)            
+            if "qh" in name.lower():
+                sign = -1.0
+            elif "qv" in name.lower():
+                sign = +1.0
+                
             if sign < 0:
                 lo = -hi
                 hi = 0.0
             lb.append(lo)
             ub.append(hi)
         return (lb, ub)
+    
     
 class Monitor:
     """Tracks the rms beam envelope oscillations."""
@@ -310,15 +332,21 @@ class Optimizer:
             kws = dict()
             ax.plot(positions, x_rms, label="x", **kws)
             ax.plot(positions, y_rms, label="y", **kws)
-            if self.count == 0:
-                self.ymax = ax.get_ylim()[1]
-            ax.set_ylim((0.0, self.ymax))
 
+            # Highlight matching quad regions.
             node_start = self.lattice.getNodes()[self.index_start]
-            for node in optics_controller.quad_nodes:
+            for node in self.optics_controller.quad_nodes:
                 start, stop = self.lattice.getNodePositionsDict()[node]
                 ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")
+                
+            # Draw vertical lines at FODO quads.
+            for name in self.fodo_quad_names:
+                node = self.lattice.getNodeForName(name)
+                start, stop = self.lattice.getNodePositionsDict()[node]
+                position = 0.5 * (start + stop)
+                ax.axvline(position, color="black", alpha=0.05)
 
+            ax.set_ylim((0.0, 15.0))
             ax.set_xlabel("Position [m]")
             ax.set_ylabel("RMS size [mm]")
             ax.legend(loc="upper right")
@@ -344,6 +372,9 @@ class Optimizer:
                 for i in range(2):
                     cost_ += np.var(x_rms[i::2])
                     cost_ += np.var(y_rms[i::2])
+                    
+                factor = 0.001
+                cost_ += factor * (np.max(x_rms) + np.max(y_rms))
 
             cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
                         
@@ -367,7 +398,7 @@ linac.init_lattice(
     max_drift_length=max_drift_length,
 )
 linac.add_uniform_ellipsoid_space_charge_nodes(
-    n_ellipsoids=3,
+    n_ellipsoids=5,
     path_length_min=0.010,
 )
 linac.set_linac_tracker(False)
@@ -378,7 +409,7 @@ index_start = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name)) + 1
 index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 # Identify FODO quads.
-fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
+fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 30)]
 
 # Identify matching quads.
 match_index_start = index_start
@@ -387,12 +418,19 @@ matching_quad_names = []
 for node in lattice.getNodes()[match_index_start : match_index_stop + 1]:
     if isinstance(node, Quad):
         matching_quad_names.append(node.getName())
+    
+# Set up optics controller.
+optics_controller = OpticsController(lattice, matching_quad_names)
+x0 = np.array(optics_controller.get_quad_strengths())
+lb, ub = optics_controller.get_quad_bounds(scale=1.1)
+limits = [(_lb, _ub) for _lb, _ub in zip(lb, ub)]
+
 if _mpi_rank == 0:
     print("Matching quads:")
-    print(matching_quad_names)
+    for i, name in enumerate(matching_quad_names):
+        print("{} -- lb={:.3f}, ub={:.3f}".format(name, lb[i], ub[i]))
 
 # Set up optimizer.
-optics_controller = OpticsController(lattice, matching_quad_names)
 optimizer = Optimizer(
     lattice=lattice,
     optics_controller=optics_controller,
@@ -400,23 +438,49 @@ optimizer = Optimizer(
     index_start=index_start,
     index_stop=index_stop,
     save_freq=25,
-    verbose=False,
+    verbose=True,
 )
 objective = optimizer.objective
 
-x0 = optics_controller.get_quad_strengths()
-x0 = np.array(x0)
-lb, ub = optics_controller.get_quad_bounds()
 if _mpi_rank == 0:
     stop = 0
-    x = scipy.optimize.minimize(
+    
+#     x = scipy.optimize.minimize(
+#         objective, 
+#         x0,
+#         method="trust-constr", 
+#         args=(stop), 
+#         bounds=scipy.optimize.Bounds(lb, ub),
+#         options=dict(verbose=2)
+#     )
+        
+#     x = scipy.optimize.dual_annealing(
+#         objective, 
+#         limits,
+#         args=(stop,), 
+#         callback=(lambda x, f, context: print("cost={}".format(f))),
+#         x0=x0,
+#     )
+    
+#     x = scipy.optimize.differential_evolution(
+#         objective, 
+#         limits,
+#         args=(stop,), 
+#         disp=True,
+#     )
+    
+    x = scipy.optimize.basinhopping(  # best
         objective, 
-        x0,
-        method="trust-constr", 
-        args=(stop), 
-        bounds=scipy.optimize.Bounds(lb, ub),
-        options=dict(verbose=2)
+        x0, 
+        niter=100, 
+        disp=True,
+        minimizer_kwargs=dict(
+            method="trust-constr", 
+            args=(stop,), 
+            options=dict(verbose=2)
+        )
     )
+    
     stop = 1
     objective(x0, stop)
 
