@@ -445,7 +445,7 @@ class SNS_BTF:
         kappa_min = node.getParam("dB/dr")
         self.set_quad_current(quad_name, max_current, verbose=False)
         kappa_max = node.getParam("dB/dr")
-        if kappa_max > kappa_min:
+        if kappa_max < kappa_min:
             kapp_min, kapp_max = kappa_max, kappa_min
         node.setParam("dB/dr", kappa)
         return (kappa_min, kappa_max)
