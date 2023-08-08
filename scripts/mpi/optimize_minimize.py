@@ -1,4 +1,4 @@
-"""Parellel optimization with ORBIT_MPI and scipy.
+"""Parallel optimization with ORBIT_MPI and scipy.
 
 https://stackoverflow.com/questions/37159923/parallelize-a-function-call-with-mpi4py
 """
@@ -7,7 +7,6 @@ import numpy as np
 
 import orbit_mpi
 from orbit_mpi import mpi_datatype
-from orbit_mpi import mpi_op
 
 
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -17,14 +16,14 @@ _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
 def function(x, stop):
     stop = orbit_mpi.MPI_Bcast(stop, mpi_datatype.MPI_INT, 0, _mpi_comm)    
-    val = 0.0
+    cost = 0.0
     if stop == 0:
         x = orbit_mpi.MPI_Bcast(x.tolist(), mpi_datatype.MPI_DOUBLE, 0, _mpi_comm) 
-        val_ = x[0]**4 - x[0]**2 + x[1]**2
-        val = orbit_mpi.MPI_Allreduce(val_, mpi_datatype.MPI_DOUBLE, mpi_op.MPI_SUM, _mpi_comm)
+        cost_ = x[0]**4 - x[0]**2 + x[1]**2
+        cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
         if _mpi_rank == 0:
-            print("val={}".format(val))
-    return val
+            print("cost={}".format(cost))
+    return cost
 
 
 if _mpi_rank == 0:

@@ -73,9 +73,9 @@ switches = {
     "apertures": True,
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
-    "overlapping_fields": False,
+    "overlapping_fields": True,
     "rms_equivalent_dist": False,
-    "save": True,
+    "save": False,
     "save_init_coords_attr": False,
     "save_input_bunch": True,
     "save_output_bunch": True,
@@ -87,7 +87,7 @@ switches = {
 }
 
 
-# Set input directories.
+# Set up directories.
 output_dir = "/home/46h/sim_data/"  # parent directory for output
 file_dir = os.path.dirname(os.path.realpath(__file__))  # directory of this file
 input_dir = os.path.join(file_dir, "data_input")  # lattice input data
@@ -124,6 +124,7 @@ if switches["save"] and _mpi_rank == 0:
 xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
 coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff.csv")
 mstate_filename = None
+quads_filename = None
 sequences = [
     "MEBT1",
     "MEBT2",
@@ -146,6 +147,9 @@ if mstate_filename is not None:
         filename=mstate_filename,
         value_type="current"
     )
+    
+if quads_filename is not None:
+    linac.set_quads_from_file(quads_filename)
 
 # Overlapping PMQ fields.
 if switches["overlapping_fields"]:
@@ -182,12 +186,15 @@ lattice = linac.lattice
 # ------------------------------------------------------------------------------
 
 # Settings
-filename = None
+filename = os.path.join(
+    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_1.00e+05.dat",
+)
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.042  # [A]
-n_parts = int(5.0e+04)  # max number of particles
+current = 0.040  # [A]
+n_parts = int(6.00e+04)  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -268,7 +275,7 @@ if current is not None:
 # --------------------------------------------------------------------------------------
 
 stride = {
-    "update": 0.100,  # [m]
+    "update": 0.010,  # [m]
     "write_bunch": np.inf,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
@@ -349,7 +356,7 @@ if switches["save_init_coords_attr"]:
 
 # Settings
 start = None  # (node name/position/None)
-stop = "MEBT:HZ33a"  # (node name/position/None)
+stop = "MEBT:VS06"  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:

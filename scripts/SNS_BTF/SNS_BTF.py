@@ -7,6 +7,9 @@ import sys
 import numpy as np
 
 from bunch import Bunch
+from orbit.envelope import DanilovEnvelope20
+from orbit.envelope import DanilovEnvelopeSolverNode20
+from orbit.envelope import set_danilov_envelope_solver_nodes_20
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccLattice
 from orbit.lattice import AccNode
@@ -337,7 +340,7 @@ class SNS_BTF:
         for quad_name, value in setpoints.items():
             self.update_quad(quad_name, value, value_type=value_type, verbose=verbose)
             
-    def update_quads_from_file(self, filename=None, verbose=True):
+    def set_quads_from_file(self, filename=None, verbose=True):
         """Update quadrupole dB/dr from file.
         
         Each line gives "quad_name dB/dr". The first line is skipped.
@@ -403,6 +406,14 @@ class SNS_BTF:
         This is useful when the energy spread is large, but is slower and is not symplectic.
         """
         self.lattice.setLinacTracker(setting)
+        
+    def set_fringe_fields(self, setting):
+        for node in self.lattice.getNodes():
+            try:
+                node.setUsageFringeFieldIN(setting)
+                node.setUsageFringeFieldOUT(setting)
+            except:
+                pass
 
     def add_space_charge_nodes(
         self,
@@ -447,6 +458,28 @@ class SNS_BTF:
         if _mpi_rank == 0 and verbose:
             print("Added {} uniform ellipsoid space charge nodes".format(len(sc_nodes)))
         self.space_charge_nodes = sc_nodes
+        return self.space_charge_nodes
+    
+    def add_envelope_solver_nodes_2d(
+        self,
+        path_length_min=0.010,
+        perveance=0.0,
+        eps_x=None,
+        eps_y=None,
+        verbose=True,
+    ):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        solver_nodes = set_danilov_envelope_solver_nodes_20(
+            self.lattice,
+            path_length_min=0.010,
+            perveance=perveance,
+            eps_x=eps_x,
+            eps_y=eps_y,
+        )
+        if _mpi_rank == 0 and verbose:
+            print("Added {} envelope solver nodes".format(len(solver_nodes)))
+        self.space_charge_nodes = solver_nodes
         return self.space_charge_nodes
 
     def add_aperture_nodes(self, drift_step=0.1, start=0.0, stop=None, verbose=True):

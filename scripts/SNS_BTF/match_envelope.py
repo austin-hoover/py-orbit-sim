@@ -113,22 +113,15 @@ print("Computing matched envelope...")
 
 # Generate rms-equivalent KV distribution envelope.
 cov, mean = pyorbit_sim.bunch_utils.get_stats(bunch)
-cx = 2.0 * np.sqrt(cov[0, 0])
-cy = 2.0 * np.sqrt(cov[2, 2])
-cxp = 4.0 * cov[0, 1] / cx
-cyp = 4.0 * cov[2, 3] / cy
-eps_x = np.sqrt(np.linalg.det(cov[0:2, 0:2]))
-eps_y = np.sqrt(np.linalg.det(cov[2:4, 2:4]))
-bunch_length = 2.0 * (2.0 * np.sqrt(cov[4, 4]))
+bunch_length_rms = 2.0 * np.sqrt(cov[4, 4])
+bunch_length = 2.0 * bunch_length_rms
 envelope = DanilovEnvelope20(
-    eps_x=eps_x,
-    eps_y=eps_y,
     mass=mass,
     kin_energy=kin_energy,
     length=bunch_length,
     intensity=intensity,
-    params=[cx, cxp, cy, cyp],
 )
+envelope.set_cov(cov)
 print("Created rms-equivalent KV distribution envelope")
 print("Envelope twiss:", envelope.twiss())
 print("Bunch twiss:   ", pyorbit_sim.stats.twiss(cov[:4, :4]))

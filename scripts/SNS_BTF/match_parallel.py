@@ -23,6 +23,8 @@ from orbit.py_linac.lattice import LinacAccLattice
 from orbit.py_linac.lattice import OverlappingQuadsNode
 from orbit.py_linac.lattice import Quad
 import orbit_mpi
+from orbit_mpi import mpi_datatype
+from orbit_mpi import mpi_op
 
 from SNS_BTF import SNS_BTF
 
@@ -106,8 +108,8 @@ filename = os.path.join(
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.040  # [A]
-n_parts = int(1.00e+04)  # max number of particles
+current = 0.042  # [A]
+n_parts = int(1.00e+05)  # max number of particles
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
 
 # Initialize the bunch.
@@ -161,9 +163,7 @@ class Monitor:
         sig_yy = twiss_analysis.getCorrelation(2, 2)
         x_rms = 1000.0 * np.sqrt(sig_xx)
         y_rms = 1000.0 * np.sqrt(sig_yy)
-        
         n_parts = bunch.getSizeGlobal()
-        
         if _mpi_rank == 0 and self.verbose:
             print(
                 "s={:<7.3f} xrms={:<7.3f} yrms={:<7.3f} nparts={:07.0f} node={}".format(
@@ -172,14 +172,22 @@ class Monitor:
             )
             
             
-stop_node_name = "MEBT:VS06"
-# stop_node_name = "MEBT:VT06"
+            
+# stop_node_name = "MEBT:VS06"
+stop_node_name = "MEBT:VT06"
+# stop_node_name = "MEBT:VT04"
+# stop_node_name = lattice.getNodes()[2].getName()
 
 index_start = 0
 index_stop = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name))
 if _mpi_rank == 0:
-    print("Tracking through {}".format(lattice.getNodes()[index_stop].getName()))
-    
+    print(
+        "Tracking from {} to {}".format(
+            lattice.getNodes()[index_start].getName(),
+            lattice.getNodes()[index_stop].getName(),
+        )
+    )
+
 monitor = Monitor(verbose=True, stride=0.100)
 action_container = AccActionsContainer()
 action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
@@ -187,13 +195,17 @@ action_container.addAction(monitor.action, AccActionsContainer.EXIT)
 lattice.trackBunch(
     bunch,
     actionContainer=action_container,
-    index_start=index_start,
+    index_start=0,
     index_stop=index_stop,
 )
 
 
 # Matching to FODO channel
 # ------------------------------------------------------------------------------
+
+if _mpi_rank == 0:
+    print("Matching to FODO channel")
+    
 
 class OpticsController:
     """Sets quadrupole strengths."""
@@ -209,21 +221,31 @@ class OpticsController:
         for i, node in enumerate(self.quad_nodes):
             node.setParam("dB/dr", x[i])
 
-    def get_quad_bounds(self, scale=0.5):
+    def get_quad_bounds(self, scale=1.5):
         """Return (lower_bounds, upper_bounds) for quad strengths.
         
         `scale` determines the max strength relative to current set point.
         """
-        bounds = []
-        for kq in self.get_quad_strengths():
-            sign = np.sign(kq)
-            lb = 0.0
-            ub = scale * np.abs(kq)
+        lb, ub = [], []
+        for kq, name in zip(self.get_quad_strengths(), self.quad_names):
+            
+            lo = 0.0
+            hi = scale * np.abs(kq)  
+            # lo = 0.0
+            # hi = 30.0
+            
+            # sign = np.sign(kq)            
+            if "qh" in name.lower():
+                sign = -1.0
+            elif "qv" in name.lower():
+                sign = +1.0
+                
             if sign < 0:
-                lb = -ub
-                ub = 0.0
-            bounds.append([lb, ub])
-        return np.array(bounds).T
+                lo = -hi
+                hi = 0.0
+            lb.append(lo)
+            ub.append(hi)
+        return (lb, ub)
     
     
 class Monitor:
@@ -251,10 +273,11 @@ class Monitor:
         x_rms = 1000.0 * np.sqrt(sig_xx)
         y_rms = 1000.0 * np.sqrt(sig_yy)
         self.history.append([position, x_rms, y_rms])
-        if self.verbose:
-            print("xrms={:<7.3f} yrms={:<7.3f} node={}".format(x_rms, y_rms, node.getName()))
-        
-        
+        if _mpi_rank == 0:
+            if self.verbose:
+                print("xrms={:<7.3f} yrms={:<7.3f} node={}".format(x_rms, y_rms, node.getName()))
+                
+                
 class Optimizer:
     """Matches the beam to the FODO channel."""
     def __init__(
@@ -270,13 +293,13 @@ class Optimizer:
         self.lattice = lattice
         self.optics_controller = optics_controller
         self.fodo_quad_names = fodo_quad_names
-        self.count = 0
         self.index_start = index_start
         self.index_stop = index_stop
         self.position_offset, _ = lattice.getNodePositionsDict()[lattice.getNodes()[index_start]]
         self.save_freq = save_freq
         self.verbose = verbose
-
+        self.count = 0
+        
     def track(self, dense=False, verbose=False):
         """Return (x_rms, y_rms) at each FODO quad."""
         bunch_in = Bunch()
@@ -286,7 +309,7 @@ class Optimizer:
         monitor = Monitor(
             node_names=monitor_node_names, 
             position_offset=self.position_offset, 
-            verbose=verbose
+            verbose=verbose,
         )
         action_container = AccActionsContainer()
         action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
@@ -296,56 +319,72 @@ class Optimizer:
             index_start=self.index_start,
             index_stop=self.index_stop,
         )
-        return np.array(monitor.history)
+        history = np.array(monitor.history)
+        return history
     
     def save_data(self):
         history = self.track(dense=True, verbose=False)
         positions, x_rms, y_rms = history.T
         
-        fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)
-        kws = dict()
-        ax.plot(positions, x_rms, label="x", **kws)
-        ax.plot(positions, y_rms, label="y", **kws)
-        if self.count == 0:
-            self.ymax = ax.get_ylim()[1]
-        ax.set_ylim((0.0, self.ymax))
+        if _mpi_rank == 0:
+        
+            fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)
+            kws = dict()
+            ax.plot(positions, x_rms, label="x", **kws)
+            ax.plot(positions, y_rms, label="y", **kws)
 
-        node_start = self.lattice.getNodes()[self.index_start]
-        for node in optics_controller.quad_nodes:
-            start, stop = self.lattice.getNodePositionsDict()[node]
-            ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")
+            # Highlight matching quad regions.
+            node_start = self.lattice.getNodes()[self.index_start]
+            for node in self.optics_controller.quad_nodes:
+                start, stop = self.lattice.getNodePositionsDict()[node]
+                ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")
+                
+            # Draw vertical lines at FODO quads.
+            for name in self.fodo_quad_names:
+                node = self.lattice.getNodeForName(name)
+                start, stop = self.lattice.getNodePositionsDict()[node]
+                position = 0.5 * (start + stop)
+                ax.axvline(position, color="black", alpha=0.05)
 
-        ax.set_xlabel("Position [m]")
-        ax.set_ylabel("RMS size [mm]")
-        ax.legend(loc="upper right")
-        filename = "envelope_{:06.0f}.png".format(self.count)
-        filename = man.get_filename(filename)
-        plt.savefig(filename, dpi=100)
-        plt.close()
+            ax.set_ylim((0.0, 15.0))
+            ax.set_xlabel("Position [m]")
+            ax.set_ylabel("RMS size [mm]")
+            ax.legend(loc="upper right")
+            filename = "envelope_{:06.0f}.png".format(self.count)
+            filename = man.get_filename(filename)
+            plt.savefig(filename, dpi=100)
+            plt.close()
 
-    def objective(self, x):
-        """Return variance of period-by-period beam sizes.
-        
-        Also save data.
-        """
-        self.optics_controller.set_quad_strengths(x)
-        history = self.track(dense=False, verbose=self.verbose)
-        positions = history[:, 0]
-        x_rms = history[:, 1]
-        y_rms = history[:, 2]
-        
-        cost = 0.0  
-        for i in range(2):            
-            cost += np.var(x_rms[i::2])
-            cost += np.var(y_rms[i::2])
-        
-        if self.save_freq and (self.count % self.save_freq == 0):
-            self.save_data()
-        
-        self.count += 1
-        if self.verbose:
-            print("cost={}".format(cost))
-            print()
+    def objective(self, x, stop):
+        """Return variance of period-by-period beam sizes."""
+        stop = orbit_mpi.MPI_Bcast(stop, mpi_datatype.MPI_INT, 0, _mpi_comm)    
+        cost = 0.0
+        if stop == 0:
+            x = orbit_mpi.MPI_Bcast(x.tolist(), mpi_datatype.MPI_DOUBLE, 0, _mpi_comm) 
+
+            self.optics_controller.set_quad_strengths(x)
+
+            history = self.track(dense=False, verbose=self.verbose)
+            positions, x_rms, y_rms = history.T
+
+            cost_ = 0.0
+            if _mpi_rank == 0:
+                for i in range(2):
+                    cost_ += np.var(x_rms[i::2])
+                    cost_ += np.var(y_rms[i::2])
+                    
+                factor = 0.001
+                cost_ += factor * (np.max(x_rms) + np.max(y_rms))
+
+            cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
+                        
+            if self.verbose and _mpi_rank == 0:
+                print("cost={}".format(cost))
+                
+            if self.save_freq and (self.count % self.save_freq == 0):
+                self.save_data()
+            self.count += 1
+
         return cost
 
 
@@ -359,7 +398,7 @@ linac.init_lattice(
     max_drift_length=max_drift_length,
 )
 linac.add_uniform_ellipsoid_space_charge_nodes(
-    n_ellipsoids=1,
+    n_ellipsoids=5,
     path_length_min=0.010,
 )
 linac.set_linac_tracker(False)
@@ -370,7 +409,7 @@ index_start = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name)) + 1
 index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 # Identify FODO quads.
-fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 34)]
+fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 30)]
 
 # Identify matching quads.
 match_index_start = index_start
@@ -379,40 +418,73 @@ matching_quad_names = []
 for node in lattice.getNodes()[match_index_start : match_index_stop + 1]:
     if isinstance(node, Quad):
         matching_quad_names.append(node.getName())
-print("Matching quads:")
-print(matching_quad_names)
+    
+# Set up optics controller.
+optics_controller = OpticsController(lattice, matching_quad_names)
+x0 = np.array(optics_controller.get_quad_strengths())
+lb, ub = optics_controller.get_quad_bounds(scale=1.1)
+limits = [(_lb, _ub) for _lb, _ub in zip(lb, ub)]
+
+if _mpi_rank == 0:
+    print("Matching quads:")
+    for i, name in enumerate(matching_quad_names):
+        print("{} -- lb={:.3f}, ub={:.3f}".format(name, lb[i], ub[i]))
 
 # Set up optimizer.
-optics_controller = OpticsController(lattice, matching_quad_names)
 optimizer = Optimizer(
-    lattice, 
-    optics_controller=optics_controller, 
-    fodo_quad_names=fodo_quad_names, 
+    lattice=lattice,
+    optics_controller=optics_controller,
+    fodo_quad_names=fodo_quad_names,
     index_start=index_start,
     index_stop=index_stop,
     save_freq=25,
-    verbose=False
+    verbose=True,
 )
-
-# Match the beam.
 objective = optimizer.objective
-x0 = optics_controller.get_quad_strengths()
-(lb, ub) = optics_controller.get_quad_bounds(scale=1.1)
 
-result = scipy.optimize.least_squares(
-    objective,
-    x0,
-    bounds=(lb, ub),
-    xtol=1.00e-12,
-    ftol=1.00e-12,
-    gtol=1.00e-12,
-    verbose=2,
-    max_nfev=2000,
-)
+if _mpi_rank == 0:
+    stop = 0
+    
+#     x = scipy.optimize.minimize(
+#         objective, 
+#         x0,
+#         method="trust-constr", 
+#         args=(stop), 
+#         bounds=scipy.optimize.Bounds(lb, ub),
+#         options=dict(verbose=2)
+#     )
+        
+#     x = scipy.optimize.dual_annealing(
+#         objective, 
+#         limits,
+#         args=(stop,), 
+#         callback=(lambda x, f, context: print("cost={}".format(f))),
+#         x0=x0,
+#     )
+    
+#     x = scipy.optimize.differential_evolution(
+#         objective, 
+#         limits,
+#         args=(stop,), 
+#         disp=True,
+#     )
+    
+    x = scipy.optimize.basinhopping(  # best
+        objective, 
+        x0, 
+        niter=100, 
+        disp=True,
+        minimizer_kwargs=dict(
+            method="trust-constr", 
+            args=(stop,), 
+            options=dict(verbose=2)
+        )
+    )
+    
+    stop = 1
+    objective(x0, stop)
 
-# result = scipy.optimize.minimize(
-#     objective,
-#     x0,
-#     method="trust-constr",
-#     bounds=scipy.optimize.Bounds(lb, ub),
-# )
+else:
+    stop = 0
+    while stop == 0:
+        objective(x0, stop)
