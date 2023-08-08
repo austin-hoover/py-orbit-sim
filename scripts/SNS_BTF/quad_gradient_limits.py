@@ -27,3 +27,8 @@ for quad_name in linac.quad_names_no_fodo:
             quad_name, curr_min, curr_max, kappa_min, kappa_max
         )
     )
+    
+for quad_name in linac.quad_names_no_fodo:
+    curr = linac.get_quad_current(quad_name)
+    curr_min, curr_max = linac.get_quad_current_limits(quad_name)
+    print(curr, curr_min, curr_max)
