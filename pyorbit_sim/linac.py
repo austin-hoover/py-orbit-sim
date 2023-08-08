@@ -388,6 +388,8 @@ class BeamSizeMonitor:
     ----------
     history : ndarray, shape (n, 3)
         Columns are position [m], x_rms [mm], y_rms [mm].
+    maxs : ndarray, shape (2,)
+        x_rms_max, y_rms_max.
     """
     def __init__(self, node_names=None, stride=None, position_offset=0.0, verbose=False):
         """
@@ -405,17 +407,11 @@ class BeamSizeMonitor:
         self.position = self.position_offset = position_offset
         self.verbose = verbose
         self.history = []
+        self.maxs = np.zeros(2)
 
     def action(self, params_dict):
-        bunch = params_dict["bunch"]
         node = params_dict["node"]
-        position = params_dict["path_length"] + self.position_offset
-        if self.node_names and (node.getName() not in self.node_names):
-            return
-        if self.stride is not None:
-            if position - self.position < self.stride:
-                return
-        self.position = position
+        bunch = params_dict["bunch"]
 
         twiss_analysis = BunchTwissAnalysis()
         order = 2
@@ -424,7 +420,19 @@ class BeamSizeMonitor:
         sig_yy = twiss_analysis.getCorrelation(2, 2)
         x_rms = 1000.0 * np.sqrt(sig_xx)
         y_rms = 1000.0 * np.sqrt(sig_yy)
+        
+        self.maxs = np.maximum(self.maxs, [x_rms, y_rms])
+
+        position = params_dict["path_length"] + self.position_offset
+        if self.node_names and (node.getName() not in self.node_names):
+            return
+        if self.stride is not None:
+            if position - self.position < self.stride:
+                return
+        self.position = position
+
         self.history.append([position, x_rms, y_rms])
+
         if _mpi_rank == 0 and self.verbose:
             print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
             

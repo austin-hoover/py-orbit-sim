@@ -709,6 +709,13 @@ class Matcher:
             only at `self.fodo_quad_names`.
         verbose : bool
             Whether to print progress during tracking.
+            
+        Returns
+        -------
+        history : ndarray, shape (n, 3)
+            Columns are position, x_rms, y_rms.
+        maxs : ndarray, shape (2,)
+            (x_rms_max, y_rms_max)
         """
         bunch_in = Bunch()
         self.bunch.copyBunchTo(bunch_in)
@@ -728,14 +735,15 @@ class Matcher:
             index_stop=self.index_stop,
         )
         history = np.array(monitor.history)
-        return history
+        maxs = np.array(monitor.maxs)
+        return history, maxs
     
     def save_data(self):
         """Save current optics and plot rms beam size evolution."""
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
-        history = self.track(dense=True, verbose=False)
+        history, _ = self.track(dense=True, verbose=False)
         positions, x_rms, y_rms = history.T
         
         if _mpi_rank == 0:
@@ -783,16 +791,25 @@ class Matcher:
         if stop == 0:
             x = orbit_mpi.MPI_Bcast(x.tolist(), mpi_datatype.MPI_DOUBLE, 0, _mpi_comm) 
             self.optics_controller.set_quad_strengths(x)
-            history = self.track(dense=False, verbose=self.verbose)
+            history, maxs = self.track(dense=False, verbose=self.verbose)
             positions, x_rms, y_rms = history.T
 
             cost_ = 0.0
             if _mpi_rank == 0:
+                
+                # Penalize large beam size variance in FODO channel.
                 for i in range(2):
                     cost_ += np.var(x_rms[i::2])
                     cost_ += np.var(y_rms[i::2])
-                factor = 0.001
+                    
+                # Penalize large beam size in FODO channel.
+                factor = 0.00
                 cost_ += factor * (np.max(x_rms) + np.max(y_rms))
+                
+                ## Penalize large beam size before the FODO channel.
+                factor = 0.01
+                cost_ += factor * np.max(maxs)
+                
             cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
                         
             if self.verbose and _mpi_rank == 0:
@@ -800,8 +817,38 @@ class Matcher:
             if self.save_freq and (self.count % self.save_freq == 0):
                 self.save_data()
             self.count += 1
-
+                
         return cost
+    
+    def match(self, **kws):   
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
+        if "bounds" not in kws:
+            lb, ub = self.optics_controller.get_quad_bounds(scale=1.2)
+            kws["bounds"] = optimize.Bounds(lb, ub)
+        kws.setdefault("method", "trust-constr")
+        kws.setdefault("options", dict())
+        if kws["method"] == "trust-constr":
+            kws["options"].setdefault("verbose", 2)
+        
+        if _mpi_rank == 0:
+            print("Matching quads:")
+            for i, name in enumerate(self.optics_controller.quad_names):
+                lo = kws["bounds"].lb[i]
+                hi = kws["bounds"].ub[i]
+                print("{} -- lb={:.3f}, ub={:.3f}".format(name, lo, hi))
+
+        x0 = self.optics_controller.get_quad_strengths()
+        if _mpi_rank == 0:
+            stop = 0
+            x = optimize.minimize(self.objective, x0, args=(stop), **kws)
+            stop = 1
+            self.objective(x0, stop)
+        else:
+            stop = 0
+            while stop == 0:
+                self.objective(x0, stop)
     
     def match_global(self, **kws):   
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -834,36 +881,6 @@ class Matcher:
             stop = 0
             kws["minimizer_kwargs"]["args"] = (stop)
             x = optimize.basinhopping(self.objective, x0, **kws)
-            stop = 1
-            self.objective(x0, stop)
-        else:
-            stop = 0
-            while stop == 0:
-                self.objective(x0, stop)
-                
-    def match(self, **kws):   
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        if "bounds" not in kws:
-            lb, ub = self.optics_controller.get_quad_bounds(scale=1.2)
-            kws["bounds"] = optimize.Bounds(lb, ub)
-        kws.setdefault("method", "trust-constr")
-        kws.setdefault("options", dict())
-        if kws["method"] == "trust-constr":
-            kws["options"].setdefault("verbose", 2)
-        
-        if _mpi_rank == 0:
-            print("Matching quads:")
-            for i, name in enumerate(self.optics_controller.quad_names):
-                lo = kws["bounds"].lb[i]
-                hi = kws["bounds"].ub[i]
-                print("{} -- lb={:.3f}, ub={:.3f}".format(name, lo, hi))
-
-        x0 = self.optics_controller.get_quad_strengths()
-        if _mpi_rank == 0:
-            stop = 0
-            x = optimize.minimize(self.objective, x0, args=(stop), **kws)
             stop = 1
             self.objective(x0, stop)
         else:

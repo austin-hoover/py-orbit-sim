@@ -53,7 +53,7 @@ timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main
 # Set up directories.
 file_dir = os.path.dirname(os.path.realpath(__file__))
 input_dir = os.path.join(file_dir, "data_input")
-output_dir = os.path.join(file_dir, "data_output")
+output_dir = "/home/46h/sim_data/"
 if _mpi_rank == 0:
     print("file_dir = {}".format(file_dir))
     print("input_dir = {}".format(input_dir))
@@ -67,6 +67,12 @@ man = pyorbit_sim.utils.ScriptManager(
     datestamp=datestamp,
     script_path_in_outdir=False,
 )
+if save and _mpi_rank == 0:
+    man.make_outdir()
+    man.save_info()
+    man.save_script_copy()
+    pprint(man.get_info())
+
     
     
 # Lattice
@@ -116,7 +122,7 @@ mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = int(2.00e+04)  # max number of particles
+n_parts = int(1.00e+04)  # max number of particles
 intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
 
 # Initialize the bunch.
@@ -148,7 +154,9 @@ if _mpi_rank == 0:
 # Tracking to matching section
 # ------------------------------------------------------------------------------
             
-stop_node_name = "MEBT:VT06"
+# stop_node_name = "MEBT:VT06"
+# stop_node_name = "MEBT:VT04"
+stop_node_name = lattice.getNodes()[2].getName()
 index_start = 0
 index_stop = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name))
 if _mpi_rank == 0:
@@ -187,7 +195,7 @@ linac.init_lattice(
     max_drift_length=max_drift_length,
 )
 linac.add_uniform_ellipsoid_space_charge_nodes(
-    n_ellipsoids=3,
+    n_ellipsoids=1,
     path_length_min=0.010,
 )
 linac.set_linac_tracker(False)
@@ -198,7 +206,7 @@ index_start = lattice.getNodeIndex(lattice.getNodeForName(stop_node_name)) + 1
 index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 # Identify FODO quads.
-fodo_quad_names = ["MEBT:FQ{}".format(i) for i in range(11, 30)]
+fodo_quad_names = linac.quad_names_fodo
 
 # Identify matching quads.
 match_index_start = index_start
@@ -210,8 +218,11 @@ for node in lattice.getNodes()[match_index_start : match_index_stop + 1]:
     
 # Set up optics controller.
 optics_controller = pyorbit_sim.linac.OpticsController(lattice, matching_quad_names)
-(lb, ub) = optics_controller.estimate_quad_bounds(scale=1.5)
-bounds = optimize.Bounds(lb, ub)
+
+bounds = [linac.get_quad_kappa_limits(name) for name in matching_quad_names]
+bounds = np.array(bounds)
+bounds = bounds.T
+bounds = optimize.Bounds(bounds[0], bounds[1])
 
 # Set up matcher.
 matcher = Matcher(
