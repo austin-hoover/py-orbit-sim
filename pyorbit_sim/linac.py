@@ -21,6 +21,11 @@ from orbit_utils import BunchExtremaCalculator
 import pyorbit_sim.bunch_utils
 
 
+_mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+_mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+_mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
+
 class BunchWriter:
     def __init__(self, folder="./", prefix=None, index=0, position=0.0, verbose=True):
         self.folder = folder
@@ -333,6 +338,95 @@ class Monitor:
                 line += "{},".format(data[i])
             line = line[:-1] + "\n"
             self.file.write(line)
+            
+            
+class OpticsController:
+    """Sets quadrupole strengths."""
+    def __init__(self, lattice=None, quad_names=None):
+        self.lattice = lattice
+        self.quad_names = quad_names
+        self.quad_nodes = [lattice.getNodeForName(name) for name in quad_names]
+
+    def get_quad_strengths(self):
+        """Return dB/dr for each quad."""
+        return np.array([node.getParam("dB/dr") for node in self.quad_nodes])
+
+    def set_quad_strengths(self, x):
+        for i, node in enumerate(self.quad_nodes):
+            node.setParam("dB/dr", x[i])
+
+    def estimate_quad_bounds(self, scale=1.5):
+        """Estimate quad strength bounds.
+        
+        Parameters
+        ----------
+        scale : float
+            Determines the max strength relative to current set point.
+        
+        Returns
+        -------
+        lb, ub : ndarray
+            Lower and upper bounds on quad strengths (dB/dr).
+        """
+        bounds = []
+        for kq, name in zip(self.get_quad_strengths(), self.quad_names):
+            lb = 0.0
+            ub = scale * np.abs(kq)  
+            if kq < 0.0:
+                lb = -ub
+                ub = 0.0
+            bounds.append([lb, ub])
+        return np.array(bounds).T
+    
+    
+class BeamSizeMonitor:
+    """Monitor the rms beam size in the lattice.
+    
+    Good for quick tests.
+    
+    Attributes
+    ----------
+    history : ndarray, shape (n, 3)
+        Columns are position [m], x_rms [mm], y_rms [mm].
+    """
+    def __init__(self, node_names=None, stride=None, position_offset=0.0, verbose=False):
+        """
+        node_names : list
+            List of node names to observe. If None, observe every step.
+        stride : float
+            Space updates by at least this distance.
+        position_offset : float
+            The starting position.
+        verbose : bool
+            Whether to print results during tracking.
+        """
+        self.node_names = node_names
+        self.stride = stride
+        self.position = self.position_offset = position_offset
+        self.verbose = verbose
+        self.history = []
+
+    def action(self, params_dict):
+        bunch = params_dict["bunch"]
+        node = params_dict["node"]
+        position = params_dict["path_length"] + self.position_offset
+        if self.node_names and (node.getName() not in self.node_names):
+            return
+        if self.stride is not None:
+            if position - self.position < self.stride:
+                return
+        self.position = position
+
+        twiss_analysis = BunchTwissAnalysis()
+        order = 2
+        twiss_analysis.computeBunchMoments(bunch, order, 0, 0)
+        sig_xx = twiss_analysis.getCorrelation(0, 0)
+        sig_yy = twiss_analysis.getCorrelation(2, 2)
+        x_rms = 1000.0 * np.sqrt(sig_xx)
+        y_rms = 1000.0 * np.sqrt(sig_yy)
+        self.history.append([position, x_rms, y_rms])
+        if _mpi_rank == 0 and self.verbose:
+            print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
             
     
 def get_node_info(node_name_or_position, lattice):
