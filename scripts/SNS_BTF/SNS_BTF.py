@@ -277,29 +277,25 @@ class SNS_BTF:
             self.magnets[name_short]["node"] = node
             if name in self.quad_names_fodo:
                 self.magnets[name_short]["coeff"] = [0.0, 0.0]
-                self.magnets[name_short]["current"] = 0.0
+            elif name_short in self.coeff:
+                coeff = self.coeff[name_short]
+                gradient = self.get_quad_gradient(name_short)
+                current = self.quad_gradient_to_current(name_short, gradient)
+                self.magnets[name_short]["coeff"] = coeff
+                print("{}: I={:.4f}, coeff={}".format(name, current, coeff))
             else:
-                if name_short in self.coeff:
-                    coeff = self.coeff[name_short]
-                    current = self.quad_gradient_to_current(name_short, self.get_quad_gradient(name_short))
-                    self.magnets[name_short]["coeff"] = coeff
-                    self.magnets[name_short]["current"] = current
-                    print("Set {} I={:.4f}, coeff={}".format(name, current, coeff))
-                else:
-                    warnings.warn("WARNING: '{}' not in coeff dict".format(name_short))                
-        return self.lattice
-                
-    def save_node_positions(self, filename="lattice_nodes.txt"):
-        file = open(filename, "w")
-        file.write("node position length\n")
-        for node in self.lattice.getNodes():
-            file.write("{} {} {}\n".format(node.getName(), node.getPosition(), node.getLength()))
-        file.close()
+                warnings.warn("WARNING: '{}' not in coeff dict".format(name_short))   
         
-    def save_lattice_structure(self, filename="lattice_structure.txt"):
-        file = open(filename, "w")
-        file.write(self.lattice.structureToText())
-        file.close()
+        # Make sure quad currents are within limits.
+        for name in self.quad_names_no_fodo_short:
+            current = self.get_quad_current(name)
+            min_current, max_current = self.get_quad_current_limits(name)
+            if not min_current <= current <= max_current:
+                print("{} current {:.3f} outside limits".format(name, current))
+                current = np.clip(current, min_current, max_current)
+                self.set_quad_current(name, current, verbose=True)
+        
+        return self.lattice
                     
     def quad_current_to_gradient(self, quad_name, current):
         """Convert current to gradient.
@@ -385,31 +381,27 @@ class SNS_BTF:
 
     def set_quad_gradient(self, quad_name, gradient, verbose=True):
         """Set quadrupole integrated gradient (GL) [T]."""
-        quad_name = self.shorten_quad_name(quad_name)
         current = self.quad_gradient_to_current(quad_name, gradient)
+        quad_name = self.shorten_quad_name(quad_name)
         quad_node = self.magnets[quad_name]["node"]
         kappa = -gradient / quad_node.getLength()            
         if quad_name == "QV02":
             kappa = -kappa
         quad_node.setParam("dB/dr", kappa)
-        self.magnets[quad_name]["current"] = current
         if verbose:
             print(
-                "Set {} dB/dr={} (I={:.3f} [A], GL={:.3f} [T])".format(
-                quad_name, kappa, current, gradient
+                "Set {} dB/dr={} (I={:.3f}, GL={:.3f})".format(
+                    quad_name, kappa, current, gradient
+                )
             )
-        )
         
     def get_quad_current(self, quad_name):
-        quad_name = self.shorten_quad_name(quad_name)
-        return self.magnets[quad_name]["current"]
+        """Return quad current [A]."""
+        return self.quad_gradient_to_current(quad_name, self.get_quad_gradient(quad_name))
 
     def set_quad_current(self, quad_name, current, verbose=True):
-        return self.set_quad_gradient(
-            quad_name, 
-            self.quad_current_to_gradient(quad_name, current), 
-            verbose=verbose
-        )
+        gradient = self.quad_current_to_gradient(quad_name, current)
+        return self.set_quad_gradient(quad_name, gradient, verbose=verbose)
         
     def get_quad_current_limits(self, quad_name):
         """Return (min, max) quad current [A].
@@ -424,23 +416,21 @@ class SNS_BTF:
             abs_max_current = 350.0
         elif quad_name.upper() == "QV02":
             abs_max_current = 400.0
+            
+        min_current = 0.0
+        max_current = abs_max_current
 
         # Determine sign.
         sign = np.sign(self.get_quad_current(quad_name))
-        if sign > 0:
-            min_current = 0.0
-            max_current = +abs_max_current
-        elif sign < 0:
+        flip = False
+        if sign < 0:
             min_current = -abs_max_current
             max_current = 0.0
-        else:
+        elif sign == 0:
             if quad_name.upper().startswith("QV"):
                 min_current = -abs_max_current
                 max_current = 0.0
-            elif quad_name.upper().startswith("QH"):
-                min_current = 0.0
-                max_current = +abs_max_current
-
+    
         return (min_current, max_current)
     
     def get_quad_kappa_limits(self, quad_name):
@@ -644,6 +634,18 @@ class SNS_BTF:
             )
         self.aperture_nodes = aperture_nodes
         return self.aperture_nodes
+    
+    def save_node_positions(self, filename="lattice_nodes.txt"):
+        file = open(filename, "w")
+        file.write("node position length\n")
+        for node in self.lattice.getNodes():
+            file.write("{} {} {}\n".format(node.getName(), node.getPosition(), node.getLength()))
+        file.close()
+        
+    def save_lattice_structure(self, filename="lattice_structure.txt"):
+        file = open(filename, "w")
+        file.write(self.lattice.structureToText())
+        file.close()
                 
                 
 class Matcher:
