@@ -13,7 +13,7 @@ input_dir = os.path.join(file_dir, "data_input")
 xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
 coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff_straight.csv")
 
-linac = SNS_BTF(coef_filename=coef_filename, rf_frequency=402.5e+06)
+linac = SNS_BTF(coef_filename=coef_filename, rf_frequency=402.5e06)
 lattice = linac.init_lattice(
     xml_filename=xml_filename,
     sequences=["MEBT1", "MEBT2"],
@@ -27,8 +27,3 @@ for quad_name in linac.quad_names_no_fodo:
             quad_name, curr_min, curr_max, kappa_min, kappa_max
         )
     )
-    
-for quad_name in linac.quad_names_no_fodo:
-    curr = linac.get_quad_current(quad_name)
-    curr_min, curr_max = linac.get_quad_current_limits(quad_name)
-    print(curr, curr_min, curr_max)

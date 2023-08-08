@@ -277,15 +277,24 @@ class SNS_BTF:
             self.magnets[name_short]["node"] = node
             if name in self.quad_names_fodo:
                 self.magnets[name_short]["coeff"] = [0.0, 0.0]
+            elif name_short in self.coeff:
+                coeff = self.coeff[name_short]
+                gradient = self.get_quad_gradient(name_short)
+                current = self.quad_gradient_to_current(name_short, gradient)
+                self.magnets[name_short]["coeff"] = coeff
+                print("{}: I={:.4f}, coeff={}".format(name, current, coeff))
             else:
-                if name_short in self.coeff:
-                    coeff = self.coeff[name_short]
-                    gradient = self.get_quad_gradient(name_short)
-                    current = self.quad_gradient_to_current(name_short, gradient)
-                    self.magnets[name_short]["coeff"] = coeff
-                    print("{}: I={:.4f}, coeff={}".format(name, current, coeff))
-                else:
-                    warnings.warn("WARNING: '{}' not in coeff dict".format(name_short))                
+                warnings.warn("WARNING: '{}' not in coeff dict".format(name_short))   
+        
+        # Make sure quad currents are within limits.
+        for name in self.quad_names_no_fodo_short:
+            current = self.get_quad_current(name)
+            min_current, max_current = self.get_quad_current_limits(name)
+            if not min_current <= current <= max_current:
+                print("{} current {:.3f} outside limits".format(name, current))
+                current = np.clip(current, min_current, max_current)
+                self.set_quad_current(name, current, verbose=True)
+        
         return self.lattice
                     
     def quad_current_to_gradient(self, quad_name, current):
@@ -407,23 +416,21 @@ class SNS_BTF:
             abs_max_current = 350.0
         elif quad_name.upper() == "QV02":
             abs_max_current = 400.0
+            
+        min_current = 0.0
+        max_current = abs_max_current
 
         # Determine sign.
         sign = np.sign(self.get_quad_current(quad_name))
-        if sign > 0:
-            min_current = 0.0
-            max_current = +abs_max_current
-        elif sign < 0:
+        flip = False
+        if sign < 0:
             min_current = -abs_max_current
             max_current = 0.0
-        else:
+        elif sign == 0:
             if quad_name.upper().startswith("QV"):
                 min_current = -abs_max_current
                 max_current = 0.0
-            elif quad_name.upper().startswith("QH"):
-                min_current = 0.0
-                max_current = +abs_max_current
-
+    
         return (min_current, max_current)
     
     def get_quad_kappa_limits(self, quad_name):
