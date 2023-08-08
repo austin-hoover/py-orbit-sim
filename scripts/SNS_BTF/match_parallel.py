@@ -53,7 +53,7 @@ timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main
 # Set up directories.
 file_dir = os.path.dirname(os.path.realpath(__file__))
 input_dir = os.path.join(file_dir, "data_input")
-output_dir = os.path.join(file_dir, "data_output")
+output_dir = "/home/46h/sim_data/"
 if _mpi_rank == 0:
     print("file_dir = {}".format(file_dir))
     print("input_dir = {}".format(input_dir))
@@ -67,6 +67,12 @@ man = pyorbit_sim.utils.ScriptManager(
     datestamp=datestamp,
     script_path_in_outdir=False,
 )
+if save and _mpi_rank == 0:
+    man.make_outdir()
+    man.save_info()
+    man.save_script_copy()
+    pprint(man.get_info())
+
     
     
 # Lattice
