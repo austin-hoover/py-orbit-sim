@@ -99,12 +99,12 @@ linac.init_lattice(
     sequences=sequences,
     max_drift_length=max_drift_length,
 )
+linac.set_overlapping_pmq_fields(z_step=max_drift_length, verbose=True)
 linac.add_uniform_ellipsoid_space_charge_nodes(
-    n_ellipsoids=1,
+    n_ellipsoids=3,
     path_length_min=max_drift_length,
 )
 linac.set_linac_tracker(True)
-linac.set_overlapping_pmq_fields(z_step=0.001, verbose=True):
 lattice = linac.lattice
 
 
@@ -145,8 +145,6 @@ macro_size = intensity / bunch_size_global
 bunch.macroSize(macro_size)
 
 
-
-
 # Matching to FODO channel
 # ------------------------------------------------------------------------------
 
@@ -160,6 +158,9 @@ index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:QH30"))
 
 # Identify FODO quads.
 fodo_quad_names = linac.quad_names_fodo
+if _mpi_rank == 0:
+    print("FODO quad node names:")
+    pprint(fodo_quad_names)
 
 # Identify matching quads.
 match_index_start = index_start
