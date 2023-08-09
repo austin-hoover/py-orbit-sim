@@ -535,6 +535,9 @@ class SNS_BTF:
             quad_Names=self.quad_names_fodo,
             EngeFunctionFactory=get_quad_func,
         )
+        # Update FODO quad names.
+        for i, name in enumerate(self.quad_names_fodo):
+            self.quad_names_fodo[i] = "{}:group:1:OVRLPQ".format(name)
         
     def set_linac_tracker(self, setting):
         """Use linac-style quads and drifts instead of TEAPOT-style. 
@@ -742,7 +745,8 @@ class Matcher:
                 print("Saving file {}".format(filename))
             file = open(filename, "w")
             file.write("# quad_name dB/dr\n")
-            for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
+            for name in self.optics_controller.quad_names:
+                node = self.lattice.getNodeForName(name)
                 file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
             file.close()
             
