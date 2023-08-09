@@ -75,7 +75,7 @@ switches = {
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
     "overlapping_fields": True,
-    "perturb_lattice" True,
+    "perturb_lattice": True,
     "rms_equivalent_dist": False,
     "save": True,
     "save_init_coords_attr": False,
