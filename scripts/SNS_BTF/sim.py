@@ -37,7 +37,7 @@ from orbit.py_linac.lattice import Drift
 from orbit.py_linac.lattice import LinacApertureNode
 from orbit.py_linac.lattice import LinacEnergyApertureNode
 from orbit.py_linac.lattice import LinacPhaseApertureNode
-from orbit.py_linac.lattice import OverlappingQuadsNode 
+from orbit.py_linac.lattice import OverlappingQuadsNode
 from orbit.py_linac.lattice import Quad
 from orbit.py_linac.lattice_modifications import Add_quad_apertures_to_lattice
 from orbit.py_linac.lattice_modifications import Add_rfgap_apertures_to_lattice
@@ -66,6 +66,7 @@ from pyorbit_sim.utils import ScriptManager
 from SNS_BTF import SNS_BTF
 
 
+
 # Setup
 # --------------------------------------------------------------------------------------
 
@@ -73,16 +74,16 @@ switches = {
     "apertures": True,
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
-    "overlapping_fields": True,
+    "overlapping_fields": False,
     "rms_equivalent_dist": False,
-    "save": False,
+    "save": True,
     "save_init_coords_attr": False,
-    "save_input_bunch": True,
-    "save_output_bunch": True,
-    "save_lostbunch": True,  
+    "save_input_bunch": False,
+    "save_output_bunch": False,
+    "save_lostbunch": True,
     "save_losses": True,
     "save_particle_ids": True,
-    "set_design_sync_time": True,
+    "set_design_sync_time": False,
     "space_charge": True,
 }
 
@@ -107,7 +108,7 @@ timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main
 # Create output directory and save script info.
 man = ScriptManager(
     datadir=output_dir,
-    path=pathlib.Path(__file__), 
+    path=pathlib.Path(__file__),
     timestamp=timestamp,
     datestamp=datestamp,
 )
@@ -117,69 +118,71 @@ if switches["save"] and _mpi_rank == 0:
     man.save_script_copy()
     pprint(man.get_info())
 
+    
 
 # Lattice
 # ------------------------------------------------------------------------------
 
+# Settings
 xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
-coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff.csv")
+coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff_straight.csv")
 mstate_filename = None
-quads_filename = None
+quads_filename = os.path.join(
+    "/home/46h/sim_data/SNS_BTF/match_parallel/2023-08-08/",
+    "230808225233-match_parallel_quad_strengths_001750.dat",
+)
 sequences = [
     "MEBT1",
     "MEBT2",
 ]
-max_drift_length = 0.005  # [m]
+max_drift_length = 0.010  # [m]
 
-linac = SNS_BTF(
-    coef_filename=os.path.join(input_dir, "magnets/default_i2gl_coeff.csv"),
-    rf_frequency=402.5e+06,
-)
-
+# Initialize lattice.
+linac = SNS_BTF(coef_filename=coef_filename, rf_frequency=402.5e06)
 linac.init_lattice(
     xml_filename=xml_filename,
     sequences=sequences,
     max_drift_length=max_drift_length,
 )
-    
+
+# Set optics from file.
 if mstate_filename is not None:
-    linac.update_quads_from_mstate(
-        filename=mstate_filename,
-        value_type="current"
-    )
-    
+    linac.update_quads_from_mstate(filename=mstate_filename, value_type="current")
 if quads_filename is not None:
-    linac.set_quads_from_file(quads_filename)
+    linac.set_quads_from_file(quads_filename, comment="#", verbose=True)
 
 # Overlapping PMQ fields.
 if switches["overlapping_fields"]:
     linac.set_overlapping_pmq_fields(z_step=max_drift_length, verbose=True)
-    
-# Space charge
-linac.add_space_charge_nodes(
-    grid_size_x=64,
-    grid_size_y=64,
-    grid_size_z=64,
-    path_length_min=max_drift_length,
-    n_bunches=3,
-)
-for node in linac.space_charge_nodes:
-    node.setCalculationOn(switches["space_charge"])
+
+## Space charge
+if switches["space_charge"]:
+    # linac.add_space_charge_nodes(
+    #     grid_size_x=64,
+    #     grid_size_y=64,
+    #     grid_size_z=64,
+    #     path_length_min=max_drift_length,
+    #     n_bunches=1,
+    # )
+    linac.add_uniform_ellipsoid_space_charge_nodes(
+        n_ellipsoids=1,
+        path_length_min=max_drift_length,
+    )
 
 # Apertures
 if switches["apertures"]:
     linac.add_aperture_nodes(drift_step=0.1, verbose=True)
-    
+
 # Tracking module
 linac.set_linac_tracker(switches["linac_tracker"])
-    
+
 # Save lattice info.
 if switches["save"]:
     linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
     linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
-    
 
 lattice = linac.lattice
+
 
 
 # Bunch
@@ -193,8 +196,8 @@ filename = os.path.join(
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
-current = 0.040  # [A]
-n_parts = int(6.00e+04)  # max number of particles
+current = 0.042  # [A]
+n_parts = int(1.00e05)  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -204,7 +207,7 @@ bunch.getSyncParticle().kinEnergy(kin_energy)
 
 # Load the bunch coordinates or generate from Twiss parameters.
 if filename is not None:
-    pyorbit_sim.bunch_utils.load(
+    bunch = pyorbit_sim.bunch_utils.load(
         filename=filename,
         bunch=bunch,
         verbose=True,
@@ -227,10 +230,10 @@ else:
         eps_y=0.21e-06,
         eps_z=0.24153e-06,
     )
-    
+
 # Set the bunch centroid.
 bunch = pyorbit_sim.bunch_utils.set_centroid(
-    bunch, 
+    bunch,
     centroid=[
         0.0,  # <x> [m]
         0.0,  # <x'> [rad]
@@ -246,31 +249,31 @@ bunch = pyorbit_sim.bunch_utils.set_centroid(
 if switches["rms_equivalent_dist"]:
     bunch = pyorbit_sim.bunch_utils.generate_rms_equivalent_bunch(
         dist=WaterbagDist3D,
-        bunch=bunch, 
+        bunch=bunch,
         verbose=True,
     )
 
-# Downsample. (Assume the particles were randomly generated to begin with.)
-if n_parts is not None:
-    bunch = pyorbit_sim.bunch_utils.downsample(
-        bunch, 
-        n=int(n_parts / _mpi_size),
-        method="first", 
-        verbose=True,
-    )
-                
+# Downsample the bunch.
+bunch = pyorbit_sim.bunch_utils.downsample(
+    bunch,
+    n=n_parts,
+    method="first",
+    conserve_intensity=True,
+    verbose=True,
+)
+
 # Decorrelate the x-x', y-y', z-z' coordinates. (No MPI.)
 if switches["decorrelate_x-y-z"]:
     bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
 
 # Set the macro-particle size.
-if current is not None:
-    intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
-    bunch_size_global = bunch.getSizeGlobal()
-    macro_size = intensity / bunch_size_global
-    bunch.macroSize(macro_size)
+intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
+bunch_size_global = bunch.getSizeGlobal()
+macro_size = intensity / bunch_size_global
+bunch.macroSize(macro_size)
 
-        
+
+
 # Diagnostics
 # --------------------------------------------------------------------------------------
 
@@ -282,27 +285,29 @@ stride = {
 if not switches["save"]:
     stride["write_bunch"] = np.inf
     stride["plot_bunch"] = np.inf
-        
+
+
     
-# Create bunch plotter.
+# Bunch plotter
+# ------------------------------
+
+
+# Define transformation to be applied before plotting.
 def transform(X):
-    X[:, :] = X[:, :] * 1000.0
-    X = pyorbit_sim.bunch_utils.norm_xxp_yyp_zzp(X, scale_emittance=True)
-    X = pyorbit_sim.bunch_utils.slice_sphere(
-        X,
-        axis=(0, 1, 2, 3),
-        rmin=0.0,
-        rmax=1.0,
-    )
+    X[:, :] *= 1000.0
+    X = pyorbit_sim.cloud.norm_xxp_yyp_zzp(X, scale_emittance=True)
     return X
 
+# Create plotter.
 plotter = pyorbit_sim.plotting.Plotter(
-    transform=transform, 
+    transform=transform,
     folder=man.outdir,
     prefix=man.prefix,
-    default_save_kws=None, 
+    default_save_kws=None,
     dims=["x", "xp", "y", "yp", "z", "dE"],
 )
+
+# Add functions to plotter.
 plot_kws = dict(
     text=True,
     colorbar=True,
@@ -314,23 +319,44 @@ plot_kws = dict(
     norm="log",
 )
 plotter.add_function(
-    pyorbit_sim.plotting.proj2d, 
-    axis=(4, 5),
+    pyorbit_sim.plotting.proj2d,
+    axis=(0, 1),
     limits=[(-5.0, 5.0), (-5.0, 5.0)],
-    save_kws=dict(dpi=200), 
-    name=None, 
+    save_kws=dict(dpi=200),
+    name=None,
     **plot_kws
 )
 
+# Add plotter nodes. If these are not added, the plotter will be called
+# by `monitor` wtih frequency given by `stride`.
+# [...]
 
-# Create bunch writer.
+
+
+# Bunch writer
+# ------------------------------
 writer = pyorbit_sim.linac.BunchWriter(
-    folder=man.outdir, 
-    prefix=man.prefix, 
+    folder=man.outdir,
+    prefix=man.prefix,
     index=0,
-)       
+)
 
-# Create bunch monitor.
+# Add bunch writer nodes. If these are not added, the writer will be called
+# by `monitor` wtih frequency given by `stride`.
+# [...]
+
+# Write particle ids in column 7 of each bunch file.
+if switches["save_particle_ids"]:
+    ParticleIdNumber.addParticleIdNumbers(bunch)
+
+# Write initial 6D coordinates to columns 8-13 of each bunch file.
+if switches["save_init_coords_attr"]:
+    copyCoordsToInitCoordsAttr(bunch)
+
+
+    
+# Monitor
+# ------------------------------
 monitor = pyorbit_sim.linac.Monitor(
     position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride=stride,
@@ -342,21 +368,14 @@ monitor = pyorbit_sim.linac.Monitor(
     verbose=True,
 )
 
-# Write particle ids in column 7 of each bunch file.
-if switches["save_particle_ids"]:
-    ParticleIdNumber.addParticleIdNumbers(bunch)
-    
-# Write initial 6D coordinates to columns 8-13 of each bunch file.
-if switches["save_init_coords_attr"]:
-    copyCoordsToInitCoordsAttr(bunch)
-    
+
 
 # Tracking
 # --------------------------------------------------------------------------------------
 
 # Settings
 start = None  # (node name/position/None)
-stop = "MEBT:VS06"  # (node name/position/None)
+stop = "MEBT:QH30"  # (node name/position/None)
 
 # Record synchronous particle time of arrival at each accelerating cavity.
 if _mpi_rank == 0:
@@ -367,35 +386,23 @@ if _mpi_rank == 0:
 
 # Check the synchronous particle time.
 pyorbit_sim.linac.check_sync_part_time(
-    bunch, 
-    lattice, 
-    start=start,
-    set_design=switches["set_design_sync_time"],
-    verbose=True
+    bunch, lattice, start=start, set_design=switches["set_design_sync_time"], verbose=True
 )
-    
+
 # Save input bunch.
 if switches["save"] and switches["save_input_bunch"]:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
     writer.action(bunch, node_name)
-    
+
 # Track the bunch.
 params_dict = pyorbit_sim.linac.track(
-    bunch, 
-    lattice, 
-    monitor=monitor, 
-    start=start,
-    stop=stop,
-    verbose=True
+    bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True
 )
-        
+
 # Save loss statistics.
-if len(linac.aperture_nodes) > 0:
-    for aperture_node in linac.aperture_nodes:
-        aperture_node.getNumberOfLostParticles
-        
+if linac.aperture_nodes:
     aprt_nodes_losses = GetLostDistributionArr(linac.aperture_nodes, params_dict["lostbunch"])
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
@@ -406,10 +413,10 @@ if len(linac.aperture_nodes) > 0:
             print("Saving loss vs. node array to {}".format(filename))
         file = open(filename, "w")
         file.write("node position loss\n")
-        for (node, loss) in aprt_nodes_losses:
+        for node, loss in aprt_nodes_losses:
             file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
         file.close()
-    
+
 # Save lost bunch.
 if switches["save"] and switches["save_lostbunch"]:
     filename = man.get_filename("lostbunch.dat")
@@ -420,10 +427,10 @@ if switches["save"] and switches["save_lostbunch"]:
 
 # Save output bunch.
 if switches["save"] and switches["save_output_bunch"]:
-    node_name = stop 
+    node_name = stop
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"
     writer.action(bunch, node_name)
-    
+
 if _mpi_rank == 0:
     print("timestamp = {}".format(man.timestamp))
