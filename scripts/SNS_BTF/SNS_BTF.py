@@ -1,6 +1,7 @@
 """SNS Beam Test Facility (BTF)."""
 from __future__ import print_function
 import collections
+import copy
 import os
 import sys
 import warnings
@@ -9,6 +10,7 @@ import matplotlib
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy import optimize
 
 from bunch import Bunch
@@ -440,6 +442,7 @@ class SNS_BTF:
         """
         min_current, max_current = self.get_quad_current_limits(quad_name)
         node = self.lattice.getNodeForName(quad_name)
+        # kappa = copy.copy(node.getParam("dB/dr"))
         kappa = node.getParam("dB/dr")
         self.set_quad_current(quad_name, min_current, verbose=False)
         kappa_min = node.getParam("dB/dr")
@@ -479,17 +482,22 @@ class SNS_BTF:
         
         Each line gives "quad_name dB/dr". Lines starting with `comment` are skipped.
         """
+        if verbose:
+            print("Reading file {}".format(filename))
         file = open(filename)
         for i, line in enumerate(file):
+            line = line.rstrip()
+            if not line:
+                continue
             if line.startswith(comment):
                 continue
-            name, value = line.rstrip().split(" ")
+            name, value = line.split(" ")
             name = self.shorten_quad_name(name)
             node = self.magnets[name]["node"]
             value = float(value)
             node.setParam("dB/dr", value)
             if verbose:
-                print("Updated {} dB/dr={}".format(node.getName(), value))
+                print("Set {} dB/dr={}".format(node.getName(), value))
                 
     def set_pmq_gradient(self, quad_name, gradient, verbose=True):
         quad_name = self.shorten_quad_name(quad_name)
@@ -586,28 +594,6 @@ class SNS_BTF:
         if _mpi_rank == 0 and verbose:
             print("Added {} uniform ellipsoid space charge nodes".format(len(sc_nodes)))
         self.space_charge_nodes = sc_nodes
-        return self.space_charge_nodes
-    
-    def add_envelope_solver_nodes_2d(
-        self,
-        path_length_min=0.010,
-        perveance=0.0,
-        eps_x=None,
-        eps_y=None,
-        verbose=True,
-    ):
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-        solver_nodes = set_danilov_envelope_solver_nodes_20(
-            self.lattice,
-            path_length_min=0.010,
-            perveance=perveance,
-            eps_x=eps_x,
-            eps_y=eps_y,
-        )
-        if _mpi_rank == 0 and verbose:
-            print("Added {} envelope solver nodes".format(len(solver_nodes)))
-        self.space_charge_nodes = solver_nodes
         return self.space_charge_nodes
 
     def add_aperture_nodes(self, drift_step=0.1, start=0.0, stop=None, verbose=True):
@@ -719,10 +705,9 @@ class Matcher:
         """
         bunch_in = Bunch()
         self.bunch.copyBunchTo(bunch_in)
-        
-        monitor_node_names = None if dense else self.fodo_quad_names
+                
         monitor = BeamSizeMonitor(
-            node_names=monitor_node_names, 
+            node_names=(None if dense else self.fodo_quad_names), 
             position_offset=self.position_offset, 
             verbose=verbose,
         )
@@ -740,6 +725,9 @@ class Matcher:
     
     def save_data(self):
         """Save current optics and plot rms beam size evolution."""
+        if self.outdir is None:
+            return
+        
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
@@ -753,10 +741,18 @@ class Matcher:
             if self.verbose:
                 print("Saving file {}".format(filename))
             file = open(filename, "w")
-            file.write("quad_name dB/dr\n")
+            file.write("# quad_name dB/dr\n")
             for node in self.lattice.getNodesOfClasses([Quad, OverlappingQuadsNode]):
                 file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
             file.close()
+            
+            # Save history.
+            df = pd.DataFrame(history, columns=["position", "x_rms", "y_rms"])
+            filename = "history_{:06.0f}.dat".format(self.count)
+            filename = self.get_filename(filename)
+            if self.verbose:
+                print("Saving file {}".format(filename))
+            df.to_csv(filename, sep=" ")
             
             # Plot rms beam sizes.
             fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)

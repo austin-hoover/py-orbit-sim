@@ -171,49 +171,51 @@ def decorrelate_xy_z(bunch, verbose=False):
     return bunch
 
 
-def downsample(bunch, n=1, verbose=False, method="random"):
+def downsample(bunch, n=1, verbose=False, method="first", conserve_intensity=True):
     """Downsample the bunch to `n` particles.
     
     Parameters
     ----------
     n : int or float
-        The number of particles to keep. Can also be a float between 0 and 1, 
-        indicating the fraction of particles to keep.
+        The number of particles to keep. (The new global bunch size.)
     method : str
-        "random": Selects a random group of n particles from the bunch.
-        "first": Keeps the first n particles in the bunch. This method assumes
-        the particles were randomly generated to begin with.
+        "first": Keep the first n particles in the bunch. (Or keep the
+        first (n / mpi_size) particles on each processor.) This method 
+        assumes the particles were originally randomly generated.
+    conserve_intensity : bool
+        Whether to increase the macrosize after downsampling to conserve
+        the bunch intensity.
     """
+    if n is None:
+        return bunch
+    
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     
-    n_old = bunch.getSize()
-    if n >= n_old:
-        return bunch
+    macro_size = bunch.macroSize()
+    bunch_size_global = bunch.getSizeGlobal()
+    intensity = macro_size * bunch_size_global
     
-    if verbose and _mpi_rank == 0:
-        print('Downsampling bunch (n={})...'.format(n))
-    if method == "random":
-        # Randomly select n particles.
-        X = get_coords(bunch)
-        if 0 < n < 1:
-            n = n * X.shape[0]
-        n = int(np.clip(n, 1, X.shape[0]))
-        idx = np.random.choice(X.shape[0], n, replace=False)
-        X = X[idx, :]
-        # Edit the bunch coordinates.
-        new_bunch = Bunch()
-        bunch.copyEmptyBunchTo(new_bunch)
-        new_bunch = set_coords(new_bunch, X)
-        new_bunch.macroSize(bunch.macroSize() * (bunch.getSize() / new_bunch.getSize()))
-        new_bunch.copyBunchTo(bunch)
-    elif method == "first":        
+    n_proc = int(n / _mpi_size)
+    n_proc_old = bunch.getSize()
+    if n_proc >= n_proc_old:
+        return bunch    
+    
+    if method == "first":        
         if verbose:
-            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_old, n))
-        for i in reversed(range(n, n_old)):
+            print("(rank {}) n_old={}, n_new={}".format(_mpi_rank, n_proc_old, n_proc))
+        for i in reversed(range(n_proc, n_proc_old)):
             bunch.deleteParticleFast(i)
         bunch.compress()    
+    else:
+        raise ValueError("Invalid method")
+    
+    if conserve_intensity:
+        bunch_size_global = bunch.getSizeGlobal()
+        macro_size = intensity / bunch_size_global
+        bunch.macroSize(macro_size)
+    
     if verbose:
         print('Downsampling complete.')
     return bunch
