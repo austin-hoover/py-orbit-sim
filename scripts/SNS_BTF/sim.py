@@ -75,6 +75,7 @@ switches = {
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
     "overlapping_fields": True,
+    "perturb_lattice" True,
     "rms_equivalent_dist": False,
     "save": True,
     "save_init_coords_attr": False,
@@ -180,6 +181,19 @@ if switches["save"]:
 lattice = linac.lattice
 
 
+# Perturb the lattice.
+if switches["perturb_lattice"]:
+    np.random.seed(0)
+    node_names = ["MEBT:QV09", "MEBT:QH10"]
+    max_frac_delta = 0.1
+    for name in node_names:
+        node = lattice.getNodeForName(name)
+        kappa = node.getParam("dB/dr")
+        # delta = kappa * np.random.uniform(-max_frac_delta, max_frac_delta) 
+        delta = 0.2 * kappa
+        print("Adding delta={} to node={}".format(delta, node_name))
+        node.setParam("dB/dr", kappa + delta)
+        
 
 # Bunch
 # ------------------------------------------------------------------------------
