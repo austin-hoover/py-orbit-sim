@@ -410,6 +410,9 @@ class BeamSizeMonitor:
         self.maxs = np.zeros(2)
 
     def action(self, params_dict):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
         node = params_dict["node"]
         bunch = params_dict["bunch"]
 
