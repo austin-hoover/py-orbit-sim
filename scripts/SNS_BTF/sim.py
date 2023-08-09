@@ -78,8 +78,8 @@ switches = {
     "rms_equivalent_dist": False,
     "save": True,
     "save_init_coords_attr": False,
-    "save_input_bunch": False,
-    "save_output_bunch": False,
+    "save_input_bunch": True,
+    "save_output_bunch": True,
     "save_lostbunch": True,
     "save_losses": True,
     "save_particle_ids": True,
@@ -128,8 +128,8 @@ xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
 coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff_straight.csv")
 mstate_filename = None
 quads_filename = os.path.join(
-    "/home/46h/sim_data/SNS_BTF/match_parallel/2023-08-08/",
-    "230808225233-match_parallel_quad_strengths_001750.dat",
+    "/home/46h/sim_data/SNS_BTF/match_parallel/2023-08-09/",
+    "230809005942-match_parallel_quad_strengths_001575.dat"
 )
 sequences = [
     "MEBT1",
@@ -158,16 +158,12 @@ if switches["overlapping_fields"]:
 ## Space charge
 if switches["space_charge"]:
     linac.add_space_charge_nodes(
-        grid_size_x=64,
-        grid_size_y=64,
-        grid_size_z=64,
+        grid_size_x=128,
+        grid_size_y=128,
+        grid_size_z=128,
         path_length_min=max_drift_length,
         n_bunches=3,
     )
-    # linac.add_uniform_ellipsoid_space_charge_nodes(
-    #     n_ellipsoids=1,
-    #     path_length_min=max_drift_length,
-    # )
 
 # Apertures
 if switches["apertures"]:
@@ -191,13 +187,13 @@ lattice = linac.lattice
 # Settings
 filename = os.path.join(
     "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_1.00e+05.dat",
+    "bunch_RFQ_output_8.56e+06.dat"
 )
 mass = 0.939294  # [GeV / c^2]
 charge = -1.0  # [elementary charge units]
 kin_energy = 0.0025  # [GeV]
 current = 0.042  # [A]
-n_parts = int(1.00e05)  # max number of particles
+n_parts = None  # max number of particles
 
 # Initialize the bunch.
 bunch = Bunch()
@@ -279,7 +275,7 @@ bunch.macroSize(macro_size)
 
 stride = {
     "update": 0.010,  # [m]
-    "write_bunch": np.inf,  # [m]
+    "write_bunch": 2.0,  # [m]
     "plot_bunch": np.inf,  # [m]
 }
 if not switches["save"]:
