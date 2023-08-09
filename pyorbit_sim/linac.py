@@ -439,6 +439,42 @@ class BeamSizeMonitor:
         if _mpi_rank == 0 and self.verbose:
             print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
             
+            
+class BeamSizeMonitorFast:
+    def __init__(self, node_names=None, stride=None, position_offset=0.0, verbose=False):
+        self.node_names = node_names
+        self.stride = stride
+        self.position = self.position_offset = position_offset
+        self.verbose = verbose
+        self.history = []
+
+    def action(self, params_dict):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+
+        node = params_dict["node"]
+        bunch = params_dict["bunch"]
+
+        position = params_dict["path_length"] + self.position_offset
+        if self.node_names and (node.getName() not in self.node_names):
+            return
+        if self.stride is not None:
+            if position - self.position < self.stride:
+                return
+        self.position = position
+        
+        twiss_analysis = BunchTwissAnalysis()
+        order = 2
+        twiss_analysis.computeBunchMoments(bunch, order, 0, 0)
+        sig_xx = twiss_analysis.getCorrelation(0, 0)
+        sig_yy = twiss_analysis.getCorrelation(2, 2)
+        x_rms = 1000.0 * np.sqrt(sig_xx)
+        y_rms = 1000.0 * np.sqrt(sig_yy)
+        self.history.append([position, x_rms, y_rms])
+
+        if _mpi_rank == 0 and self.verbose:
+            print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
+            
     
 def get_node_info(node_name_or_position, lattice):
     """Return node, node index, start and stop position for node name or center position.
