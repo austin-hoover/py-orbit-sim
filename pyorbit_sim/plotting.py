@@ -20,6 +20,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 
 from bunch import Bunch
+from orbit.py_linac.lattice import BaseLinacNode
 
 
 def get_bunch_coords(bunch):
@@ -478,3 +479,23 @@ class Plotter:
             if "position" in info:
                 self.position = info["position"]
             
+
+class PlotterNode(BaseLinacNode):
+    def __init__(self, name="plotter_node", node_name=None, plotter=None, verbose=True, **kws):
+        BaseLinacNode.__init__(self, name)
+        self.plotter = plotter
+        if self.plotter is None:
+            self.plotter = Plotter(**kws)
+        self.active = True
+        self.node_name = node_name
+        self.verbose = verbose
+        
+    def track(self, params_dict):
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        if self.active and params_dict.has_key("bunch"):
+            self.plotter.action(params_dict["bunch"], info=dict(node=self.node_name), verbose=verbose)
+            
+    def trackDesign(self, params_dict):
+        pass
+    
