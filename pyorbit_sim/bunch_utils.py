@@ -186,6 +186,9 @@ def downsample(bunch, n=1, verbose=False, method="first", conserve_intensity=Tru
         Whether to increase the macrosize after downsampling to conserve
         the bunch intensity.
     """
+    if n is None:
+        return bunch
+    
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
