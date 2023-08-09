@@ -104,6 +104,7 @@ linac.add_uniform_ellipsoid_space_charge_nodes(
     path_length_min=max_drift_length,
 )
 linac.set_linac_tracker(True)
+linac.set_overlapping_pmq_fields(z_step=0.001, verbose=True):
 lattice = linac.lattice
 
 

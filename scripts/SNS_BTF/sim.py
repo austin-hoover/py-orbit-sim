@@ -74,7 +74,7 @@ switches = {
     "apertures": True,
     "decorrelate_x-y-z": False,
     "linac_tracker": True,
-    "overlapping_fields": False,
+    "overlapping_fields": True,
     "rms_equivalent_dist": False,
     "save": True,
     "save_init_coords_attr": False,
@@ -157,17 +157,17 @@ if switches["overlapping_fields"]:
 
 ## Space charge
 if switches["space_charge"]:
-    # linac.add_space_charge_nodes(
-    #     grid_size_x=64,
-    #     grid_size_y=64,
-    #     grid_size_z=64,
-    #     path_length_min=max_drift_length,
-    #     n_bunches=1,
-    # )
-    linac.add_uniform_ellipsoid_space_charge_nodes(
-        n_ellipsoids=1,
+    linac.add_space_charge_nodes(
+        grid_size_x=64,
+        grid_size_y=64,
+        grid_size_z=64,
         path_length_min=max_drift_length,
+        n_bunches=3,
     )
+    # linac.add_uniform_ellipsoid_space_charge_nodes(
+    #     n_ellipsoids=1,
+    #     path_length_min=max_drift_length,
+    # )
 
 # Apertures
 if switches["apertures"]:
