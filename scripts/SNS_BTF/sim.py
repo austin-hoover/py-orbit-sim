@@ -191,7 +191,7 @@ if switches["perturb_lattice"]:
         kappa = node.getParam("dB/dr")
         # delta = kappa * np.random.uniform(-max_frac_delta, max_frac_delta) 
         delta = 0.2 * kappa
-        print("Adding delta={} to node={}".format(delta, node_name))
+        print("Adding delta={} to node={}".format(delta, name))
         node.setParam("dB/dr", kappa + delta)
         
 
