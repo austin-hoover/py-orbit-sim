@@ -649,7 +649,6 @@ class Matcher:
         index_stop=-1,
         save_freq=None,
         verbose=False,
-        prefix=None,
         outdir=None,
     ):
         """
@@ -681,12 +680,9 @@ class Matcher:
         self.verbose = verbose
         self.count = 0
         self.outdir = outdir
-        self.prefix = prefix
         
     def get_filename(self, filename):
-        if self.prefix is None:
-            return filename
-        return os.path.join(self.outdir, "{}_{}".format(self.prefix, filename))
+        return os.path.join(self.outdir, filename)
                 
     def track(self, dense=False, verbose=False):
         """Return (x_rms, y_rms) at each FODO quad.

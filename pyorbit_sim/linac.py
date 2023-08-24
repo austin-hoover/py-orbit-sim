@@ -27,9 +27,8 @@ _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
 
 class BunchWriter:
-    def __init__(self, folder="./", prefix=None, index=0, position=0.0, verbose=True):
+    def __init__(self, folder="./", index=0, position=0.0, verbose=True):
         self.folder = folder
-        self.prefix = prefix
         self.index = index
         self.position = position
         self.verbose = verbose
@@ -39,8 +38,6 @@ class BunchWriter:
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
         filename = "bunch"
-        if self.prefix is not None:
-            filename = "{}_{}".format(self.prefix, filename)
         if self.index is not None:
             filename = "{}_{:04.0f}".format(filename, self.index)
         if node_name is not None:

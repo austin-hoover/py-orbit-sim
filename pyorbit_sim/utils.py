@@ -97,22 +97,24 @@ class ScriptManager:
             True: outdir is '/home/sim_data/ring/sim/230812062403/'.
             False: outdir is '/home/sim_data/'.
         """
+        self.git_hash, self.git_url = self.get_git()
         self.datadir = datadir
         self.timestamp = timestamp
         self.datestamp = datestamp
         self.path = path
         self.script_name = self.path.stem
-        self.git_hash, self.git_url = self.get_git()
-        self.prefix = "{}-{}".format(self.timestamp, self.script_name)
         self.script_path_in_outdir = script_path_in_outdir
         if self.script_path_in_outdir:
             self.outdir = os.path.join(
                 self.datadir, 
                 self.path.as_posix().split("scripts/")[1].split(".py")[0], 
-                self.datestamp,
+                self.timestamp,
             )
         else:
-            self.outdir = self.datadir
+            self.outdir = os.path.join(
+                self.datadir, 
+                self.timestamp,
+            )
     
     def make_outdir(self):
         """Create output directory."""
@@ -134,16 +136,12 @@ class ScriptManager:
                 print("Unknown git revision.")
         return _git_hash, _git_url
     
-    def get_filename(self, filename, sep="_"):
-        """Append prefix to filename.
-        
-        Example: 'data.txt' --> '230812062403-sim_data.txt'.
-        """
-        return os.path.join(self.outdir, "{}{}{}".format(self.prefix, sep, filename))
+    def get_filename(self, filename):
+        return os.path.join(self.outdir, filename)
     
     def save_script_copy(self):
-        """Save a timestamped copy of the script"""
-        shutil.copy(self.path.absolute().as_posix(), self.get_filename(".py", sep=""))
+        filename = self.get_filename("{}.py".format(self.script_name))
+        shutil.copy(self.path.absolute().as_posix(), filename)
         
     def get_info(self):
         """Return info dictionary."""

@@ -83,9 +83,9 @@ from spacecharge import Boundary2D
 from spacecharge import SpaceChargeCalc2p5D
 from spacecharge import SpaceChargeCalcSliceBySlice2D
 
-from SNS_RING import SNS_RING
-from SNS_RING import X_INJ
-from SNS_RING import Y_INJ
+from sns_ring import SNS_RING
+from sns_ring import X_INJ
+from sns_ring import Y_INJ
 
 sys.path.append(os.getcwd())
 from pyorbit_sim import utils

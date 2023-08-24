@@ -18,7 +18,7 @@ from orbit.lattice import AccNode
 from orbit.utils import consts
 import orbit_mpi
 
-from SNS_BTF import SNS_BTF
+from sns_btf import SNS_BTF
 
 import pyorbit_sim
 

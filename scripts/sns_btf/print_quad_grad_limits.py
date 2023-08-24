@@ -5,7 +5,7 @@ from pprint import pprint
 
 from orbit.py_linac.lattice import Quad
 
-from SNS_BTF import SNS_BTF
+from sns_btf import SNS_BTF
 
 
 file_dir = os.path.dirname(os.path.realpath(__file__))

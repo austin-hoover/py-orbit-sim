@@ -22,7 +22,7 @@ import orbit_mpi
 # sys.path.append("../..")
 from pyorbit_sim.utils import ScriptManager
 
-from SNS_RING import SNS_RING
+from sns_ring import SNS_RING
 
 
 # Setup

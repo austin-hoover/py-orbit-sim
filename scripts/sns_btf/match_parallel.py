@@ -26,10 +26,10 @@ import orbit_mpi
 from orbit_mpi import mpi_datatype
 from orbit_mpi import mpi_op
 
-from SNS_BTF import BeamSizeMonitor
-from SNS_BTF import Matcher
-from SNS_BTF import OpticsController
-from SNS_BTF import SNS_BTF
+from sns_btf import BeamSizeMonitor
+from sns_btf import Matcher
+from sns_btf import OpticsController
+from sns_btf import SNS_BTF
 
 import pyorbit_sim
 
@@ -54,7 +54,7 @@ timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main
 # Set up directories.
 file_dir = os.path.dirname(os.path.realpath(__file__))
 input_dir = os.path.join(file_dir, "data_input")
-output_dir = "/home/46h/sim_data/"
+output_dir = "/home/46h/repo/py-orbit-sim/data_output/"
 if _mpi_rank == 0:
     print("file_dir = {}".format(file_dir))
     print("input_dir = {}".format(input_dir))
@@ -187,9 +187,8 @@ matcher = Matcher(
     fodo_quad_names=fodo_quad_names,
     index_start=index_start,
     index_stop=index_stop,
-    save_freq=(25 if save else 0),
+    save_freq=(100 if save else 0),
     verbose=False,
-    prefix=man.prefix,
     outdir=(man.outdir if save else None),
 )
 

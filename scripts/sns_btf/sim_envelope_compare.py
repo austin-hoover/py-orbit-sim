@@ -25,7 +25,7 @@ import orbit_mpi
 
 import pyorbit_sim
 
-from SNS_BTF import SNS_BTF
+from sns_btf import SNS_BTF
 
 
 # Setup
