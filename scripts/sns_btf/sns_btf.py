@@ -680,10 +680,7 @@ class Matcher:
         self.verbose = verbose
         self.count = 0
         self.outdir = outdir
-        
-    def get_filename(self, filename):
-        return os.path.join(self.outdir, filename)
-                
+                        
     def track(self, dense=False, verbose=False):
         """Return (x_rms, y_rms) at each FODO quad.
         
@@ -722,7 +719,7 @@ class Matcher:
         maxs = np.array(monitor.maxs)
         return history, maxs
     
-    def save_data(self):
+    def save_state(self):
         """Save current optics and plot rms beam size evolution."""
         if self.outdir is None:
             return
@@ -735,21 +732,20 @@ class Matcher:
         
         if _mpi_rank == 0:
             # Save optics.
-            filename = "quad_strengths_{:06.0f}.dat".format(self.count)
-            filename = self.get_filename(filename)
+            filename = "quad_settings_{:06.0f}.dat".format(self.count)
+            filename = os.path.join(self.outdir, filename)
             if self.verbose:
                 print("Saving file {}".format(filename))
             file = open(filename, "w")
             file.write("# quad_name dB/dr\n")
-            for name in self.optics_controller.quad_names:
-                node = self.lattice.getNodeForName(name)
+            for node in self.lattice.getQuads():
                 file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
             file.close()
             
             # Save history.
             df = pd.DataFrame(history, columns=["position", "x_rms", "y_rms"])
             filename = "history_{:06.0f}.dat".format(self.count)
-            filename = self.get_filename(filename)
+            filename = os.path.join(self.outdir, filename)
             if self.verbose:
                 print("Saving file {}".format(filename))
             df.to_csv(filename, sep=" ")
@@ -771,7 +767,7 @@ class Matcher:
             ax.set_ylabel("RMS size [mm]")
             ax.legend(loc="upper right")
             filename = "rms_{:06.0f}.png".format(self.count)
-            filename = self.get_filename(filename)
+            filename = os.path.join(self.outdir, filename)
             if self.verbose:
                 print("Saving file {}".format(filename))
             plt.savefig(filename, dpi=100)
@@ -792,17 +788,14 @@ class Matcher:
 
             cost_ = 0.0
             if _mpi_rank == 0:
-                
                 # Penalize large beam size variance in FODO channel.
                 for i in range(2):
                     cost_ += np.var(x_rms[i::2])
                     cost_ += np.var(y_rms[i::2])
-                    
                 # Penalize large beam size in FODO channel.
                 factor = 0.00
                 cost_ += factor * (np.max(x_rms) + np.max(y_rms))
-                
-                ## Penalize large beam size before the FODO channel.
+                # Penalize large beam size before the FODO channel.
                 factor = 0.01
                 cost_ += factor * np.max(maxs)
                 
@@ -811,9 +804,9 @@ class Matcher:
             if self.verbose and _mpi_rank == 0:
                 print("cost={}".format(cost))
             if self.save_freq and (self.count % self.save_freq == 0):
-                self.save_data()
+                self.save_state()
             self.count += 1
-                
+            
         return cost
     
     def match(self, **kws):   
@@ -839,44 +832,6 @@ class Matcher:
         if _mpi_rank == 0:
             stop = 0
             x = optimize.minimize(self.objective, x0, args=(stop), **kws)
-            stop = 1
-            self.objective(x0, stop)
-        else:
-            stop = 0
-            while stop == 0:
-                self.objective(x0, stop)
-    
-    def match_global(self, **kws):   
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        kws.setdefault("niter", 100)
-        kws.setdefault("disp", True)
-        kws.setdefault(
-            "callback", 
-            lambda x, f, accepted: print("at minimum {:.4f} accepted {}".format(f, accepted)),
-        )        
-        kws.setdefault("minimizer_kwargs", dict())
-        if "bounds" not in kws["minimizer_kwargs"]:
-            lb, ub = self.optics_controller.get_quad_bounds(scale=1.2)
-            kws["minimizer_kwargs"]["bounds"] = optimize.Bounds(lb, ub)
-        kws["minimizer_kwargs"].setdefault("method", "trust-constr")
-        kws["minimizer_kwargs"].setdefault("options", dict())
-        if kws["minimizer_kwargs"]["method"] == "trust-constr":
-            kws["minimizer_kwargs"]["options"].setdefault("verbose", 2)
-        
-        if _mpi_rank == 0:
-            print("Matching quads:")
-            for i, name in enumerate(self.optics_controller.quad_names):
-                lo = kws["minimizer_kwargs"]["bounds"].lb[i]
-                hi = kws["minimizer_kwargs"]["bounds"].ub[i]
-                print("{} -- lb={:.3f}, ub={:.3f}".format(name, lo, hi))
-
-        x0 = self.optics_controller.get_quad_strengths()
-        if _mpi_rank == 0:
-            stop = 0
-            kws["minimizer_kwargs"]["args"] = (stop)
-            x = optimize.basinhopping(self.objective, x0, **kws)
             stop = 1
             self.objective(x0, stop)
         else:

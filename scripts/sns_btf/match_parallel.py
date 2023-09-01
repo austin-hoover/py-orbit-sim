@@ -81,11 +81,6 @@ if save and _mpi_rank == 0:
 # Settings
 xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
 coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff_straight.csv")
-mstate_filename = None
-quads_filename = os.path.join(
-    "/home/46h/sim_data/SNS_BTF/match_parallel/2023-08-08/",
-    "230808225233-match_parallel_quad_strengths_001750.dat"
-)
 sequences = [
     "MEBT1",
     "MEBT2",
