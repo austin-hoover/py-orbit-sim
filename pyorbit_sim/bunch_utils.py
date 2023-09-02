@@ -198,7 +198,7 @@ def downsample(bunch, n=1, verbose=False, method="first", conserve_intensity=Tru
     intensity = macro_size * bunch_size_global
     
     n_proc = int(n / _mpi_size)
-    n_proc_old = bunch.getSize()
+    n_proc_old = bunch.getSize()    
     if n_proc >= n_proc_old:
         return bunch    
     
@@ -512,7 +512,7 @@ def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
 
 def generate_norm_twiss(
     dist=None, 
-    n=0, 
+    n=None, 
     bunch=None, 
     alpha_x=-1.9620,
     alpha_y=1.7681,
@@ -550,7 +550,10 @@ def generate_norm_twiss(
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     
     if verbose and _mpi_rank == 0:
-        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))   
+        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))  
+        
+    if n is None:
+        n = int(1.00e+05)
         
     mass = bunch.mass()
     kin_energy = bunch.getSyncParticle().kinEnergy()
