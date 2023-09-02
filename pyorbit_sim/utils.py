@@ -1,3 +1,4 @@
+import logging
 import os
 import pathlib
 import shutil
@@ -6,7 +7,6 @@ import sys
 import time
 
 import orbit_mpi
-
 
 
 def ensure_path_exists(path):
@@ -153,13 +153,18 @@ class ScriptManager:
             "timestamp": self.timestamp,
             "datestamp": self.datestamp,
         }
-        return info
-
-    def save_info(self):   
-        """Save info dictionary."""
-        info = self.get_info()
-        file = open(self.get_filename("info.txt"), "w")
-        for key in sorted(info):
-            file.write("{}: {}\n".format(key, info[key]))
-        file.close()
-        return info
+        return info    
+    
+    def get_logger(self, save=True, disp=True, filename="log.txt"):
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        if save:
+            filename = self.get_filename(filename)
+            info_file_handler = logging.FileHandler(filename, mode="a")
+            info_file_handler.setLevel(logging.INFO)
+            logger.addHandler(info_file_handler)
+        if disp:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            logger.addHandler(console_handler)
+        return logger

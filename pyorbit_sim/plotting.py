@@ -416,7 +416,7 @@ class Plotter:
     def __init__(
         self, 
         transform=None, 
-        folder="./", 
+        outdir=".", 
         prefix=None, 
         default_save_kws=None, 
         index=0, 
@@ -425,7 +425,7 @@ class Plotter:
         units=None,
     ):
         self.transform = transform
-        self.folder = folder
+        self.outdir = outdir
         self.prefix = prefix
         self.functions = []
         self.kws = []
@@ -469,7 +469,7 @@ class Plotter:
                 filename = "{}_{}".format(self.prefix, filename)
             if "node" in info:
                 filename = '{}_{}'.format(filename, info["node"])
-            filename = os.path.join(self.folder, filename)
+            filename = os.path.join(self.outdir, filename)
             
             print("Saving figure to file {}".format(filename))
             plt.savefig(filename, **self.save_kws[i])

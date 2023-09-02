@@ -27,8 +27,8 @@ _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
 
 class BunchWriter:
-    def __init__(self, folder="./", index=0, position=0.0, verbose=True):
-        self.folder = folder
+    def __init__(self, outdir="./", index=0, position=0.0, verbose=True):
+        self.outdir = outdir
         self.index = index
         self.position = position
         self.verbose = verbose
@@ -43,7 +43,7 @@ class BunchWriter:
         if node_name is not None:
             filename = "{}_{}".format(filename, node_name)
         filename = "{}.dat".format(filename)
-        filename = os.path.join(self.folder, filename)
+        filename = os.path.join(self.outdir, filename)
         if _mpi_rank == 0 and self.verbose:
             print("Writing bunch to file {}".format(filename))
         bunch.dumpBunch(filename)
@@ -118,8 +118,8 @@ class Monitor:
             nodes.
             The dictionary can contain the following keys.
                 "update": proceed with all updates (print statement, etc.)
-                "write_bunch": call `bunch.dumpBunch`
-                "plot_bunch": call plotting routines
+                "write": call `bunch.dumpBunch`
+                "plot": call plotting routines
         track_rms : bool
             Whether include RMS bunch parameters in history arrays.
         emit_norm_flag, dispersion_flag : bool
@@ -147,8 +147,8 @@ class Monitor:
         if self.stride is None:
             self.stride = dict()
         self.stride.setdefault("update", 0.1)
-        self.stride.setdefault("write_bunch", np.inf)
-        self.stride.setdefault("plot_bunch", np.inf)
+        self.stride.setdefault("write", np.inf)
+        self.stride.setdefault("plot", np.inf)
         
         self.writer = writer
         self.plotter = plotter
@@ -309,13 +309,13 @@ class Monitor:
         self.step += 1
                                                 
         # Write bunch coordinates to file.        
-        if self.writer is not None and self.stride["write_bunch"] is not None:
-            if (position - self.writer.position) >= self.stride["write_bunch"]:
+        if self.writer is not None and self.stride["write"] is not None:
+            if (position - self.writer.position) >= self.stride["write"]:
                 self.writer.action(bunch, node_name=node.getName(), position=position)
 
         # Call plotting routines.
-        if self.plotter is not None and self.stride["plot_bunch"] is not None and _mpi_rank == 0:
-            if (position - self.plotter.position) >= self.stride["plot_bunch"]:
+        if self.plotter is not None and self.stride["plot"] is not None and _mpi_rank == 0:
+            if (position - self.plotter.position) >= self.stride["plot"]:
                 info = dict()
                 for key in self.history:
                     if self.history[key]:
@@ -375,103 +375,6 @@ class OpticsController:
             bounds.append([lb, ub])
         return np.array(bounds).T
     
-    
-class BeamSizeMonitor:
-    """Monitor the rms beam size in the lattice.
-    
-    Good for quick tests.
-    
-    Attributes
-    ----------
-    history : ndarray, shape (n, 3)
-        Columns are position [m], x_rms [mm], y_rms [mm].
-    maxs : ndarray, shape (2,)
-        x_rms_max, y_rms_max.
-    """
-    def __init__(self, node_names=None, stride=None, position_offset=0.0, verbose=False):
-        """
-        node_names : list
-            List of node names to observe. If None, observe every step.
-        stride : float
-            Space updates by at least this distance.
-        position_offset : float
-            The starting position.
-        verbose : bool
-            Whether to print results during tracking.
-        """
-        self.node_names = node_names
-        self.stride = stride
-        self.position = self.position_offset = position_offset
-        self.verbose = verbose
-        self.history = []
-        self.maxs = np.zeros(2)
-
-    def action(self, params_dict):
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        node = params_dict["node"]
-        bunch = params_dict["bunch"]
-
-        twiss_analysis = BunchTwissAnalysis()
-        order = 2
-        twiss_analysis.computeBunchMoments(bunch, order, 0, 0)
-        sig_xx = twiss_analysis.getCorrelation(0, 0)
-        sig_yy = twiss_analysis.getCorrelation(2, 2)
-        x_rms = 1000.0 * np.sqrt(sig_xx)
-        y_rms = 1000.0 * np.sqrt(sig_yy)
-        
-        self.maxs = np.maximum(self.maxs, [x_rms, y_rms])
-
-        position = params_dict["path_length"] + self.position_offset
-        if self.node_names and (node.getName() not in self.node_names):
-            return
-        if self.stride is not None:
-            if position - self.position < self.stride:
-                return
-        self.position = position
-
-        self.history.append([position, x_rms, y_rms])
-
-        if _mpi_rank == 0 and self.verbose:
-            print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
-            
-            
-class BeamSizeMonitorFast:
-    def __init__(self, node_names=None, stride=None, position_offset=0.0, verbose=False):
-        self.node_names = node_names
-        self.stride = stride
-        self.position = self.position_offset = position_offset
-        self.verbose = verbose
-        self.history = []
-
-    def action(self, params_dict):
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        node = params_dict["node"]
-        bunch = params_dict["bunch"]
-
-        position = params_dict["path_length"] + self.position_offset
-        if self.node_names and (node.getName() not in self.node_names):
-            return
-        if self.stride is not None:
-            if position - self.position < self.stride:
-                return
-        self.position = position
-        
-        twiss_analysis = BunchTwissAnalysis()
-        order = 2
-        twiss_analysis.computeBunchMoments(bunch, order, 0, 0)
-        sig_xx = twiss_analysis.getCorrelation(0, 0)
-        sig_yy = twiss_analysis.getCorrelation(2, 2)
-        x_rms = 1000.0 * np.sqrt(sig_xx)
-        y_rms = 1000.0 * np.sqrt(sig_yy)
-        self.history.append([position, x_rms, y_rms])
-
-        if _mpi_rank == 0 and self.verbose:
-            print("s={:.3f}  xrms={:<7.3f} yrms={:<7.3f} node={}".format(position, x_rms, y_rms, node.getName()))
-            
     
 def get_node_info(node_name_or_position, lattice):
     """Return node, node index, start and stop position for node name or center position.

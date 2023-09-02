@@ -1,5 +1,6 @@
 """SNS BTF simulation."""
 from __future__ import print_function
+import argparse
 import math
 import os
 import pathlib
@@ -10,6 +11,7 @@ import sys
 import time
 
 import numpy as np
+import yaml
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -66,33 +68,95 @@ from pyorbit_sim.utils import ScriptManager
 from sns_btf import SNS_BTF
 
 
+# Parse command line arguments
+# --------------------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser("sim")
+
+# Input/output paths
+parser.add_argument("--outdir", type=str, default=None)
+parser.add_argument("--xml", type=str, default="xml/btf_lattice_straight.xml")
+parser.add_argument("--coef", type=str, default="magnets/default_i2gl_coeff_straight.csv")
+parser.add_argument("--mstate", type=str, default=None)
+parser.add_argument("--quads", type=str, default="magnets/230901113653_quad_settings_matched.dat")
+    
+# Saving
+parser.add_argument("--save", type=int, default=1)
+parser.add_argument("--save_init_coords_attr", type=int, default=0)
+parser.add_argument("--save_input_bunch", type=int, default=1)
+parser.add_argument("--save_output_bunch", type=int, default=1)
+parser.add_argument("--save_lost_bunch", type=int, default=1)
+parser.add_argument("--save_losses", type=int, default=1)
+parser.add_argument("--save_ids", type=int, default=1)
+parser.add_argument("--verbose", type=int, default=1)
+
+parser.add_argument("--stride_update", type=float, default=0.010)  # [m]
+parser.add_argument("--stride_write", type=float, default=float("inf"))  # [m]
+parser.add_argument("--stride_plot", type=float, default=float("inf"))  # [m]
+
+# Lattice
+parser.add_argument("--apertures", type=int, default=1)
+parser.add_argument("--linac_tracker", type=int, default=1)
+parser.add_argument("--max_drift", type=float, default=0.010)
+parser.add_argument("--overlap", type=int, default=0)
+parser.add_argument("--set_sync_time", type=int, default=1)
+parser.add_argument("--rf", type=float, default=402.5e+06)
+
+# Space charge
+parser.add_argument("--spacecharge", type=int, default=1)
+parser.add_argument("--gridx", type=int, default=64)
+parser.add_argument("--gridy", type=int, default=64)
+parser.add_argument("--gridz", type=int, default=64)
+parser.add_argument("--bunches", type=int, default=3)
+
+# Bunch
+
+# If None, use default bunch filename defined below.
+# If "design", use the design Twiss parameters defined below with the 
+# distribution specified by args.dist. 
+# Otherwise, specifies the bunch filename.
+parser.add_argument("--bunch", type=str, default=None)
+
+parser.add_argument("--charge", type=float, default=-1.0)  # [elementary charge units]
+parser.add_argument("--current", type=float, default=0.042)  # [A]
+parser.add_argument("--energy", type=float, default=0.0025)  # [GeV]
+parser.add_argument("--mass", type=float, default=0.939294)  # [GeV / c^2]
+
+parser.add_argument("--dist", type=str, default="wb", choices=["kv", "wb", "gs"])
+parser.add_argument("--n", type=int, default=None, help="number of particles")
+parser.add_argument("--decorr", type=int, default=0)
+parser.add_argument("--rms_equiv", type=int, default=0)
+parser.add_argument("--mean_x", type=float, default=0.0)
+parser.add_argument("--mean_y", type=float, default=0.0)
+parser.add_argument("--mean_z", type=float, default=0.0)
+parser.add_argument("--mean_xp", type=float, default=0.0)
+parser.add_argument("--mean_yp", type=float, default=0.0)
+parser.add_argument("--mean_dE", type=float, default=0.0)
+
+
+# Tracking
+parser.add_argument("--start", type=str, default=None)
+parser.add_argument("--start_pos", type=float, default=None)
+parser.add_argument("--stop", type=str, default=None)
+parser.add_argument("--stop_pos", type=float, default=None)
+
+args = parser.parse_args()
+
 
 # Setup
 # --------------------------------------------------------------------------------------
+file_dir = os.path.dirname(os.path.realpath(__file__))
 
-switches = {
-    "apertures": True,
-    "decorrelate_x-y-z": False,
-    "linac_tracker": True,
-    "overlapping_fields": True,
-    "perturb_lattice": True,
-    "rms_equivalent_dist": False,
-    "save": True,
-    "save_init_coords_attr": False,
-    "save_input_bunch": True,
-    "save_output_bunch": True,
-    "save_lostbunch": True,
-    "save_losses": True,
-    "save_particle_ids": True,
-    "set_design_sync_time": False,
-    "space_charge": True,
-}
+# Load config file.
+file = open(os.path.join(file_dir, "config.yaml"), "r")
+config = yaml.safe_load(file)
+file.close()
 
-
-# Set up directories.
-output_dir = "/home/46h/sim_data/"  # parent directory for output
-file_dir = os.path.dirname(os.path.realpath(__file__))  # directory of this file
-input_dir = os.path.join(file_dir, "data_input")  # lattice input data
+# Set input/output directories.
+input_dir = os.path.join(file_dir, "data_input")
+output_dir = os.path.join(file_dir, config["output_dir"])
+if args.outdir is not None:
+    output_dir = os.path.join(file_dir, args.outdir)
 
 # MPI
 _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -113,194 +177,165 @@ man = ScriptManager(
     timestamp=timestamp,
     datestamp=datestamp,
 )
-if switches["save"] and _mpi_rank == 0:
+if args.save and _mpi_rank == 0:
     man.make_outdir()
-    man.save_info()
+    log = man.get_logger(save=args.save, disp=True)
+    for key, val in man.get_info().items():
+        log.info("{} {}".format(key, val))
+    log.info(args)
     man.save_script_copy()
-    pprint(man.get_info())
 
-    
 
 # Lattice
 # ------------------------------------------------------------------------------
-
-# Settings
-xml_filename = os.path.join(input_dir, "xml/btf_lattice_straight.xml")
-coef_filename = os.path.join(input_dir, "magnets/default_i2gl_coeff_straight.csv")
-mstate_filename = None
-quads_filename = os.path.join(
-    "/home/46h/sim_data/SNS_BTF/match_parallel/2023-08-09/",
-    "230809005942-match_parallel_quad_strengths_001575.dat"
-)
 sequences = [
     "MEBT1",
     "MEBT2",
 ]
-max_drift_length = 0.010  # [m]
 
-# Initialize lattice.
-linac = SNS_BTF(coef_filename=coef_filename, rf_frequency=402.5e06)
+# Initialize the lattice.
+linac = SNS_BTF(coef_filename=os.path.join(input_dir, args.coef), rf_frequency=args.rf)
 linac.init_lattice(
-    xml_filename=xml_filename,
+    xml_filename=os.path.join(input_dir, args.xml),
     sequences=sequences,
-    max_drift_length=max_drift_length,
+    max_drift_length=args.max_drift,
 )
 
 # Set optics from file.
-if mstate_filename is not None:
-    linac.update_quads_from_mstate(filename=mstate_filename, value_type="current")
-if quads_filename is not None:
-    linac.set_quads_from_file(quads_filename, comment="#", verbose=True)
+if args.mstate:
+    filename = os.path.join(input_dir, args.mstate)
+    linac.update_quads_from_mstate(filename, value_type="current")
+if args.quads:
+    filename = os.path.join(input_dir, args.quads)
+    linac.set_quads_from_file(filename, comment="#", verbose=args.verbose)
 
 # Overlapping PMQ fields.
-if switches["overlapping_fields"]:
-    linac.set_overlapping_pmq_fields(z_step=max_drift_length, verbose=True)
+if args.overlap:
+    linac.set_overlapping_pmq_fields(z_step=args.max_drift, verbose=args.verbose)
 
-## Space charge
-if switches["space_charge"]:
+# Space charge
+if args.spacecharge:
     linac.add_space_charge_nodes(
-        grid_size_x=128,
-        grid_size_y=128,
-        grid_size_z=128,
-        path_length_min=max_drift_length,
-        n_bunches=3,
+        grid_size_x=args.gridx,
+        grid_size_y=args.gridy,
+        grid_size_z=args.gridz,
+        path_length_min=args.max_drift,
+        n_bunches=args.bunches,
     )
 
 # Apertures
-if switches["apertures"]:
-    linac.add_aperture_nodes(drift_step=0.1, verbose=True)
+if args.apertures:
+    linac.add_aperture_nodes(drift_step=0.1, verbose=args.verbose)
 
 # Tracking module
-linac.set_linac_tracker(switches["linac_tracker"])
+linac.set_linac_tracker(args.linac_tracker)
 
 # Save lattice info.
-if switches["save"]:
+if args.save:
     linac.save_node_positions(man.get_filename("lattice_nodes.txt"))
     linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
 
 lattice = linac.lattice
 
-
-# Perturb the lattice.
-if switches["perturb_lattice"]:
-    np.random.seed(0)
-    node_names = ["MEBT:QV09", "MEBT:QH10"]
-    max_frac_delta = 0.1
-    for name in node_names:
-        node = lattice.getNodeForName(name)
-        kappa = node.getParam("dB/dr")
-        # delta = kappa * np.random.uniform(-max_frac_delta, max_frac_delta) 
-        delta = 0.2 * kappa
-        print("Adding delta={} to node={}".format(delta, name))
-        node.setParam("dB/dr", kappa + delta)
-        
-
+                    
 # Bunch
 # ------------------------------------------------------------------------------
 
-# Settings
-filename = os.path.join(
-    "/home/46h/projects/BTF/sim/SNS_RFQ/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_8.56e+06_decorr_x-y-z.dat"
+# Define default bunch filename.
+def_bunch_filename = os.path.join(
+    "/home/46h/projects/btf/sim/sns_rfq/parmteq/2021-01-01_benchmark/data/",
+    "bunch_RFQ_output_8.56e+06.dat"
 )
-mass = 0.939294  # [GeV / c^2]
-charge = -1.0  # [elementary charge units]
-kin_energy = 0.0025  # [GeV]
-current = 0.042  # [A]
-n_parts = None  # max number of particles
+
+# Parse arguments.
+dists = {
+    "kv": KVDist3D, 
+    "wb": WaterBagDist3D, 
+    "gs": GaussDist3D,
+}
+dist = dists[args.dist]
 
 # Initialize the bunch.
 bunch = Bunch()
-bunch.mass(mass)
-bunch.charge(charge)
-bunch.getSyncParticle().kinEnergy(kin_energy)
+bunch.mass(args.mass)
+bunch.charge(args.charge)
+bunch.getSyncParticle().kinEnergy(args.energy)
 
-# Load the bunch coordinates or generate from Twiss parameters.
-if filename is not None:
+# Load the bunch coordinates
+if args.bunch == "design":
+    bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
+        dist=dist,
+        n=args.n,
+        bunch=bunch,
+        verbose=args.verbose,
+        **config["bunch"]["twiss"]
+    )
+else:
+    filename = args.bunch
+    if filename is None:
+        filename = def_bunch_filename
     bunch = pyorbit_sim.bunch_utils.load(
         filename=filename,
         bunch=bunch,
-        verbose=True,
-    )
-else:
-    if n_parts is None:
-        n_parts = int(1e4)
-    bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
-        dist=WaterBagDist3D,
-        n=n_parts,
-        bunch=bunch,
-        verbose=True,
-        alpha_x=-1.9620,
-        alpha_y=1.7681,
-        alpha_z=-0.0196,
-        beta_x=0.1831,
-        beta_y=0.1620,
-        beta_z=0.5844,
-        eps_x=0.21e-06,
-        eps_y=0.21e-06,
-        eps_z=0.24153e-06,
+        verbose=args.verbose,
     )
 
 # Set the bunch centroid.
 bunch = pyorbit_sim.bunch_utils.set_centroid(
     bunch,
     centroid=[
-        0.0,  # <x> [m]
-        0.0,  # <x'> [rad]
-        0.0,  # <y> [m]
-        0.0,  # <y'> [rad]
-        0.0,  # <z> [m]
-        0.0,  # <dE> [GeV]
+        args.mean_x, 
+        args.mean_y, 
+        args.mean_z, 
+        args.mean_xp, 
+        args.mean_xp, 
+        args.mean_dE,
     ],
-    verbose=True,
+    verbose=args.verbose,
 )
 
 # Generate an rms-equivalent bunch.
-if switches["rms_equivalent_dist"]:
+if args.rms_equiv:
     bunch = pyorbit_sim.bunch_utils.generate_rms_equivalent_bunch(
-        dist=WaterbagDist3D,
+        dist=dist,
         bunch=bunch,
-        verbose=True,
+        verbose=args.verbose,
     )
 
 # Downsample the bunch.
 bunch = pyorbit_sim.bunch_utils.downsample(
     bunch,
-    n=n_parts,
+    n=args.n,
     method="first",
     conserve_intensity=True,
-    verbose=True,
+    verbose=args.verbose,
 )
 
 # Decorrelate the x-x', y-y', z-z' coordinates. (No MPI.)
-if switches["decorrelate_x-y-z"]:
-    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=True)
+if args.decorr:
+    bunch = pyorbit_sim.bunch_utils.decorrelate_x_y_z(bunch, verbose=args.verbose)
 
 # Set the macro-particle size.
-intensity = pyorbit_sim.bunch_utils.get_intensity(current, linac.rf_frequency)
+intensity = pyorbit_sim.bunch_utils.get_intensity(args.current, linac.rf_frequency)
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = intensity / bunch_size_global
 bunch.macroSize(macro_size)
 
 
-
 # Diagnostics
 # --------------------------------------------------------------------------------------
-
 stride = {
-    "update": 0.010,  # [m]
-    "write_bunch": 2.0,  # [m]
-    "plot_bunch": np.inf,  # [m]
+    "update": args.stride_update,
+    "write": args.stride_write,
+    "plot": args.stride_plot,
 }
-if not switches["save"]:
+if not args.save:
     stride["write_bunch"] = np.inf
     stride["plot_bunch"] = np.inf
-
 
     
 # Bunch plotter
 # ------------------------------
-
 
 # Define transformation to be applied before plotting.
 def transform(X):
@@ -311,8 +346,7 @@ def transform(X):
 # Create plotter.
 plotter = pyorbit_sim.plotting.Plotter(
     transform=transform,
-    folder=man.outdir,
-    prefix=man.prefix,
+    outdir=man.outdir,
     default_save_kws=None,
     dims=["x", "xp", "y", "yp", "z", "dE"],
 )
@@ -337,45 +371,40 @@ plotter.add_function(
     **plot_kws
 )
 
-# Add plotter nodes. If these are not added, the plotter will be called
-# by `monitor` wtih frequency given by `stride`.
+## Add plotter nodes. If these are not added, the plotter will be called
+## by `monitor` wtih frequency given by `stride`.
 # [...]
 
 
 
 # Bunch writer
 # ------------------------------
-writer = pyorbit_sim.linac.BunchWriter(
-    folder=man.outdir,
-    prefix=man.prefix,
-    index=0,
-)
+writer = pyorbit_sim.linac.BunchWriter(outdir=man.outdir, index=0)
 
-# Add bunch writer nodes. If these are not added, the writer will be called
-# by `monitor` wtih frequency given by `stride`.
+## Add bunch writer nodes. If these are not added, the writer will be called
+## by `monitor` wtih frequency given by `stride`.
 # [...]
 
 # Write particle ids in column 7 of each bunch file.
-if switches["save_particle_ids"]:
+if args.save_ids:
     ParticleIdNumber.addParticleIdNumbers(bunch)
 
 # Write initial 6D coordinates to columns 8-13 of each bunch file.
-if switches["save_init_coords_attr"]:
+if args.save_init_coords_attr:
     copyCoordsToInitCoordsAttr(bunch)
 
-
+    
     
 # Monitor
 # ------------------------------
 monitor = pyorbit_sim.linac.Monitor(
-    position_offset=0.0,  # will be set automatically in `pyorbit_sim.linac.track`.
     stride=stride,
     writer=writer,
     plotter=plotter,
     track_rms=True,
-    filename=(man.get_filename("history.dat") if switches["save"] else None),
+    filename=(man.get_filename("history.dat") if args.save else None),
     rf_frequency=linac.rf_frequency,
-    verbose=True,
+    verbose=args.verbose,
 )
 
 
@@ -383,41 +412,34 @@ monitor = pyorbit_sim.linac.Monitor(
 # Tracking
 # --------------------------------------------------------------------------------------
 
-# Settings
-start = None  # (node name/position/None)
-stop = "MEBT:QH30"  # (node name/position/None)
+# Parse arguments.
+start = args.start
+if args.start_pos is not None:
+    start = args.start_pos
+stop = args.stop
+if args.stop_pos is not None:
+    stop = args.stop_pos
 
-# Record synchronous particle time of arrival at each accelerating cavity.
-if _mpi_rank == 0:
-    print("Tracking design bunch...")
-design_bunch = lattice.trackDesignBunch(bunch)
-if _mpi_rank == 0:
-    print("Design bunch tracking complete.")
-
-# Check the synchronous particle time.
-pyorbit_sim.linac.check_sync_part_time(
-    bunch, lattice, start=start, set_design=switches["set_design_sync_time"], verbose=True
-)
-
-# Save input bunch.
-if switches["save"] and switches["save_input_bunch"]:
+# Save the input bunch.
+if args.save and args.save_input_bunch:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
     writer.action(bunch, node_name)
-
+    
 # Track the bunch.
 params_dict = pyorbit_sim.linac.track(
-    bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=True
+    bunch, lattice, monitor=monitor, start=start, stop=stop, verbose=args.verbose
 )
 
-# Save loss statistics.
+# Save the loss statistics. (Note: this will save the loss histogram on
+# one MPI processor!)
 if linac.aperture_nodes:
     aprt_nodes_losses = GetLostDistributionArr(linac.aperture_nodes, params_dict["lostbunch"])
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
         print("Total loss = {:.2e}".format(total_loss))
-    if switches["save"] and switches["save_losses"]:
+    if args.save and args.save_losses:
         filename = man.get_filename("losses.txt")
         if _mpi_rank == 0:
             print("Saving loss vs. node array to {}".format(filename))
@@ -427,20 +449,22 @@ if linac.aperture_nodes:
             file.write("{} {} {}\n".format(node.getName(), node.getPosition(), loss))
         file.close()
 
-# Save lost bunch.
-if switches["save"] and switches["save_lostbunch"]:
+# Save the lost bunch.
+if args.save and args.save_lost_bunch:
     filename = man.get_filename("lostbunch.dat")
     if _mpi_rank == 0:
         print("Writing lostbunch to file {}".format(filename))
     lostbunch = params_dict["lostbunch"]
     lostbunch.dumpBunch(filename)
 
-# Save output bunch.
-if switches["save"] and switches["save_output_bunch"]:
+# Save the output bunch.
+if args.save and args.save_output_bunch:
     node_name = stop
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"
     writer.action(bunch, node_name)
 
 if _mpi_rank == 0:
+    print("SIMULATION COMPLETE")
+    print("outdir = {}".format(man.outdir))
     print("timestamp = {}".format(man.timestamp))

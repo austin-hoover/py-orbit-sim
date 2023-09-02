@@ -6,12 +6,7 @@ import os
 import sys
 import warnings
 
-import matplotlib
-matplotlib.use("agg")
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-from scipy import optimize
 
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
@@ -54,10 +49,6 @@ from orbit_mpi import mpi_datatype
 from orbit_mpi import mpi_op
 from spacecharge import SpaceChargeCalc3D
 from spacecharge import SpaceChargeCalcUnifEllipse
-
-from pyorbit_sim.linac import BeamSizeMonitor
-from pyorbit_sim.linac import OpticsController
-
 
 
 PIPE_DIAMETER = 0.040  # [m]
@@ -635,206 +626,11 @@ class SNS_BTF:
         file = open(filename, "w")
         file.write(self.lattice.structureToText())
         file.close()
-                
-                
-class Matcher:
-    """Matches the beam to the FODO channel."""
-    def __init__(
-        self,
-        lattice=None,
-        bunch=None,
-        optics_controller=None,
-        fodo_quad_names=None,
-        index_start=0,
-        index_stop=-1,
-        save_freq=None,
-        verbose=False,
-        outdir=None,
-    ):
-        """
-        lattice : AccLattice
-            The BTF linac lattice.
-        bunch : Bunch
-            The input particle bunch.
-        optics_controller : OpticsController
-            Optics controller, must implement method `set_quad_strengths(x)`, where `x`
-            is a list of quad strengths.
-        fodo_quad_names : list[str]
-            Names of FODO quadrupoles.
-        index_start, index_stop : int
-            Index of start/stop node for tracking.
-        save_freq : int or None
-            Frequency for saving output.
-        verbose : bool
-            Whether to print tracking progress on each iteration.
-        """
-        self.lattice = lattice
-        self.bunch = bunch
-        self.optics_controller = optics_controller
-        self.fodo_quad_names = fodo_quad_names
-        self.fodo_quad_nodes = [lattice.getNodeForName(name) for name in fodo_quad_names]
-        self.index_start = index_start
-        self.index_stop = index_stop
-        self.position_offset, _ = lattice.getNodePositionsDict()[lattice.getNodes()[index_start]]
-        self.save_freq = save_freq
-        self.verbose = verbose
-        self.count = 0
-        self.outdir = outdir
-                        
-    def track(self, dense=False, verbose=False):
-        """Return (x_rms, y_rms) at each FODO quad.
         
-        Parameters
-        ----------
-        dense : bool
-            If true, return history at every time step. If false, return history
-            only at `self.fodo_quad_names`.
-        verbose : bool
-            Whether to print progress during tracking.
-            
-        Returns
-        -------
-        history : ndarray, shape (n, 3)
-            Columns are position, x_rms, y_rms.
-        maxs : ndarray, shape (2,)
-            (x_rms_max, y_rms_max)
-        """
-        bunch_in = Bunch()
-        self.bunch.copyBunchTo(bunch_in)
+    def save_quad_strengths(self, filename="quad_settings.dat"):
+        file = open(filename, "w")
+        file.write("# quad_name dB/dr\n")
+        for node in self.lattice.getQuads():
+            file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
+        file.close()
                 
-        monitor = BeamSizeMonitor(
-            node_names=(None if dense else self.fodo_quad_names), 
-            position_offset=self.position_offset, 
-            verbose=verbose,
-        )
-        action_container = AccActionsContainer()
-        action_container.addAction(monitor.action, AccActionsContainer.ENTRANCE)
-        self.lattice.trackBunch(
-            bunch_in,
-            actionContainer=action_container,
-            index_start=self.index_start,
-            index_stop=self.index_stop,
-        )
-        history = np.array(monitor.history)
-        maxs = np.array(monitor.maxs)
-        return history, maxs
-    
-    def save_state(self):
-        """Save current optics and plot rms beam size evolution."""
-        if self.outdir is None:
-            return
-        
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        history, _ = self.track(dense=True, verbose=False)
-        positions, x_rms, y_rms = history.T
-        
-        if _mpi_rank == 0:
-            # Save optics.
-            filename = "quad_settings_{:06.0f}.dat".format(self.count)
-            filename = os.path.join(self.outdir, filename)
-            if self.verbose:
-                print("Saving file {}".format(filename))
-            file = open(filename, "w")
-            file.write("# quad_name dB/dr\n")
-            for node in self.lattice.getQuads():
-                file.write("{} {}\n".format(node.getName(), node.getParam("dB/dr")))
-            file.close()
-            
-            # Save history.
-            df = pd.DataFrame(history, columns=["position", "x_rms", "y_rms"])
-            filename = "history_{:06.0f}.dat".format(self.count)
-            filename = os.path.join(self.outdir, filename)
-            if self.verbose:
-                print("Saving file {}".format(filename))
-            df.to_csv(filename, sep=" ")
-            
-            # Plot rms beam sizes.
-            fig, ax = plt.subplots(figsize=(7.0, 2.5), tight_layout=True)
-            kws = dict()
-            ax.plot(positions, x_rms, label="x", **kws)
-            ax.plot(positions, y_rms, label="y", **kws)
-            for node in self.optics_controller.quad_nodes:
-                start, stop = self.lattice.getNodePositionsDict()[node]
-                ax.axvspan(start, stop, color="black", alpha=0.075, ec="None")                
-            for node in self.fodo_quad_nodes:
-                start, stop = self.lattice.getNodePositionsDict()[node]
-                position = 0.5 * (start + stop)
-                ax.axvline(position, color="black", alpha=0.05)
-            ax.set_ylim((0.0, 15.0))
-            ax.set_xlabel("Position [m]")
-            ax.set_ylabel("RMS size [mm]")
-            ax.legend(loc="upper right")
-            filename = "rms_{:06.0f}.png".format(self.count)
-            filename = os.path.join(self.outdir, filename)
-            if self.verbose:
-                print("Saving file {}".format(filename))
-            plt.savefig(filename, dpi=100)
-            plt.close()
-                        
-    def objective(self, x, stop):
-        """Return variance of period-by-period beam sizes."""
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        stop = orbit_mpi.MPI_Bcast(stop, mpi_datatype.MPI_INT, 0, _mpi_comm)    
-        cost = 0.0
-        if stop == 0:
-            x = orbit_mpi.MPI_Bcast(x.tolist(), mpi_datatype.MPI_DOUBLE, 0, _mpi_comm) 
-            self.optics_controller.set_quad_strengths(x)
-            history, maxs = self.track(dense=False, verbose=self.verbose)
-            positions, x_rms, y_rms = history.T
-
-            cost_ = 0.0
-            if _mpi_rank == 0:
-                # Penalize large beam size variance in FODO channel.
-                for i in range(2):
-                    cost_ += np.var(x_rms[i::2])
-                    cost_ += np.var(y_rms[i::2])
-                # Penalize large beam size in FODO channel.
-                factor = 0.00
-                cost_ += factor * (np.max(x_rms) + np.max(y_rms))
-                # Penalize large beam size before the FODO channel.
-                factor = 0.01
-                cost_ += factor * np.max(maxs)
-                
-            cost = orbit_mpi.MPI_Bcast(cost_, mpi_datatype.MPI_DOUBLE, 0, _mpi_comm)    
-                        
-            if self.verbose and _mpi_rank == 0:
-                print("cost={}".format(cost))
-            if self.save_freq and (self.count % self.save_freq == 0):
-                self.save_state()
-            self.count += 1
-            
-        return cost
-    
-    def match(self, **kws):   
-        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
-        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
-
-        if "bounds" not in kws:
-            lb, ub = self.optics_controller.get_quad_bounds(scale=1.2)
-            kws["bounds"] = optimize.Bounds(lb, ub)
-        kws.setdefault("method", "trust-constr")
-        kws.setdefault("options", dict())
-        if kws["method"] == "trust-constr":
-            kws["options"].setdefault("verbose", 2)
-        
-        if _mpi_rank == 0:
-            print("Matching quads:")
-            for i, name in enumerate(self.optics_controller.quad_names):
-                lo = kws["bounds"].lb[i]
-                hi = kws["bounds"].ub[i]
-                print("{} -- lb={:.3f}, ub={:.3f}".format(name, lo, hi))
-
-        x0 = self.optics_controller.get_quad_strengths()
-        if _mpi_rank == 0:
-            stop = 0
-            x = optimize.minimize(self.objective, x0, args=(stop), **kws)
-            stop = 1
-            self.objective(x0, stop)
-        else:
-            stop = 0
-            while stop == 0:
-                self.objective(x0, stop)

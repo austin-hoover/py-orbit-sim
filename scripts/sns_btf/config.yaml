@@ -1,0 +1,12 @@
+bunch:
+  twiss:
+    alpha_x: -1.9620
+    alpha_y: 1.7681
+    alpha_z: -0.0196
+    beta_x: 0.1831
+    beta_y: 0.1620
+    beta_z: 0.5844
+    eps_x: 0.21e-06
+    eps_y: 0.21e-06
+    eps_z: 0.24153e-06
+output_dir: "../data/"
