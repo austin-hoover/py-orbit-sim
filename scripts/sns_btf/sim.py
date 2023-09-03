@@ -98,9 +98,8 @@ parser.add_argument("--stride_plot", type=float, default=float("inf"))  # [m]
 parser.add_argument("--apertures", type=int, default=1)
 parser.add_argument("--linac_tracker", type=int, default=1)
 parser.add_argument("--max_drift", type=float, default=0.010)
-parser.add_argument("--overlap", type=int, default=0)
-parser.add_argument("--set_sync_time", type=int, default=1)
-parser.add_argument("--rf", type=float, default=402.5e+06)
+parser.add_argument("--overlap", type=int, default=1)
+parser.add_argument("--rf_freq", type=float, default=402.5e+06)
 
 # Space charge
 parser.add_argument("--spacecharge", type=int, default=1)
@@ -110,20 +109,16 @@ parser.add_argument("--gridz", type=int, default=64)
 parser.add_argument("--bunches", type=int, default=3)
 
 # Bunch
-
-# If None, use default bunch filename defined below.
-# If "design", use the design Twiss parameters defined below with the 
-# distribution specified by args.dist. 
-# Otherwise, specifies the bunch filename.
+# If None, use default bunch filename defined below. If "design", use the 
+# design Twiss parameters defined below with the distribution specified by 
+# args.dist. Otherwise, specifies the bunch filename.
 parser.add_argument("--bunch", type=str, default=None)
-
 parser.add_argument("--charge", type=float, default=-1.0)  # [elementary charge units]
 parser.add_argument("--current", type=float, default=0.042)  # [A]
 parser.add_argument("--energy", type=float, default=0.0025)  # [GeV]
 parser.add_argument("--mass", type=float, default=0.939294)  # [GeV / c^2]
-
 parser.add_argument("--dist", type=str, default="wb", choices=["kv", "wb", "gs"])
-parser.add_argument("--n", type=int, default=None, help="number of particles")
+parser.add_argument("--nparts", type=int, default=None)
 parser.add_argument("--decorr", type=int, default=0)
 parser.add_argument("--rms_equiv", type=int, default=0)
 parser.add_argument("--mean_x", type=float, default=0.0)
@@ -132,7 +127,6 @@ parser.add_argument("--mean_z", type=float, default=0.0)
 parser.add_argument("--mean_xp", type=float, default=0.0)
 parser.add_argument("--mean_yp", type=float, default=0.0)
 parser.add_argument("--mean_dE", type=float, default=0.0)
-
 
 # Tracking
 parser.add_argument("--start", type=str, default=None)
@@ -163,20 +157,8 @@ _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
 _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-# Broadcast timestamp from MPI rank 0.
-main_rank = 0
-datestamp = time.strftime("%Y-%m-%d")
-timestamp = time.strftime("%y%m%d%H%M%S")
-datestamp = orbit_mpi.MPI_Bcast(datestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main_rank, _mpi_comm)
-timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main_rank, _mpi_comm)
-
 # Create output directory and save script info.
-man = ScriptManager(
-    datadir=output_dir,
-    path=pathlib.Path(__file__),
-    timestamp=timestamp,
-    datestamp=datestamp,
-)
+man = ScriptManager(datadir=output_dir, path=pathlib.Path(__file__))
 if args.save and _mpi_rank == 0:
     man.make_outdir()
     log = man.get_logger(save=args.save, disp=True)
@@ -193,11 +175,13 @@ sequences = [
     "MEBT2",
 ]
 
-# Initialize the lattice.
-linac = SNS_BTF(coef_filename=os.path.join(input_dir, args.coef), rf_frequency=args.rf)
+linac = SNS_BTF(coef_filename=os.path.join(input_dir, args.coef), rf_frequency=args.rf_freq)
 linac.init_lattice(
     xml_filename=os.path.join(input_dir, args.xml),
-    sequences=sequences,
+    sequences=[
+        "MEBT1",
+        "MEBT2",
+    ],
     max_drift_length=args.max_drift,
 )
 
@@ -265,7 +249,7 @@ bunch.getSyncParticle().kinEnergy(args.energy)
 if args.bunch == "design":
     bunch = pyorbit_sim.bunch_utils.generate_norm_twiss(
         dist=dist,
-        n=args.n,
+        n=args.nparts,
         bunch=bunch,
         verbose=args.verbose,
         **config["bunch"]["twiss"]
@@ -305,7 +289,7 @@ if args.rms_equiv:
 # Downsample the bunch.
 bunch = pyorbit_sim.bunch_utils.downsample(
     bunch,
-    n=args.n,
+    n=args.nparts,
     method="first",
     conserve_intensity=True,
     verbose=args.verbose,
