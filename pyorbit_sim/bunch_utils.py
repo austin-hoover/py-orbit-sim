@@ -408,7 +408,7 @@ def load(
             bunch.addParticle(x[i], xp[i], y[i], yp[i], z[i], dE[i])
     else:
         raise KeyError("Unrecognized format '{}'.".format(file_format))
-    if verbose and _mpi_rank == 0:
+    if verbose:
         print(
             "(rank {}) bunch loaded (nparts={}, macrosize={})".format(
                 _mpi_rank, 
