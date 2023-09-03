@@ -78,7 +78,7 @@ parser.add_argument("--outdir", type=str, default=None)
 parser.add_argument("--xml", type=str, default="xml/btf_lattice_straight.xml")
 parser.add_argument("--coef", type=str, default="magnets/default_i2gl_coeff_straight.csv")
 parser.add_argument("--mstate", type=str, default=None)
-parser.add_argument("--quads", type=str, default="magnets/230901113653_quad_settings_matched.dat")
+parser.add_argument("--quads", type=str, default="magnets/230903160009-quad_strengths_matched.dat")
     
 # Saving
 parser.add_argument("--save", type=int, default=1)
@@ -228,7 +228,7 @@ lattice = linac.lattice
 # Define default bunch filename.
 def_bunch_filename = os.path.join(
     "/home/46h/projects/btf/sim/sns_rfq/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_8.56e+06.dat"
+    "bunch_RFQ_output_1.00e+05.dat"
 )
 
 # Parse arguments.

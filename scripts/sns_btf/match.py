@@ -10,10 +10,6 @@ ellipsoid space charge solver. This solver is very fast and gives approximately 
 rms beam sizes throughout the lattice. 
 
 The optimization calls scipy.optimize.minimize and works with MPI.
-
-TO DO:
-    * Use argparse.
-    
 """
 from __future__ import print_function
 import argparse
@@ -88,8 +84,8 @@ parser.add_argument("--rms_equiv", type=int, default=0)
 parser.add_argument("--start", type=str, default=None) 
 parser.add_argument("--start_pos", type=float, default=None)
 parser.add_argument("--n_monitor", type=int, default=30)
-parser.add_argument("--maxiter", type=int, default=75)
-parser.add_argument("--alpha", type=float, default=0.01)
+parser.add_argument("--maxiter", type=int, default=100)
+parser.add_argument("--alpha", type=float, default=0.001)
 parser.add_argument("--verbose", type=int, default=0)
 
 parser.add_argument("--save", type=str, default=1)
@@ -291,7 +287,7 @@ class BeamSizeMonitor:
         
     def reset(self):
         self.sizes_fodo = []
-        self.sizes_other= []
+        self.sizes_other = []
 
     def action(self, params_dict):    
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
@@ -351,10 +347,7 @@ def objective(x, monitor, alpha=0.01, verbose=0):
     for i in range(2):
         cost_m += np.var(sizes_fodo[i::2, 0])
         cost_m += np.var(sizes_fodo[i::2, 1])
-    cost_s = 0.0
-    cost_s += np.mean(sizes_other[:, 0]) 
-    cost_s += np.mean(sizes_other[:, 1])
-    cost_s = alpha * cost_s
+    cost_s = np.mean(sizes_other)
     cost = cost_m + cost_s
     if verbose and _mpi_rank == 0:
         print("cost={:0.3e} M={:0.3e} S={:0.3e}".format(cost, cost_m, cost_s))
@@ -412,20 +405,27 @@ if _mpi_rank == 0:
 index_stop = lattice.getNodeIndex(fodo_quad_nodes[-1])
 lattice.trackBunch(bunch, index_start=0, index_stop=index_stop)
 index_start = index_stop + 1
-index_stop = -1
 
 # Optimize the remaining quads.
 matching_quad_names = []
+matching_quad_nodes = []
 for node in lattice.getNodes()[index_start:]:
     if isinstance(node, Quad):
+        matching_quad_nodes.append(node)
         matching_quad_names.append(node.getName())
+        
 optics_controller = pyorbit_sim.linac.OpticsController(lattice, matching_quad_names)
 bounds = [linac.get_quad_kappa_limits(name) for name in matching_quad_names]
 bounds = np.array(bounds).T
 bounds = optimize.Bounds(bounds[0], bounds[1])
 
-# Minimize the average beam size at the following nodes.
-other_nodes = lattice.getNodes()[index_start : index_stop : 20]
+# Minimize the average beam size at the quads.
+index_stop = lattice.getNodeIndex(lattice.getNodeForName("MEBT:HZ33a"))
+nodes = lattice.getNodes()[:index_stop]
+stride = max(1, int((len(nodes) - index_start) / 15))
+idx = np.arange(index_start, len(nodes), stride)
+other_nodes = [nodes[i] for i in idx]
+
 
 def objective(x, monitor, verbose=0):
     optics_controller.set_quad_strengths(x)
@@ -434,7 +434,7 @@ def objective(x, monitor, verbose=0):
         bunch, 
         monitor,
         index_start=index_start, 
-        index_stop=index_stop, 
+        index_stop=-1, 
         verbose=verbose,
     )
     sizes = np.array(monitor.sizes_other)
@@ -448,15 +448,17 @@ def objective(x, monitor, verbose=0):
 
 if _mpi_rank == 0:
     print("Quads being optimized:")
-    pprint(matching_quad_names)
+    for i, node in enumerate(matching_quad_nodes):
+        print("{} lb={} ub={}".format(node.getName(), bounds.lb[i], bounds.ub[i]))
     print("Minimize max beam size at these nodes:")
     pprint([node.getName() for node in other_nodes])
     
     
 monitor = BeamSizeMonitor(other_nodes=other_nodes, verbose=args.verbose)
+x0 = optics_controller.get_quad_strengths()
 result = optimize.minimize(
     objective,
-    optics_controller.get_quad_strengths(), 
+    x0,
     method="trust-constr", 
     bounds=bounds, 
     args=(monitor, args.verbose),
@@ -469,5 +471,6 @@ if _mpi_rank == 0:
     print(result)
 if args.save:
     linac.save_quad_strengths(man.get_filename("quad_strengths.dat"))
+    
     
 track(lattice, bunch, monitor, verbose=2)
