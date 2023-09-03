@@ -75,7 +75,6 @@ def url_style(url, text=None):
 
 
 class ScriptManager:
-    
     def __init__(self, datadir=None, path=None, timestamp=None, datestamp=None, script_path_in_outdir=True):
         """
         Parameters
@@ -84,12 +83,8 @@ class ScriptManager:
             All output files/folders will go here.
         path : pathlib.Path
             The path to the script.
-        timestamp : str
-            Timestamp when ScriptManager was created (YYMMDDHHSSMM). This is
-            appended to each output file, along with the script name. For example,
-            "230812062403-sim_coords.py" if the script name is 'sim'.
-        datestamp : str
-            Datestamp when ScriptManager was created (YYYY-MM-DD).
+        timestamp, datestamp : str
+            Timestamp (YYMMDDHHSSMM) and datestamp (YYYY-MM-DD) when ScriptManager was created.
         script_path_in_outdir : bool
             Suppose the script is '/scripts/ring/sim.py` and datadir is
             '/home/sim_data/' and timestamp is '230812062403':
@@ -97,10 +92,17 @@ class ScriptManager:
             True: outdir is '/home/sim_data/ring/sim/230812062403/'.
             False: outdir is '/home/sim_data/'.
         """
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        
+        main_rank = 0
+        datestamp = time.strftime("%Y-%m-%d")
+        timestamp = time.strftime("%y%m%d%H%M%S")
+        self.datestamp = orbit_mpi.MPI_Bcast(datestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main_rank, _mpi_comm)
+        self.timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main_rank, _mpi_comm)
+        
         self.git_hash, self.git_url = self.get_git()
         self.datadir = datadir
-        self.timestamp = timestamp
-        self.datestamp = datestamp
         self.path = path
         self.script_name = self.path.stem
         self.script_path_in_outdir = script_path_in_outdir
@@ -117,12 +119,10 @@ class ScriptManager:
             )
     
     def make_outdir(self):
-        """Create output directory."""
         if not os.path.exists(self.outdir):
             os.makedirs(self.outdir)
 
     def get_git(self):
-        """Retreive git information."""
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 
@@ -144,7 +144,6 @@ class ScriptManager:
         shutil.copy(self.path.absolute().as_posix(), filename)
         
     def get_info(self):
-        """Return info dictionary."""
         info = {
             "git_hash": self.git_hash,
             "git_url": self.git_url,
