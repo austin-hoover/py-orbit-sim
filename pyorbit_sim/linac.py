@@ -335,45 +335,6 @@ class Monitor:
                 line += "{},".format(data[i])
             line = line[:-1] + "\n"
             self.file.write(line)
-            
-            
-class OpticsController:
-    """Sets quadrupole strengths."""
-    def __init__(self, lattice=None, quad_names=None):
-        self.lattice = lattice
-        self.quad_names = quad_names
-        self.quad_nodes = [lattice.getNodeForName(name) for name in quad_names]
-
-    def get_quad_strengths(self):
-        """Return dB/dr for each quad."""
-        return np.array([node.getParam("dB/dr") for node in self.quad_nodes])
-
-    def set_quad_strengths(self, x):
-        for i, node in enumerate(self.quad_nodes):
-            node.setParam("dB/dr", x[i])
-
-    def estimate_quad_bounds(self, scale=1.5):
-        """Estimate quad strength bounds.
-        
-        Parameters
-        ----------
-        scale : float
-            Determines the max strength relative to current set point.
-        
-        Returns
-        -------
-        lb, ub : ndarray
-            Lower and upper bounds on quad strengths (dB/dr).
-        """
-        bounds = []
-        for kq, name in zip(self.get_quad_strengths(), self.quad_names):
-            lb = 0.0
-            ub = scale * np.abs(kq)  
-            if kq < 0.0:
-                lb = -ub
-                ub = 0.0
-            bounds.append([lb, ub])
-        return np.array(bounds).T
     
     
 def get_node_info(node_name_or_position, lattice):

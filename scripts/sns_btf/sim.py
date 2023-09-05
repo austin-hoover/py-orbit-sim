@@ -78,7 +78,7 @@ parser.add_argument("--outdir", type=str, default=None)
 parser.add_argument("--xml", type=str, default="xml/btf_lattice_straight.xml")
 parser.add_argument("--coef", type=str, default="magnets/default_i2gl_coeff_straight.csv")
 parser.add_argument("--mstate", type=str, default=None)
-parser.add_argument("--quads", type=str, default="magnets/230903160009-quad_strengths_matched.dat")
+parser.add_argument("--quads", type=str, default="magnets/230905100947-quad_strengths_matched.dat")
     
 # Saving
 parser.add_argument("--save", type=int, default=1)
@@ -106,7 +106,7 @@ parser.add_argument("--spacecharge", type=int, default=1)
 parser.add_argument("--gridx", type=int, default=64)
 parser.add_argument("--gridy", type=int, default=64)
 parser.add_argument("--gridz", type=int, default=64)
-parser.add_argument("--bunches", type=int, default=3)
+parser.add_argument("--n_bunches", type=int, default=3)
 
 # Bunch
 # If None, use default bunch filename defined below. If "design", use the 
@@ -204,7 +204,7 @@ if args.spacecharge:
         grid_size_y=args.gridy,
         grid_size_z=args.gridz,
         path_length_min=args.max_drift,
-        n_bunches=args.bunches,
+        n_bunches=args.n_bunches,
     )
 
 # Apertures
@@ -220,6 +220,10 @@ if args.save:
     linac.save_lattice_structure(man.get_filename("lattice_structure.txt"))
 
 lattice = linac.lattice
+
+
+for node in lattice.getQuads():
+    print("{}={}".format(node.getName(), node.getParam("dB/dr")))
 
                     
 # Bunch
