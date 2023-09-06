@@ -103,9 +103,9 @@ parser.add_argument("--rf_freq", type=float, default=402.5e+06)
 
 # Space charge
 parser.add_argument("--spacecharge", type=int, default=1)
-parser.add_argument("--gridx", type=int, default=64)
-parser.add_argument("--gridy", type=int, default=64)
-parser.add_argument("--gridz", type=int, default=64)
+parser.add_argument("--gridx", type=int, default=128)
+parser.add_argument("--gridy", type=int, default=128)
+parser.add_argument("--gridz", type=int, default=128)
 parser.add_argument("--n_bunches", type=int, default=3)
 
 # Bunch
@@ -230,10 +230,7 @@ for node in lattice.getQuads():
 # ------------------------------------------------------------------------------
 
 # Define default bunch filename.
-def_bunch_filename = os.path.join(
-    "/home/46h/projects/btf/sim/sns_rfq/parmteq/2021-01-01_benchmark/data/",
-    "bunch_RFQ_output_1.00e+05.dat"
-)
+def_bunch_filename = "/home/46h/projects/btf/sim/sns_rfq/parmteq/2021-01-01_benchmark/data/bunch_RFQ_output_1.00e+05.dat"
 
 # Parse arguments.
 dists = {
