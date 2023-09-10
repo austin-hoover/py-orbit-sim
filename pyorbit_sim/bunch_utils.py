@@ -274,9 +274,16 @@ def shift_centroid(bunch, delta=None, verbose=False):
 
 
 def set_centroid(bunch, centroid=0.0, verbose=False):
+    if centroid is None:
+        return
     if np.ndim(centroid) == 0:
         centroid = 6 * [centroid]
+    if all([x is None for x in centroid]):
+        return
     old_centroid = get_centroid(bunch)
+    for i in range(len(centroid)):
+        if centroid[i] is None:
+            centroid[i] = old_centroid[i]
     delta = np.subtract(centroid, old_centroid)
     return shift_centroid(bunch, delta=delta, verbose=verbose)
 
@@ -373,8 +380,8 @@ def load(
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
-    if verbose and _mpi_rank == 0:
-        print("Loading bunch from file '{}'".format(filename))        
+    if verbose:
+        print("(rank {}) loading bunch from file {}".format(_mpi_rank, filename))        
     if not os.path.isfile(filename):
         raise ValueError("File '{}' does not exist.".format(filename))
     if bunch is None:
