@@ -38,8 +38,8 @@ def emittance_2x2(Sigma):
     return np.sqrt(np.linalg.det(Sigma))
 
 
-def apparent_emittance(Sigma):
-    """RMS apparent emittances from 2n x 2n covariance matrix.
+def apparent_emittances(Sigma):
+    """Compute rms apparent emittances from 2n x 2n covariance matrix.
 
     Parameters
     ----------
@@ -59,8 +59,34 @@ def apparent_emittance(Sigma):
     return emittances
 
 
+def intrinsic_emittances(Sigma):
+    """Compute rms intrinsic emittances from 4 x 4 covariance matrix.
+
+    Parameters
+    ----------
+    Sigma : ndarray, shape (4, 4)
+        A covariance matrix. (Dimensions ordered {x, x', y, y', ...}.)
+
+    Returns
+    -------
+    eps_1, eps_2 : float
+        The intrinsic emittances (eps_4D = sqrt(det(Sigma)) = eps_1 * eps_2).
+    """
+    U = np.array([
+        [+0.0, +1.0, +0.0, +0.0], 
+        [-1.0, +0.0, +0.0, +0.0], 
+        [+0.0, +0.0, +0.0, +1.0], 
+        [+0.0, +0.0, -1.0, +0.0],
+    ])
+    tr_SU2 = np.trace(np.linalg.matrix_power(np.matmul(Sigma, U), 2))
+    det_S = np.linalg.det(Sigma)
+    eps_1 = 0.5 * np.sqrt(-tr_SU2 + np.sqrt(tr_SU2**2 - 16.0 * det_S))
+    eps_2 = 0.5 * np.sqrt(-tr_SU2 - np.sqrt(tr_SU2**2 - 16.0 * det_S))
+    return eps_1, eps_2
+
+
 def twiss(Sigma):
-    """RMS Twiss parameters from 2n x 2n covariance matrix.
+    """Compute rms Twiss parameters from 2n x 2n covariance matrix.
 
     Parameters
     ----------

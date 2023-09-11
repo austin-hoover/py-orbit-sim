@@ -1,0 +1,3 @@
+output_dir: "../data/"
+minipulse_intensity: 1.50e+11
+bunch_length_frac: 0.78

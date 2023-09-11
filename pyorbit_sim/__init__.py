@@ -5,5 +5,6 @@ import pyorbit_sim.lattice
 import pyorbit_sim.linac
 import pyorbit_sim.misc
 import pyorbit_sim.plotting
+import pyorbit_sim.ring
 import pyorbit_sim.stats
 import pyorbit_sim.utils

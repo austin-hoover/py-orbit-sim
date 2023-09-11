@@ -24,8 +24,6 @@ from orbit.bumps import TeapotBumpNode
 from orbit.bumps import TeapotSimpleBumpNode
 from orbit.collimation import addTeapotCollimatorNode
 from orbit.collimation import TeapotCollimatorNode
-# from orbit.diagnostics.diagnostics import BunchCoordsNode
-# from orbit.diagnostics.diagnostics_lattice_modifications import add_diagnostics_node_as_child
 from orbit.diagnostics import addTeapotDiagnosticsNode
 from orbit.diagnostics import TeapotMomentsNode
 from orbit.diagnostics import TeapotStatLatsNode
@@ -45,13 +43,13 @@ from orbit.impedances import FreqDep_LImpedance_Node
 from orbit.impedances import FreqDep_TImpedance_Node
 from orbit.impedances import LImpedance_Node
 from orbit.impedances import TImpedance_Node
-# from orbit.injection import addTeapotInjectionNode
-# from orbit.injection import InjectParts
-# from orbit.injection import TeapotInjectionNode
-# from orbit.injection.distributions import JohoLongitudinal
-# from orbit.injection.distributions import JohoTransverse
-# from orbit.injection.distributions import SNSESpreadDist
-# from orbit.injection.distributions import UniformLongDist
+from orbit.injection import addTeapotInjectionNode
+from orbit.injection import InjectParts
+from orbit.injection import TeapotInjectionNode
+from orbit.injection.joho import JohoTransverse
+from orbit.injection.joho import JohoLongitudinal
+from orbit.injection.distributions import SNSESpreadDist
+from orbit.injection.distributions import UniformLongDist
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
 from orbit.lattice import AccLattice
@@ -81,12 +79,9 @@ from pyorbit_sim.misc import get_pc
 
 
 # Global variables
+# --------------------------------------------------------------------------------------
 
-## Injection coordinates
-X_INJ = 0.0486  # [m]
-Y_INJ = 0.0460  # [m]
-
-## Maximum injection kicker angles at 1.0 GeV [mrad]
+# Maximum injection kicker angles at 1.0 GeV [mrad]
 MIN_KICKER_ANGLES = 1.15 * np.array([0.0, 0.0, -7.13, -7.13, -7.13, -7.13, 0.0, 0.0])
 MAX_KICKER_ANGLES = 1.15 * np.array([12.84, 12.84, 0.0, 0.0, 0.0, 0.0, 12.84, 12.84])
 
@@ -103,26 +98,16 @@ class SNS_RING(TEAPOT_Ring):
     Note that TEAPOT_Ring adds children on instantiation. This means that the nodes cannot
     be split into parts.
     """
-    def __init__(self):
+    def __init__(self, x_inj=0.0486, y_inj=0.0460):
         TEAPOT_Ring.__init__(self)
         self.bunch = None
-        self.sync_part = None
         self.lostbunch = None
         self.params_dict = None
-        self.foil_node = None
-        self.inj_node = None
-        self.rf_nodes = None
-        self.longitudinal_impedance_node = None
-        self.transverse_impedance_node = None
-        self.longitudinal_space_charge_node = None
-        self.transverse_space_charge_nodes = None
-        self.diagnostics_nodes = dict()
-        self.aperture_nodes = dict()
-        self.collimator_nodes = dict()
+        self.x_inj = x_inj
+        self.y_inj = y_inj
         
     def set_bunch(self, bunch=None, lostbunch=None, params_dict=None):
         self.bunch = bunch
-        self.sync_part = bunch.getSyncParticle()
         self.lostbunch = lostbunch
         self.params_dict = params_dict
         
@@ -188,115 +173,140 @@ class SNS_RING(TEAPOT_Ring):
         dispersion["dispp_y"] = np.array(pos_dispp_y)[:, 1]
         return dispersion
         
-    def get_injection_controller(self, **kws):
-        kws.setdefault("mass", mass_proton)
-        kws.setdefault("kin_energy", 1.0)
-        kws.setdefault("inj_mid", "injm1")
-        kws.setdefault("inj_start", "bpm_a09")
-        kws.setdefault("inj_end", "bpm_b01")
-        return InjectionController(ring=self, **kws)
+#     def get_injection_controller(self, **kws):
+#         kws.setdefault("mass", mass_proton)
+#         kws.setdefault("kin_energy", 1.0)
+#         kws.setdefault("inj_mid", "injm1")
+#         kws.setdefault("inj_start", "bpm_a09")
+#         kws.setdefault("inj_end", "bpm_b01")
+#         return InjectionController(ring=self, **kws)
 
     def add_foil_node(
         self,
-        xmin=(X_INJ - 0.0085),
-        xmax=(X_INJ + 0.0085),
-        ymin=(Y_INJ - 0.0080),
-        ymax=(Y_INJ + 0.1000),
+        xmin=-0.0085,
+        xmax=+0.0085,
+        ymin=-0.0080,
+        ymax=+0.1000,
         thickness=390.0,
         scatter="full",  # {"full", "simple"}
     ):
-        scatter = {"full": 0, "simple": 1}[scatter]
-        self.foil_node = TeapotFoilNode(xmin, xmax, ymin, ymax, thickness)
-        self.foil_node.setScatterChoice(scatter)
+        xmin += self.x_inj
+        xmax += self.x_inj
+        ymin += self.y_inj
+        ymax += self.y_inj
+        scatter_options = {
+            "full": 0, 
+            "simple": 1
+        }
+        scatter = scatter_options[scatter]
+        foil_node = TeapotFoilNode(xmin, xmax, ymin, ymax, thickness)
+        foil_node.setScatterChoice(scatter)
         start_node = self.getNodes()[0]
-        start_node.addChildNode(self.foil_node, AccNode.ENTRANCE)
-        return self.foil_node
+        start_node.addChildNode(foil_node, AccNode.ENTRANCE)
+        return foil_node
     
     def add_inj_node(
         self,
         n_parts=1,
         n_parts_max=-1,
-        xmin=(X_INJ - 0.0085),
-        xmax=(X_INJ + 0.0085),
-        ymin=(Y_INJ - 0.0080),
-        ymax=(Y_INJ + 0.1000),
-        dist_x_kind="joho",
-        dist_y_kind="joho",
-        dist_z_kind="snsespread",
+        xmin=-0.0085,
+        xmax=+0.0085,
+        ymin=-0.0080,
+        ymax=+0.1000,
+        dist_x="joho",
+        dist_y="joho",
+        dist_z="snsespread",
         dist_x_kws=None,
         dist_y_kws=None,
         dist_z_kws=None,
     ):
-        if xmin is None:
-            xmin = -np.inf
-        if xmax is None:
-            xmax = +np.inf
-        if ymin is None:
-            ymin = -np.inf
-        if ymax is None:
-            ymax = +np.inf
+        def get_joho_eps_lim(eps_rms, order):
+            return eps_rms * 2.0 * (order + 1.0)
                         
+            
         # x-px distribution
-        # ----------------------------------------------------------------
+        # ------------------------------------------------------------------------------
         if dist_x_kws is None:
             dist_x_kws = dict()
-        if dist_x_kind == "joho":
-            dist_x_constructor = JohoTransverse
-            dist_x_kws.setdefault("centerpos", X_INJ)
-            dist_x_kws.setdefault("centermom", 0.0)
+        if dist_x == "joho":
             dist_x_kws.setdefault("alpha", 0.064)
             dist_x_kws.setdefault("beta", 10.056)
             dist_x_kws.setdefault("order", 9.0)
-            dist_x_kws.setdefault("eps_rms", 0.221e-6)
+            dist_x_kws.setdefault("eps_rms", 0.221e-06)
+            dist_x_kws.setdefault("centerpos", self.x_inj)
+            dist_x_kws.setdefault("centermom", 0.0)
+            dist_x_kws.setdefault("tailfraction", 0.0)
+            dist_x_kws.setdefault("tailfactor", 1.0)
+            dist_x_kws["emitlim"] = get_joho_eps_lim(dist_x_kws.pop("eps_rms"), dist_x_kws["order"])
+            dist_x = JohoTransverse(
+                dist_x_kws["order"], 
+                dist_x_kws["alpha"], 
+                dist_x_kws["beta"], 
+                dist_x_kws["emitlim"], 
+                centerpos=dist_x_kws["centerpos"],
+                centermom=dist_x_kws["centermom"],
+                tailfraction=dist_x_kws["tailfraction"],
+                tailfactor=dist_x_kws["tailfactor"],
+            )
         else:
             raise ValueError("Invalid dist_x")
-        dist_x_kws["emitlim"] = dist_x_kws.pop("eps_rms") * 2.0 * (dist_x_kws["order"] + 1.0)
+            
             
         # y-py distribution
-        # ----------------------------------------------------------------
+        # ------------------------------------------------------------------------------
         if dist_y_kws is None:
             dist_y_kws = dict()
-        if dist_y_kind == "joho":
-            dist_y_constructor = JohoTransverse
-            dist_y_kws.setdefault("centerpos", Y_INJ)
-            dist_y_kws.setdefault("centermom", 0.0)
-            dist_y_kws.setdefault("alpha", 0.063)
-            dist_y_kws.setdefault("beta", 10.815)
+        if dist_y == "joho":
+            dist_y_kws.setdefault("alpha", 0.064)
+            dist_y_kws.setdefault("beta", 10.056)
             dist_y_kws.setdefault("order", 9.0)
             dist_y_kws.setdefault("eps_rms", 0.221e-6)
+            dist_y_kws.setdefault("centerpos", self.y_inj)
+            dist_y_kws.setdefault("centermom", 0.0)
+            dist_y_kws.setdefault("tailfraction", 0.0)
+            dist_y_kws.setdefault("tailfactor", 1.0)
+            dist_y_kws["emitlim"] = get_joho_eps_lim(dist_y_kws.pop("eps_rms"), dist_y_kws["order"])
+            dist_y = JohoTransverse(
+                dist_y_kws["order"],
+                dist_y_kws["alpha"], 
+                dist_y_kws["beta"], 
+                dist_y_kws["emitlim"], 
+                centerpos=dist_y_kws["centerpos"],
+                centermom=dist_y_kws["centermom"],
+                tailfraction=dist_y_kws["tailfraction"],
+                tailfactor=dist_y_kws["tailfactor"],
+            )
         else:
             raise ValueError("Invalid dist_y")
-        dist_y_kws["emitlim"] = dist_y_kws.pop("eps_rms") * 2.0 * (dist_y_kws["order"] + 1.0)
+            
             
         # z-pz distribution
-        # ----------------------------------------------------------------
+        # ------------------------------------------------------------------------------
         if dist_z_kws is None:
             dist_z_kws = dict()
-            
-        n_inj_turns = 1000
-        if "n_inj_turns" in dist_z_kws:
-            n_inj_turns = dist_z_kws.pop("n_inj_turns")
-        bunch_length_frac = 50.0 / 64.0
-        if "bunch_length_frac" in dist_z_kws:
-            bunch_length_frac = dist_z_kws.pop("bunch_length_frac")
-            
+
+        dist_z_kws.setdefault("n_inj_turns", 1000)
+        dist_z_kws.setdefault("bunch_length_frac", 0.78)
+        dist_z_kws.setdefault("n_inj_turns", 1000)
+                    
+        bunch_length_frac = dist_z_kws["bunch_length_frac"] 
         bunch_length = bunch_length_frac * self.getLength()
         zmin = -0.5 * bunch_length
         zmax = +0.5 * bunch_length
-        drift_time = 1000.0 * n_inj_turns * (self.getLength() / (self.sync_part.beta() * speed_of_light))
         
-        if dist_z_kind == "snsespread":
-            dist_z_constructor = SNSESpreadDist    
+        n_inj_turns = dist_z_kws["n_inj_turns"]
+        time_per_turn = self.bunch.getSyncParticle().beta() * speed_of_light
+        drift_time = 1000.0 * n_inj_turns * (self.getLength() / time_per_turn)  # [ms]
+        
+        if dist_z == "snsespread":
             dist_z_kws.setdefault("lattlength", self.getLength())
-            dist_z_kws.setdefault("zmin", zmin)
-            dist_z_kws.setdefault("zmax", zmax)
             dist_z_kws.setdefault("tailfraction", 0.0)
-            dist_z_kws.setdefault("sync_part", self.sync_part)
-            dist_z_kws.setdefault("emean", self.sync_part.kinEnergy())
+            dist_z_kws.setdefault("emean", self.bunch.getSyncParticle().kinEnergy())
             dist_z_kws.setdefault("esigma", 0.0005)
             dist_z_kws.setdefault("etrunc", 1.0)
-            dist_z_kws.setdefault("emin", self.sync_part.kinEnergy() - 0.0025)
-            dist_z_kws.setdefault("emax", self.sync_part.kinEnergy() + 0.0025)
+            dist_z_kws.setdefault("emin", self.bunch.getSyncParticle().kinEnergy() - 0.0025)
+            dist_z_kws.setdefault("emax", self.bunch.getSyncParticle().kinEnergy() + 0.0025)
+            
             dist_z_kws.setdefault("ecparams", dict())
             dist_z_kws["ecparams"].setdefault("mean", 0.0)
             dist_z_kws["ecparams"].setdefault("sigma", 0.000000001)
@@ -306,49 +316,115 @@ class SNS_RING(TEAPOT_Ring):
             dist_z_kws["ecparams"].setdefault("drifti", 0.0)
             dist_z_kws["ecparams"].setdefault("driftf", 0.0)
             dist_z_kws["ecparams"].setdefault("drifttime", drift_time)
+            
             dist_z_kws.setdefault("esparams", dict())
             dist_z_kws["esparams"].setdefault("nu", 100.0)
             dist_z_kws["esparams"].setdefault("phase", 0.0)
             dist_z_kws["esparams"].setdefault("max", 0.0)
             dist_z_kws["esparams"].setdefault("nulltime", 0.0)
-        elif dist_z_kind == "joho":
-            dist_z_constructor = JohoLongitudinal
-        elif dist_z_kind == "uniform":
-            dist_z_constructor = UniformLongDist
+            
+            ecparams = [
+                dist_z_kws["ecparams"]["mean"],
+                dist_z_kws["ecparams"]["sigma"],
+                dist_z_kws["ecparams"]["trunc"],
+                dist_z_kws["ecparams"]["min"],
+                dist_z_kws["ecparams"]["max"],
+                dist_z_kws["ecparams"]["drifti"],
+                dist_z_kws["ecparams"]["driftf"],
+                dist_z_kws["ecparams"]["drifttime"],
+            ]
+            esparams = [
+                dist_z_kws["esparams"]["nu"],
+                dist_z_kws["esparams"]["phase"],
+                dist_z_kws["esparams"]["max"],
+                dist_z_kws["esparams"]["nulltime"],
+            ]
+            
+            dist_z = SNSESpreadDist(
+                self.getLength(),
+                zmin, 
+                zmax,
+                dist_z_kws["tailfraction"], 
+                self.bunch.getSyncParticle(),
+                dist_z_kws["emean"], 
+                dist_z_kws["esigma"], 
+                dist_z_kws["etrunc"], 
+                dist_z_kws["emin"], 
+                dist_z_kws["emax"], 
+                ecparams,
+                esparams,
+            )
+        elif dist_z == "joho":
+            dist_z_kws.setdefault("order", 1)
+            dist_z_kws.setdefault("zlim", 1.0)
+            dist_z_kws.setdefault("dElim", 1.0)
+            dist_z_kws.setdefault("nlongbunches", 0)
+            dist_z_kws.setdefault("deltazbunch", 0.0)
+            dist_z_kws.setdefault("deltaznotch", 0.0)
+            dist_z_kws.setdefault("tailfraction", 0.0)
+            dist_z_kws.setdefault("tailfactor", 1.0)
+            dist_z = JohoLongitudinal(
+                order=dist_z_kws["order"],
+                zlim=dist_z_kws["zlim"],
+                dElim=dist_z_kws["dElim"],
+                nlongbunches=dist_z_kws["nlongbunches"],
+                deltazbunch=dist_z_kws["deltazbunch"],
+                deltaznotch=dist_z_kws["deltaznotch"],
+                tailfraction=dist_z_kws["tailfraction"],
+                tailfactor=dist_z_kws["tailfactor"],
+            )
+        elif dist_z == "uniform":
             dist_z_kws.setdefault("zmin", zmin)
             dist_z_kws.setdefault("zmax", zmax)
-            dist_z_kws.setdefault("sync_part", self.sync_part)
+            dist_z_kws.setdefault("sync_part", self.bunch.getSyncParticle())
             dist_z_kws.setdefault("eoffset", 0.0)
             dist_z_kws.setdefault("deltaEfrac", 0.0)
+            dist_z = UniformLongDist(
+                dist_z_kws["zmin"], 
+                dist_z_kws["zmax"], 
+                self.bunch.getSyncParticle(), 
+                dist_z_kws["eoffset"], 
+                dist_z_kws["deltaEfrac"],
+            )
         else:
             raise ValueError("Invalid dist_z")
             
-        self.inj_node = TeapotInjectionNode(
+        foil_boundary = [
+            self.x_inj + xmin,
+            self.x_inj + xmax, 
+            self.y_inj + ymin, 
+            self.y_inj + ymax,
+        ]
+        
+        inj_node = TeapotInjectionNode(
             n_parts, 
             self.bunch, 
             self.lostbunch, 
-            [xmin, xmax, ymin, ymax],
-            dist_x_constructor(**dist_x_kws),
-            dist_y_constructor(**dist_y_kws),
-            dist_z_constructor(**dist_z_kws),
+            foil_boundary, 
+            dist_x, 
+            dist_y, 
+            dist_z, 
             n_parts_max,
         )
+        
         start_node = self.getNodes()[0]
-        start_node.addChildNode(self.inj_node, AccNode.ENTRANCE)
-        return self.inj_node
+        start_node.addChildNode(inj_node, AccNode.ENTRANCE)
+        return inj_node
 
     def add_longitudinal_impedance_node(
         self,
         n_macros_min=1000,
         n_bins=128,
         position=124.0,
-        ZL_Ekicker=None,
-        ZL_RF=None,
+        zl_ekicker_filename="",
+        zl_rf_filename="",
     ):
+        """Sets impedance from file."""
+        if not (zl_ekicker_filename or zl_rf_filename):
+            raise ValueError()
+        
         ZL = dict()
-        for key in ["Ekicker", "RF"]:
-            filename = "data/ZL_{}.dat".format(key)
-            filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), filename)
+        for key, filename in zip(["ekicker", "rf"], [zl_ekicker_filename, zl_rf_filename]):
             file = open(filename, "r")
             ZL[key] = []
             for line in file:
@@ -359,14 +435,14 @@ class SNS_RING(TEAPOT_Ring):
             file.close()
                 
         Z = []
-        for zk, zrf in zip(ZL["Ekicker"], ZL["RF"]):
+        for zk, zrf in zip(ZL["ekicker"], ZL["rf"]):
             zreal = (zk.real / 1.75) + zrf.real
             zimag = (zk.imag / 1.75) + zrf.imag
             Z.append(complex(zreal, zimag))
-        self.longitudinal_impedance_node = LImpedance_Node(self.getLength(), n_macros_min, n_bins)
-        self.longitudinal_impedance_node.assignImpedance(Z)
-        addImpedanceNode(self, position, self.longitudinal_impedance_node)
-        return self.longitudinal_impedance_node
+        impedance_node = LImpedance_Node(self.getLength(), n_macros_min, n_bins)
+        impedance_node.assignImpedance(Z)
+        addImpedanceNode(self, position, impedance_node)
+        return impedance_node
         
     def add_transverse_impedance_node(
         self,
@@ -381,9 +457,12 @@ class SNS_RING(TEAPOT_Ring):
         beta_y=10.447,
         q_x=6.21991,
         q_y=6.20936,
+        filename="",
     ):
+        if not filename:
+            raise ValueError()
+            
         INDEX, ZP, ZM = [], [], []
-        filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "data/HahnImpedance.dat")
         file = open(filename, "r")
         for line in file:
             if line.startswith("#"):
@@ -394,14 +473,14 @@ class SNS_RING(TEAPOT_Ring):
             INDEX.append(int(m))
         file.close()
 
-        self.transverse_impedance_node = TImpedance_Node(self.getLength(), n_macros_min, n_bins, use_x, use_y)
-        self.transverse_impedance_node.assignLatFuncs(q_x, alpha_x, beta_x, q_y, alpha_y, beta_y)
+        impedance_node = TImpedance_Node(self.getLength(), n_macros_min, n_bins, use_x, use_y)
+        impedance_node.assignLatFuncs(q_x, alpha_x, beta_x, q_y, alpha_y, beta_y)
         if use_x:
-            self.transverse_impedance_node.assignImpedance("X", ZP, ZM)
+            impedance_node.assignImpedance("X", ZP, ZM)
         if use_y:
-            self.transverse_impedance_node.assignImpedance("Y", ZP, ZM)
-        addImpedanceNode(self, position, self.transverse_impedance_node)
-        return self.transverse_impedance_node
+            impedance_node.assignImpedance("Y", ZP, ZM)
+        addImpedanceNode(self, position, impedance_node)
+        return impedance_node
         
     def add_longitudinal_space_charge_node(
         self, 
@@ -411,11 +490,11 @@ class SNS_RING(TEAPOT_Ring):
         n_bins=64,
         position=124.0,
     ):
-        self.longitudinal_space_charge_node = SC1D_AccNode(b_a, self.getLength(), n_macros_min, use, n_bins)
+        sc_node = SC1D_AccNode(b_a, self.getLength(), n_macros_min, use, n_bins)
         Z = [complex(0.0, 0.0) for _ in range(n_bins // 2)]
-        self.longitudinal_space_charge_node.assignImpedance(Z);
-        addLongitudinalSpaceChargeNode(self, position, self.longitudinal_space_charge_node)
-        return self.longitudinal_space_charge_node
+        sc_node.assignImpedance(Z)
+        addLongitudinalSpaceChargeNode(self, position, sc_node)
+        return sc_node
         
     def add_transverse_space_charge_nodes(
         self,
@@ -426,19 +505,19 @@ class SNS_RING(TEAPOT_Ring):
         path_length_min=1.0e-8,
         n_boundary_points=128,
         n_free_space_modes=32,
-        r_boundary=0.220,
+        radius=0.220,
         kind="slicebyslice",
     ):
-        boundary = Boundary2D(n_boundary_points, n_free_space_modes, "Circle", r_boundary, r_boundary)
+        boundary = Boundary2D(n_boundary_points, n_free_space_modes, "Circle", radius, radius)
         if kind == "2p5d":
-            self.transverse_space_charge_nodes = setSC2p5DAccNodes(
+            sc_nodes = setSC2p5DAccNodes(
                 self, 
                 path_length_min, 
                 SpaceChargeCalc2p5D(size_x, size_y, size_z), 
                 boundary,
             )
         elif kind == "slicebyslice":
-            self.transverse_space_charge_nodes = setSC2DSliceBySliceAccNodes(
+            sc_nodes = setSC2DSliceBySliceAccNodes(
                 self, 
                 path_length_min, 
                 SpaceChargeCalcSliceBySlice2D(size_x, size_y, size_z), 
@@ -446,7 +525,7 @@ class SNS_RING(TEAPOT_Ring):
             )
         else:
             raise ValueError("Invalid kind.")
-        return self.transverse_space_charge_nodes
+        return sc_nodes
             
     def add_tune_diagnostics_node(
         self,
@@ -462,14 +541,12 @@ class SNS_RING(TEAPOT_Ring):
         tune_node = TeapotTuneAnalysisNode(filename)
         tune_node.assignTwiss(beta_x, alpha_x, eta_x, etap_x, beta_y, alpha_y)
         addTeapotDiagnosticsNode(self, position, tune_node)
-        self.diagnostics_nodes["tune"] = tune_node
         return tune_node
     
     def add_moments_diagnostics_node(self, filename="moments.dat", order=4, position=0.0):
         moments_node = TeapotMomentsNode(filename, order)
         start_node = self.getNodes()[0]
         start_node.addChildNode(moments_node, AccNode.ENTRANCE)
-        self.diagnostics_nodes["moments"] = moments_node
         return moments_node
 
     def add_inj_chicane_aperture_displacement_nodes(self):
@@ -482,7 +559,7 @@ class SNS_RING(TEAPOT_Ring):
 
         ycenter = 0.023
 
-        bumpwave = ConstantWaveform(1.0)
+        bumpwave = ConstantWaveform(self.bunch.getSyncParticle(), self.getLength(), 1.0)
         
         xb10i = 0.0
         apb10xi = -xb10i
@@ -585,31 +662,22 @@ class SNS_RING(TEAPOT_Ring):
     def add_aperture_node_circle(self, rx=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
         aperture_node = CircleApertureNode(rx, position, x, y, name)
         addTeapotApertureNode(self, position, aperture_node)        
-        if name == "aperture_node":
-            name = "{}_{}".format(name, len(self.aperture_nodes))
-        self.aperture_nodes[name] = aperture_node
         return aperture_node
     
     def add_aperture_node_ellipse(self, rx=0.0, ry=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
         aperture_node = EllipseApertureNode(rx, ry, position, x, y, name)
         addTeapotApertureNode(self, position, aperture_node)        
-        if name == "aperture_node":
-            name = "{}_{}".format(name, len(self.aperture_nodes))
-        self.aperture_nodes[name] = aperture_node
         return aperture_node
     
-    def add_aperture_node_circular(self, rx=0.0, ry=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
+    def add_aperture_node_rectangle(self, rx=0.0, ry=0.0, position=0.5, x=0.0, y=0.0, name="aperture_node"):
         aperture_node = RectangleApertureNode(rx, ry, position, x, y, name)
         addTeapotApertureNode(self, position, aperture_node)        
-        if name == "aperture_node":
-            name = "{}_{}".format(name, len(self.aperture_nodes))
-        self.aperture_nodes[name] = aperture_node
         return aperture_node
                 
     def add_aperture_nodes(self):
         """Add apertures throughout the ring.
 
-        This does not work with the standard MADX output file: The parent nodes are currently 
+        This does not work with the standard MADX output file. The parent nodes are currently 
         selected by index; they need to be selected by name.
         """
         nodes = self.getNodes()
@@ -1113,9 +1181,6 @@ class SNS_RING(TEAPOT_Ring):
     ):            
         collimator_node = TeapotCollimatorNode(length, ma, density_fac, shape, a, b, c, d, angle, position, name)
         addTeapotCollimatorNode(self, position, collimator_node)        
-        if name == "collimator_node":
-            name = "{}_{}".format(name, len(self.collimator_nodes))
-        self.collimator_nodes[name] = collimator_node
         return collimator_node
 
     def add_collimator_nodes(self):
@@ -1138,523 +1203,63 @@ class SNS_RING(TEAPOT_Ring):
         self.add_collimator_node(1.19000, 3, 0.65, 2, 0.0625, 0.0625, 0.0, 0.0, 0.0, 65.8779, "s2")
         self.add_collimator_node(1.01000, 3, 1.00, 1, 0.120, 0.000, 0.0, 0.0, 0.0, 67.0679, "s2sh2")
         
-    def add_rf_harmonic_nodes(self, RF1=None, RF2=None):
+    def add_harmonic_rf_node(self, rf1=None, rf2=None):
         z_to_phi = 2.0 * math.pi / self.getLength()
         dE_sync = 0.0
         length = 0.0
-        if RF1 is None:
-            RF1 = dict()
-        if RF2 is None:
-            RF2 = dict()
-        RF1.setdefault("phase", 0.0)
-        RF1.setdefault("hnum", 1.0)
-        RF1.setdefault("voltage", +2.0e-6)
-        RF2.setdefault("phase", 0.0)
-        RF2.setdefault("hnum", 2.0)
-        RF2.setdefault("voltage", -4.0e-6)
-
-        self.rf_nodes = dict()
-        self.rf_nodes["RF1a"] = RFNode.Harmonic_RFNode(
-            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1a",
-        )
-        self.rf_nodes["RF1b"] = RFNode.Harmonic_RFNode(
-            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1b",
-        )
-        self.rf_nodes["RF1c"] = RFNode.Harmonic_RFNode(
-            z_to_phi, dE_sync, RF1["hnum"], RF1["voltage"], RF1["phase"], length, name="RF1c",
-        )
-        self.rf_nodes["RF2"] = RFNode.Harmonic_RFNode(
-            z_to_phi, dE_sync, RF2["hnum"], RF2["voltage"], RF2["phase"], length, name="RF2",
-        )
-        RFLatticeModifications.addRFNode(self, 184.273, self.rf_nodes["RF1a"])
-        RFLatticeModifications.addRFNode(self, 186.571, self.rf_nodes["RF1b"])
-        RFLatticeModifications.addRFNode(self, 188.868, self.rf_nodes["RF1c"])
-        RFLatticeModifications.addRFNode(self, 191.165, self.rf_nodes["RF2"])
-        return self.rf_nodes
-
-
-class InjectionController:    
-    def __init__(
-        self,
-        ring=None,
-        mass=None,
-        kin_energy=None,
-        inj_mid="injm1",
-        inj_start="bpm_a09",
-        inj_end="bpm_b01",
-    ):
-        self.ring = ring
-        self.mass = mass
-        self.kin_energy = kin_energy
-        self.kicker_names = [
-            "ikickh_a10",
-            "ikickv_a10",
-            "ikickh_a11",
-            "ikickv_a11",
-            "ikickv_a12",
-            "ikickh_a12",
-            "ikickv_a13",
-            "ikickh_a13",
-        ]
-        self.kicker_nodes = [ring.getNodeForName(name) for name in self.kicker_names]
-
-        # Maximum injection kicker angles at 1.0 GeV [mrad].
-        self.min_kicker_angles = MIN_KICKER_ANGLES
-        self.max_kicker_angles = MAX_KICKER_ANGLES
-
-        # Convert the maximum kicker angles from [mrad] to [rad].
-        self.min_kicker_angles = 1.0e-3 * self.min_kicker_angles
-        self.max_kicker_angles = 1.0e-3 * self.max_kicker_angles
-
-        # Scale the maximum kicker angles based on kinetic energy. (They are defined for
-        # the nominal SNS kinetic energy of 1.0 GeV.)
-        self.kin_energy_scale_factor = get_pc(mass, kin_energy=1.0) / get_pc(mass, kin_energy)
-        self.min_kicker_angles *= self.kin_energy_scale_factor
-        self.max_kicker_angles *= self.kin_energy_scale_factor
-
-        # Identify the horizontal and vertical kicker nodes. (PyORBIT does not
-        # distinguish between horizontal/vertical kickers.)
-        self.kicker_idx_x = [0, 2, 5, 7]
-        self.kicker_idx_y = [1, 3, 4, 6]
-        self.kicker_nodes_x = [self.kicker_nodes[i] for i in self.kicker_idx_x]
-        self.kicker_nodes_y = [self.kicker_nodes[i] for i in self.kicker_idx_y]
-        self.min_kicker_angles_x = self.min_kicker_angles[self.kicker_idx_x]
-        self.max_kicker_angles_x = self.max_kicker_angles[self.kicker_idx_x]
-        self.min_kicker_angles_y = self.min_kicker_angles[self.kicker_idx_y]
-        self.max_kicker_angles_y = self.max_kicker_angles[self.kicker_idx_y]
-
-        # Identify dipole correctors. These will be used to make a closed bump.
-        self.vcorrector_names = ["dmcv_a09", "dchv_a10", "dchv_a13", "dmcv_b01"]
-        self.vcorrector_nodes = [self.ring.getNodeForName(name) for name in self.vcorrector_names]
-        self.max_vcorrector_angle = MAX_VCORRECTOR_ANGLE  # [mrad]
-        self.max_vcorrector_angle *= 1.0e-3  # [mrad] --> [rad]
-        self.max_vcorrector_angle *= self.kin_energy_scale_factor
-        self.min_vcorrector_angle = -self.max_vcorrector_angle
-
-        # Create one sublattice for the first half of the injection region (before the foil)
-        # and one sublattice for the second half of the injection region (afterthe foil).
-        self.sublattice1 = self.ring.getSubLattice(
-            self.ring.getNodeIndex(self.ring.getNodeForName(inj_start)), 
-            -1,
-        )
-        self.sublattice2 = self.ring.getSubLattice(
-            self.ring.getNodeIndex(self.ring.getNodeForName(inj_mid)),
-            self.ring.getNodeIndex(self.ring.getNodeForName(inj_end)),
-        )        
-        self.sublattices = [self.sublattice1, self.sublattice2]
+        if rf1 is None:
+            rf1 = dict()
+        if rf2 is None:
+            rf2 = dict()
+        rf1.setdefault("phase", 0.0)
+        rf1.setdefault("hnum", 1.0)
+        rf1.setdefault("voltage", +2.00e-06)
+        rf2.setdefault("phase", 0.0)
+        rf2.setdefault("hnum", 2.0)
+        rf2.setdefault("voltage", -4.00e-06)
         
-        # Add inactive monitor nodes
-        self.monitor_nodes = []
-        for sublattice in self.sublattices:
-            self.monitor_nodes.append([])
-            node_pos_dict = sublattice.getNodePositionsDict()
-            for node in sublattice.getNodes():
-                monitor_node = BunchCoordsNode(axis=(0, 1, 2, 3))
-                monitor_node.position = node_pos_dict[node][0]
-                monitor_node.active = False
-                add_diagnostics_node_as_child(
-                    monitor_node,
-                    parent_node=node,
-                    part_index=0,
-                    place_in_part=AccActionsContainer.BEFORE,
-                )
-                self.monitor_nodes[-1].append(monitor_node)
-                
-        # Initialize bunch for single-particle tracking.
-        self.bunch = Bunch()
-        self.bunch.mass(mass)
-        self.bunch.getSyncParticle().kinEnergy(kin_energy)
-        self.params_dict = {"lostbunch": Bunch()}  # for apertures
-        self.bunch.addParticle(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-        
-    def scale_kicker_limits(self, factor=1.0):
-        self.min_kicker_angles = factor * self.min_kicker_angles
-        self.max_kicker_angles = factor * self.max_kicker_angles
-        self.min_kicker_angles_x = self.min_kicker_angles[self.kicker_idx_x]
-        self.max_kicker_angles_x = self.max_kicker_angles[self.kicker_idx_x]
-        self.min_kicker_angles_y = self.min_kicker_angles[self.kicker_idx_y]
-        self.max_kicker_angles_y = self.max_kicker_angles[self.kicker_idx_y]
-        
-    def get_nodes(self):
-        return self.sublattice1.getNodes() + self.sublattice2.getNodes()
-
-    def get_kicker_angles_x(self):
-        return np.array([node.getParam("kx") for node in self.kicker_nodes_x])
-
-    def get_kicker_angles_y(self):
-        return np.array([node.getParam("ky") for node in self.kicker_nodes_y])
-
-    def get_kicker_angles(self):
-        angles = []
-        for node in self.kicker_nodes:
-            if node in self.kicker_nodes_x:
-                angles.append(node.getParam("kx"))
-            elif node in self.kicker_nodes_y:
-                angles.append(node.getParam("ky"))
-        return np.array(angles)
-
-    def set_kicker_angles_x(self, angles=None):
-        if angles is not None:
-            for angle, node in zip(angles, self.kicker_nodes_x):
-                node.setParam("kx", angle)
-
-    def set_kicker_angles_y(self, angles=None):
-        if angles is not None:
-            for angle, node in zip(angles, self.kicker_nodes_y):
-                node.setParam("ky", angle)
-                
-    def set_kicker_angles(self, angles):
-        angles_x = [angles[i] for i in self.kicker_idx_x]
-        angles_y = [angles[i] for i in self.kicker_idx_y]
-        self.set_kicker_angles_x(angles_x)
-        self.set_kicker_angles_y(angles_y)
-        
-    def get_vcorrector_angles(self):
-        return np.array([node.getParam("ky") for node in self.vcorrector_nodes])
-
-    def set_vcorrector_angles(self, angles):
-        for angle, node in zip(angles, self.vcorrector_nodes):
-            node.setParam("ky", angle)
-        
-    def init_part(self, x=0.0, xp=0.0, y=0.0, yp=0.0):
-        self.bunch.deleteParticle(0)
-        self.bunch.addParticle(x, xp, y, yp, 0.0, 0.0)
-        
-    def track_part(self, sublattice=0):
-        self.sublattices[sublattice].trackBunch(self.bunch, self.params_dict)
-        return np.array([self.bunch.x(0), self.bunch.xp(0), self.bunch.y(0), self.bunch.yp(0)])
-                            
-    def set_inj_coords(self, coords, guess=None, **kws):
-        coords = np.array(coords)
-        if guess is None:
-            guess = np.zeros(8)
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-                            
-        def cost_func(angles):
-            self.set_kicker_angles(angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            coords_end = self.track_part(sublattice=1)
-            ftsr = 4 * "{:.3f} " + "| " + 4 * "{:.3f} "
-            print(
-                ftsr.format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                    1000.0 * coords_end[0], 
-                    1000.0 * coords_end[1], 
-                    1000.0 * coords_end[2], 
-                    1000.0 * coords_end[3],
-                )
+        rf_nodes = {
+            "rf1a": RFNode.Harmonic_RFNode(
+                z_to_phi, 
+                dE_sync, 
+                rf1["hnum"], 
+                rf1["voltage"], 
+                rf1["phase"],
+                length,
+                name="rf1a",
+            ),
+            "rf1b": RFNode.Harmonic_RFNode(
+                z_to_phi,
+                dE_sync, 
+                rf1["hnum"], 
+                rf1["voltage"], 
+                rf1["phase"], 
+                length, 
+                name="rf1b",
+            ),
+            "rf1c": RFNode.Harmonic_RFNode(
+                z_to_phi, 
+                dE_sync,
+                rf1["hnum"], 
+                rf1["voltage"], 
+                rf1["phase"], 
+                length, 
+                name="rf1c",
+            ),
+            "rf2": RFNode.Harmonic_RFNode(
+                z_to_phi, 
+                dE_sync, 
+                rf2["hnum"], 
+                rf2["voltage"], 
+                rf2["phase"], 
+                length, 
+                name="rf2",
             )
-            return magnitude(coords_mid - coords) + magnitude(coords_end)
-
-        bounds = (self.min_kicker_angles, self.max_kicker_angles)
-        opt.least_squares(cost_func, guess, bounds=bounds, **kws)
-        return self.get_kicker_angles()
-    
-    def set_inj_coords_x(self, coords, **kws):
-        coords = np.array(coords)
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-                            
-        def cost_func(angles):
-            self.set_kicker_angles_x(angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            coords_end = self.track_part(sublattice=1)
-            print(
-                (4 * "{:.3f} " + "| " + 4 * "{:.3f} ").format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                    1000.0 * coords_end[0], 
-                    1000.0 * coords_end[1], 
-                    1000.0 * coords_end[2], 
-                    1000.0 * coords_end[3],
-                )
-            )
-            return magnitude(coords_mid[:2] - coords[:2]) + magnitude(coords_end[:2])
-
-        bounds = (self.min_kicker_angles_x, self.max_kicker_angles_x)
-        opt.least_squares(cost_func, np.zeros(4), bounds=bounds, **kws)
-
-    def set_inj_coords_y(self, coords, **kws):
-        coords = np.array(coords)
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-                            
-        def cost_func(angles):
-            self.set_kicker_angles_y(angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            coords_end = self.track_part(sublattice=1)
-            print(
-                (4 * "{:.3f} " + "| " + 4 * "{:.3f} ").format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                    1000.0 * coords_end[0], 
-                    1000.0 * coords_end[1], 
-                    1000.0 * coords_end[2], 
-                    1000.0 * coords_end[3],
-                )
-            )
-            return magnitude(coords_mid[2:] - coords[2:]) + magnitude(coords_end[2:])
-
-        bounds = (self.min_kicker_angles_y, self.max_kicker_angles_y)
-        opt.least_squares(cost_func, np.zeros(4), bounds=bounds, **kws)
-        
-    def set_inj_coords_x_halves(self, coords, **kws):
-        coords = np.array(coords)
-        kicker_angles = np.zeros(4)
-        lb = self.min_kicker_angles_x
-        ub = self.max_kicker_angles_x
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-        
-        def cost_func(angles):
-            kicker_angles[:2] = angles
-            self.set_kicker_angles_x(kicker_angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            print(
-                (4 * "{:.3f} ").format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                )
-            )
-            return magnitude(coords_mid[:2] - coords[:2])
-                            
-        opt.least_squares(cost_func, np.zeros(2), bounds=(lb[:2], ub[:2]), **kws)
-                
-        def cost_func(angles):
-            kicker_angles[2:] = angles
-            self.set_kicker_angles_x(kicker_angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            coords_end = self.track_part(sublattice=1)
-            print(
-                (4 * "{:.3f} " + "| " + 4 * "{:.3f} ").format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                    1000.0 * coords_end[0], 
-                    1000.0 * coords_end[1], 
-                    1000.0 * coords_end[2], 
-                    1000.0 * coords_end[3],
-                )
-            )
-            return magnitude(coords_end[:2])
-
-        opt.least_squares(cost_func, np.zeros(2), bounds=(lb[2:], ub[2:]), **kws)
-
-    def set_inj_coords_y_halves(self, coords, **kws):
-        coords = np.array(coords)
-        kicker_angles = np.zeros(4)
-        lb = self.min_kicker_angles_y
-        ub = self.max_kicker_angles_y
-        
-        self.sublattices[0].reverseOrder()
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-        
-        def cost_func(angles):
-            kicker_angles[:2] = angles
-            self.set_kicker_angles_y(kicker_angles)
-            self.init_part(coords[0], -coords[1], coords[2], -coords[3])
-            coords_out = self.track_part(sublattice=0)
-            print(
-                (4 * "{:.3f} ").format(
-                    1000.0 * coords_out[0], 
-                    1000.0 * coords_out[1], 
-                    1000.0 * coords_out[2], 
-                    1000.0 * coords_out[3],
-                )
-            )
-            return magnitude(coords_out[2:])
-                            
-        opt.least_squares(cost_func, np.zeros(2), bounds=(lb[:2], ub[:2]), **kws)
-        
-        self.sublattices[0].reverseOrder()
-        self.init_part(0.0, 0.0, 0.0, 0.0)
-        coords = self.track_part(sublattice=0)
-                
-        def cost_func(angles):
-            kicker_angles[2:] = angles
-            self.set_kicker_angles_y(kicker_angles)
-            self.init_part(coords[0], coords[1], coords[2], coords[3])
-            coords_out = self.track_part(sublattice=1)
-            print(
-                (4 * "{:.3f} ").format(
-                    1000.0 * coords_out[0], 
-                    1000.0 * coords_out[1], 
-                    1000.0 * coords_out[2], 
-                    1000.0 * coords_out[3],
-                )
-            )
-            return magnitude(coords_out[2:])
-
-        opt.least_squares(cost_func, np.zeros(2), bounds=(lb[2:], ub[2:]), **kws)
-
-    def set_inj_coords_fast(self, coords, vcorrectors=False, **solver_kws):
-        solver_kws.setdefault("max_nfev", 5000)   
-        solver_kws.setdefault("verbose", 2)   
-        x, xp, y, yp = coords
-        kicker_angles_x = np.zeros(4)
-        kicker_angles_y = np.zeros(4)
-        
-        def _evaluate(_coords):
-            return 1.0e6 * np.sum(_coords**2)
-        
-        
-        # First half of injection region   
-
-        self.sublattices[0].reverseOrder()
-        
-        def _track():
-            self.init_part(x, -xp, y, -yp)
-            return self.track_part(sublattice=0)
-        
-        def cost_func(angles):
-            kicker_angles_x[:2] = angles
-            self.set_kicker_angles_x(kicker_angles_x)
-            return _evaluate(_track()[:2])
-        
-        opt.least_squares(
-            cost_func, 
-            kicker_angles_x[:2],
-            bounds=(self.min_kicker_angles_x[:2], self.max_kicker_angles_x[:2]), 
-            **solver_kws
-        )
-        
-        def cost_func(angles):
-            kicker_angles_y[:2] = angles
-            self.set_kicker_angles_y(kicker_angles_y)
-            return _evaluate(_track()[2:])
-
-        opt.least_squares(
-            cost_func, 
-            kicker_angles_y[:2],
-            bounds=(self.min_kicker_angles_y[:2], self.max_kicker_angles_y[:2]),
-            **solver_kws
-        )         
-        
-        self.sublattices[0].reverseOrder()
-    
-    
-        # Second half of injection region 
-
-        def _track():
-            self.init_part(x, +xp, y, +yp)
-            return self.track_part(sublattice=1)
-        
-        def cost_func(angles):
-            kicker_angles_x[2:] = angles
-            self.set_kicker_angles_x(kicker_angles_x)
-            return _evaluate(_track()[:2])
-
-        opt.least_squares(
-            cost_func, 
-            kicker_angles_x[2:],
-            bounds=(self.min_kicker_angles_x[2:], self.max_kicker_angles_x[2:]), 
-            **solver_kws
-        )     
-        
-        def cost_func(angles):
-            kicker_angles_y[2:] = angles
-            self.set_kicker_angles_y(kicker_angles_y)
-            return _evaluate(_track()[2:])
-        
-        opt.least_squares(
-            cost_func, 
-            kicker_angles_y[2:],
-            bounds=(self.min_kicker_angles_y[2:], self.max_kicker_angles_y[2:]),
-            **solver_kws
-        )     
-        return self.get_kicker_angles()
-
-    def set_inj_coords_vcorrectors(self, coords, **solver_kws):
-        solver_kws.setdefault("max_nfev", 5000)   
-        solver_kws.setdefault("verbose", 2)   
-        coords = np.array(coords)
-        x, xp, y, yp = coords
-        
-        def magnitude(_coords):
-            return 1.0e4 * np.sum(_coords**2)
-                        
-        def cost_func(angles):
-            self.set_vcorrector_angles(angles)
-            self.init_part(0.0, 0.0, 0.0, 0.0)
-            coords_mid = self.track_part(sublattice=0)
-            coords_end = self.track_part(sublattice=1)
-            print(
-                (4 * "{:.3f} " + "| " + 4 * "{:.3f} ").format(
-                    1000.0 * coords_mid[0], 
-                    1000.0 * coords_mid[1], 
-                    1000.0 * coords_mid[2], 
-                    1000.0 * coords_mid[3],
-                    1000.0 * coords_end[0], 
-                    1000.0 * coords_end[1], 
-                    1000.0 * coords_end[2], 
-                    1000.0 * coords_end[3],
-                )
-            )
-            cost = 0.0
-            cost += magnitude(coords_mid - coords)
-            cost += magnitude(coords_end)
-            return cost
-        
-        opt.least_squares(
-            cost_func, 
-            np.zeros(4),
-            bounds=(self.min_vcorrector_angle, self.max_vcorrector_angle), 
-            **solver_kws
-        )
-        return self.get_vcorrector_angles()
-    
-    def get_trajectory(self):
-        self.init_part(0.0, 0.0, 0.0, 0.0)
-        coords, positions, names = [], [], []
-        position_offset = 0.0
-        for i, sublattice in enumerate(self.sublattices):
-            if i == 1:
-                position_offset = positions[-1]
-            for monitor_node in self.monitor_nodes[i]:
-                monitor_node.active = True
-            sublattice.trackBunch(self.bunch, self.params_dict)
-            for monitor_node in self.monitor_nodes[i]:
-                coords.append(np.squeeze(monitor_node.data[-1]))
-                positions.append(monitor_node.position + position_offset)
-                names.append(monitor_node.getName().split(":")[0])
-                monitor_node.clear_data()
-                monitor_node.active = False
-        coords = pd.DataFrame(coords, columns=["x", "xp", "y", "yp"])
-        coords["s"] = positions
-        coords["node"] = names    
-        return coords
-    
-    def print_inj_coords(self):
-        coords_start = np.zeros(4)
-        self.init_part(*coords_start)
-        coords_mid = self.track_part(sublattice=0)
-        coords_end = self.track_part(sublattice=1)
-        for _coords, tag in zip([coords_start, coords_mid, coords_end], ["start", "mid", "end"]):
-            _coords = _coords * 1000.0
-            print("Coordinates at inj_{}:".format(tag))
-            print("  x = {:.3f} [mm]".format(_coords[0]))
-            print("  y = {:.3f} [mm]".format(_coords[2]))
-            print("  xp = {:.3f} [mrad]".format(_coords[1]))
-            print("  yp = {:.3f} [mrad]".format(_coords[3]))
+        }          
+        # Positions are hard-coded.
+        rf_nodes = [rf_nodes[key] for key in ["rf1a", "rf1b", "rf1c", "rf2"]]
+        RFLatticeModifications.addRFNode(self, 184.273, rf_nodes[0])
+        RFLatticeModifications.addRFNode(self, 186.571, rf_nodes[1])
+        RFLatticeModifications.addRFNode(self, 188.868, rf_nodes[2])
+        RFLatticeModifications.addRFNode(self, 191.165, rf_nodes[3])
+        return rf_nodes
