@@ -75,22 +75,14 @@ def url_style(url, text=None):
 
 
 class ScriptManager:
-    def __init__(self, datadir=None, path=None, timestamp=None, datestamp=None, script_path_in_outdir=True):
+    def __init__(self, outdir=None, filepath=None):
         """
         Parameters
         ----------
-        datadir : str
+        outdir : str
             All output files/folders will go here.
-        path : pathlib.Path
-            The path to the script.
-        timestamp, datestamp : str
-            Timestamp (YYMMDDHHSSMM) and datestamp (YYYY-MM-DD) when ScriptManager was created.
-        script_path_in_outdir : bool
-            Suppose the script is '/scripts/ring/sim.py` and datadir is
-            '/home/sim_data/' and timestamp is '230812062403':
-            
-            True: outdir is '/home/sim_data/ring/sim/230812062403/'.
-            False: outdir is '/home/sim_data/'.
+        filepath : str
+            Full path to script.
         """
         _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
@@ -102,23 +94,17 @@ class ScriptManager:
         self.timestamp = orbit_mpi.MPI_Bcast(timestamp, orbit_mpi.mpi_datatype.MPI_CHAR, main_rank, _mpi_comm)
         
         self.git_hash, self.git_url = self.get_git()
-        self.datadir = datadir
-        self.path = path
+        
+        self.filepath = filepath
+        self.path = pathlib.Path(self.filepath)
         self.script_name = self.path.stem
-        self.script_path_in_outdir = script_path_in_outdir
-        if self.script_path_in_outdir:
-            self.outdir = os.path.join(
-                self.datadir, 
-                self.path.as_posix().split("scripts/")[1].split(".py")[0], 
-                self.timestamp,
-            )
-        else:
-            self.outdir = os.path.join(
-                self.datadir, 
-                self.timestamp,
-            )
+        self.outdir = os.path.join(
+            outdir, 
+            self.path.as_posix().split("scripts/")[1].split(".py")[0], 
+            self.timestamp,
+        )
     
-    def make_outdir(self):
+    def make_dirs(self):
         if not os.path.exists(self.outdir):
             os.makedirs(self.outdir)
 
@@ -152,7 +138,7 @@ class ScriptManager:
             "timestamp": self.timestamp,
             "datestamp": self.datestamp,
         }
-        return info    
+        return info
     
     def get_logger(self, save=True, disp=True, filename="log.txt"):
         logger = logging.getLogger()

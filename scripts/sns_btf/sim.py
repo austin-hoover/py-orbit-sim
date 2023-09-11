@@ -136,7 +136,8 @@ args = parser.parse_args()
 
 # Setup
 # --------------------------------------------------------------------------------------
-file_dir = os.path.dirname(os.path.realpath(__file__))
+file_path = os.path.realpath(__file__)
+file_dir = os.path.dirname(file_path)
 
 # Load config file.
 file = open(os.path.join(file_dir, "config.yaml"), "r")
@@ -155,9 +156,9 @@ _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
 _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
 
 # Create output directory and save script info.
-man = ScriptManager(datadir=output_dir, path=pathlib.Path(__file__))
+man = ScriptManager(outdir=output_dir, filepath=file_path)
 if args.save and _mpi_rank == 0:
-    man.make_outdir()
+    man.make_dirs()
     log = man.get_logger(save=args.save, disp=True)
     for key, val in man.get_info().items():
         log.info("{} {}".format(key, val))
