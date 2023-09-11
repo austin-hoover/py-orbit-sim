@@ -275,11 +275,11 @@ def shift_centroid(bunch, delta=None, verbose=False):
 
 def set_centroid(bunch, centroid=0.0, verbose=False):
     if centroid is None:
-        return
+        return bunch
     if np.ndim(centroid) == 0:
         centroid = 6 * [centroid]
     if all([x is None for x in centroid]):
-        return
+        return bunch
     old_centroid = get_centroid(bunch)
     for i in range(len(centroid)):
         if centroid[i] is None:
@@ -388,6 +388,8 @@ def load(
         bunch = Bunch()
     if file_format == "pyorbit":
         bunch.readBunch(filename)
+        return bunch
+    
     elif file_format == "parmteq":
         # Read data.
         header = np.genfromtxt(filename, max_rows=3, usecols=[0, 1, 2, 3, 4], dtype=str)
