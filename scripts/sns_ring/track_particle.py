@@ -4,9 +4,9 @@ import argparse
 import math
 import os
 import pickle
-from pprint import pprint
 import sys
 import time
+from pprint import pprint
 
 import numpy as np
 import yaml
@@ -84,7 +84,7 @@ import pyorbit_sim
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--outdir", type=str, default=None)
-parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.18_nuy6.18_dual_solenoid/lattice.lat")
+parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.175_nuy6.175_sol.lattice")
 parser.add_argument("--madx-seq", type=str, default="rnginjsol")
 parser.add_argument("--save", type=int, default=1)
 
@@ -100,7 +100,8 @@ parser.add_argument("--rf1-volt", type=float, default=+2.00e-06)
 parser.add_argument("--rf2-phase", type=float, default=0.0)
 parser.add_argument("--rf2-hnum", type=float, default=2.0)
 parser.add_argument("--rf2-volt", type=float, default=-4.00e-06)
-parser.add_argument("--solenoid", type=int, default=0, help="Turns solenoid on/off.")
+parser.add_argument("--solenoid", type=int, default=0)
+parser.add_argument("--solB", type=float, default=0.6)
 
 parser.add_argument("--charge", type=float, default=1.0)  # [elementary charge units]
 parser.add_argument("--energy", type=float, default=1.0)  # [GeV]
@@ -158,12 +159,12 @@ for name in ["scbdsol_c13a", "scbdsol_c13b"]:
     node = ring.getNodeForName(name)
     B = 1.00e-12
     if args.solenoid:
-        B = 0.6 / (2.0 * node.getLength())
+        B = args.solB / (2.0 * node.getLength())
     node.setParam("B", B)
     logger.info(
         "{}: type={}, B={:.2f}, L={:.2f}".format(
             node.getName(), 
-            type(node),
+            node.getType(),
             node.getParam("B"),
             node.getLength())
     )
@@ -198,7 +199,8 @@ matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
 tmat_params = matrix_lattice.getRingParametersDict()
 
 logger.info("Transfer matrix parameters (uncoupled):")
-logger.info(tmat_params)
+for key, val in tmat_params.items():
+    logger.info("{}: {}".format(key, val))
 
 if args.save:
     file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
@@ -232,7 +234,9 @@ matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterizatio
 tmat_params = matrix_lattice.getRingParametersDict()
 
 logger.info("Transfer matrix parameters (coupled):")
-logger.info(tmat_params)
+for key, val in tmat_params.items():
+    logger.info("{}: {}".format(key, val))
+    
 if args.save:
     file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
     pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)

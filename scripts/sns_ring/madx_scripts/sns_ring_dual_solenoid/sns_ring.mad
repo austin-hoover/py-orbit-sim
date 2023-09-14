@@ -1,0 +1,275 @@
+  Title, "SNS Linac Accumulator Ring";  
+!------------------------------------------------------------
+! Note: BEAM statement is excluded until after HARMON performed
+! because the ENERGY definition leads to an error in the routine.
+!------------------------------------------------------------  
+!------------Physical costants-------------------------------  
+
+C     := 2.99792458e8;  !speed of light [m/sec]  
+PI    := 3.141592654;  
+DTR   := PI/180;  
+E0    := 0.938272310;   !proton mass [GeV]   
+EK    := 0.8;           ![GeV] injection kinetic Energy - energy used for matching.
+
+PC    := sqrt(EK*(EK+2*E0));       !  Value PC  
+Brho  := 1e9*(PC/C);               !  Value BRHO  
+GAMMA := 1+EK/E0;                  !  Value GAMMA      
+BETA  := sqrt(1-1/(GAMMA*GAMMA));  !  Value BETA  
+
+VALUE, Brho;
+VALUE, EK;
+
+! Flags for various ouput conditions. 
+TWISSOUTPUT = 1;     ! Set to 1 to get all twiss output
+CHROMCORRECTION = 0; ! Set to 1 to correct chromaticity - default should be no correction
+G4BL = 0; ! Set to 1 to get optics suitable for conversion to G4BL
+
+! Set to 1 to get PTC info on eigenvectors, ripken parameters, and summary
+! Should be used if solenoids are on. 
+PTCRIPKEN = 1;
+EXTTTUNES = 0;
+
+!-------Call the Lattice file (after Brho defined) ----------
+CALL, file = 'sns_ring.lat';  
+
+!------------------------------------------------------------
+! Set up the beam parameters (after lattice called, see top)
+BEAM, PARTICLE=PROTON, ENERGY=EK+E0; 
+
+
+!--------------Select Nominal Tunes--------------------------  
+
+QH:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
+QV:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
+
+IF( EXTTUNES == 1){ CALL, file='input/TUNES.OPT'; }
+
+! SOLAMPS=321.15129; ! 
+! SOLFIELD:=0.24555 * SOLAMPS/265.0; ! Attempting to use measured solenoid 
+SOLFIELD:=0.29758;!Set to match observed tune splits
+IF( EXTSOL ==1 ){ CALL, file='input/SOL.OPT'; }
+
+MUH:=QH/4.0;  
+MUV:=QV/4.0;  
+
+CMUX=0.252; 
+CMUY=0.272;
+SCMUH=MUH-4.0*CMUX;  
+SCMUV=MUV-4.0*CMUY;  
+BHMAX=27.0;
+
+! MATCHING --------------------------------------------------
+!------------------------------------------------------------  
+!AC = Arc Cell 
+! setting phase advance through arc cell
+USE, period=AC; 
+Match, sequence=AC;    
+  Constraint, sequence=AC, Range=#E, MUX=CMUX, MUY=CMUY;  
+  Vary, name=KF, step=.00001, lower=0.0, upper=6.0;  
+  Vary, name=KD, step=.00001, lower=-6.0, upper=0.0;  
+  Simplex, calls=2000, Tolerance=1.0E-10;  
+Endmatch;  
+
+IF(TWISSOUTPUT == 1){
+  USE, period=AC;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=AC, FILE='twiss/ac_twiss';
+}
+
+!----------------------------------------------------------
+! SP = Super period - straight cell + arc cell
+! setting dispersion = 0.0, beta constraints, 1/4 tune
+
+USE, period=SP;  
+Match, sequence=SP;
+  Vary, name=KDE, step=0.00001, lower=-8.0, upper=0.0;  
+  Vary, name=KFC, step=0.00001, lower=0.0, upper=8.0;  
+  Vary, name=KDC, step=0.00001, lower=-8.0, upper=0.0;  
+  Vary, name=KF, step=0.00001, lower=0.0, upper=6.0;  
+  Vary, name=KD, step=0.00001, lower=-6.0, upper=0.0;  
+    
+  WEIGHT, DX = 0.0, DPX = 0.0, DY = 0.0, DPY = 0.0;  
+  WEIGHT, MUX = 10.0, MUY = 10.0, T = 0.0, PT = 0.0;  
+    
+  WEIGHT, DX = 1.0, DPX = 10.0;  
+  Constraint, Range=QFC[1], DX = 0.0, DPX = 0.0;  
+  Constraint, Range=#E, MUX=MUH, MUY=MUV;
+  Constraint, Range=QD[1], BETY<14;
+  Constraint, Range=QD[2], BETY<14;
+  Constraint, Range=QD[3], BETY<14;
+   
+  Simplex, calls=2000, Tolerance=1.0E-10;  
+  Lmdif, calls=2000, Tolerance=1.0E-10;  
+  Simplex, calls=2000, Tolerance=1.0E-10;  
+  Lmdif, calls=2000, Tolerance=1.0E-10 ; 
+Endmatch;
+
+IF( TWISSOUTPUT == 1 ){
+  SELECT, FLAG=TWISS,clear;
+  USE, period=SP;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=SP, FILE='twiss/sp_twiss';  
+}
+
+!------------------------------------------------------------  
+! SP = Super period - straight cell + arc cell
+! Setting setting dispersion, and tunes again without beta constraints
+Use, period=SP;  
+Match, sequence=SP; 
+Vary, name=KF, step=.00001, lower=0.0, upper=6.0;  
+Vary, name=KD, step=.00001, lower=-6.0, upper=0.0;  
+Vary, name=KFC, step=0.00001, lower=0.0, upper=8.0;  
+Constraint, Range=QFC[1], DX = 0.0, DPX = 0.0;  
+Constraint, Range=#E, MUX=MUH, MUY=MUV;  
+Lmdif, calls=2000, Tolerance=1.0E-10;  
+Endmatch;
+
+IF( TWISSOUTPUT == 1 ){
+  SELECT, FLAG=TWISS,clear;
+  USE, period=SP;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=SP, FILE='twiss/sp_second_match_twiss';
+}
+  
+!-----------------------------------------------------------
+! RING = full ring starting NOT at the foil
+! RINGINJ = ring starting at foil
+
+Use, period=RINGINJ; 
+Match, sequence=RINGINJ;
+Vary, name=KDEE, step=.00001, lower=-8.0, upper=0.0;
+Vary, name=KFC, step=.00001, lower=0.0, upper=8.0;
+Vary, name=KDC, step=.00001, lower=-8.0, upper=0.0;
+Constraint, Range=#E, MUX=QH, MUY=QV;
+Constraint, Range=#E, MUY=QV;
+Constraint, Range=QDEE, BETY<13.0;
+Constraint, Range=QD, BETY<13.0;
+Simplex, calls=2000, Tolerance=1.0E-10;
+Endmatch;
+
+IF( TWISSOUTPUT == 1 ){
+  SELECT, FLAG=TWISS,clear;
+  USE, period=RINGINJ;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=RINGINJ, FILE='twiss/ringinj_twiss';
+}
+
+!------------------------------------------------------------
+! Alternatively one can just enter the right quad values
+!------------------------------------------------------------
+! KD:=-4.451524E+00;
+! KF:= 3.951462E+00;
+! KF26:=3.651998164883;
+! KDEE:=-2.973303170546;
+! KDC:=-3.832243E+00;
+! KFC:= 3.628386E+00; 
+
+!------------------ Chromaticity correction ------------------  
+! Uncomment the following section to perform chromaticity 
+! correction.
+!-------------------------------------------------------------
+
+IF( CHROMCORRECTION == 1){
+  !use, sequence=RNG;
+  twiss,deltap=-.001:.001:.0005;
+  write,table=summ,file=summ.madx-nat-chrom.data;
+
+  use, sequence=RNG;
+  Match, sequence=RNG;
+   VARY, NAME=CHRM3,STEP=0.001;  
+   VARY, NAME=CHRM4,STEP=0.001;  
+   VARY, NAME=CHRM5,STEP=0.001;  
+   VARY, NAME=CHRM6,STEP=0.001;  ;
+
+   global, sequence=RNG, DQ1=0, DQ2=0;
+   global, sequence=RNG, DDQ1=0, DDQ2=0;
+   Simplex, calls=2000, Tolerance=1.0E-10;
+  Lmdif, calls=2000, Tolerance=1.0E-10;  ; 
+  Endmatch;  
+    
+  Use, period=RNG;
+  madchrom: macro={
+   twiss;
+   qx0=table(summ,q1);
+   qx1=table(summ,dq1);
+   qy0=table(summ,q2);
+   qy1=table(summ,dq2);
+   dpp=.001;
+   twiss,deltap=dpp;
+   qxpp=table(summ,q1);
+   qypp=table(summ,q2);
+   twiss,deltap=-dpp;
+   qxmp=table(summ,q1);
+   qymp=table(summ,q2);
+   qx2=0.001*(qxpp-2*qx0+qxmp)/dpp^2;
+   qy2=0.001*(qypp-2*qy0+qymp)/dpp^2;
+  };
+
+  use, sequence=RNG;
+  Match, use_macro;
+   VARY, NAME=CHRM3,STEP=0.0001;  
+   VARY, NAME=CHRM4,STEP=0.0001;  
+   VARY, NAME=CHRM5,STEP=0.0001;  
+   VARY, NAME=CHRM6,STEP=0.0001;  
+    use_macro, name=madchrom;
+    constraint, expr= qx1=0;
+    constraint, expr= qy1=0;
+    constraint, expr= qx2=0;
+    constraint, expr= qy2=0;
+   lmdif,calls=2000;
+  Endmatch;  
+
+  twiss,deltap=-.001:.001:.0005;
+  write,table=summ,file=summ.madx-corr-chrom.data;
+}
+
+! END MATCHING --------------------------------------------------
+
+IF( TWISSOUTPUT == 1 ){
+  USE, period=RNGINJ;
+  SELECT, FLAG=TWISS, clear;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=RNGINJ, FILE='twiss/twiss_noSol';
+}
+
+
+USE, period=RNGINJSOL;
+SAVE, sequence=RNGINJSOL, FILE='sns_ring.lattice',clear;
+
+IF( TWISSOUTPUT == 1 ){
+  USE, period=RNGINJSOL;
+  SELECT, FLAG=TWISS, clear;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,BETX,ALFX,MUX,DX,DPX,BETY,ALFY,MUY,DY,DPY;
+  TWISS,sequence=RNGINJSOL, FILE='twiss/twiss';
+
+  ! CREATES TABLE WITH RIPKEN PARAMETERS
+  SELECT, FLAG=TWISS, clear;
+  SELECT, FLAG=TWISS,COLUMN=NAME,S,L,
+    alfa11,beta11,gamma11,
+    alfa12,beta12,gamma12,
+    alfa21,beta21,gamma21,
+    alfa22,beta22,gamma22,
+    mu1,mu2,mu3;
+  TWISS,sequence=RNGINJSOL, FILE='twiss/twiss_ripken',RIPKEN=true;
+
+}
+
+USE, period=RNGINJSOL;
+
+! Generate Twiss output for G4BL 
+IF( G4BL == 1 ){
+  SELECT, FLAG=TWISS   , CLEAR;  ! Get rid of old select to start new one.
+  SELECT, FLAG=TWISS   , COLUMN=NAME,KEYWORD,S,L,K1L,K0L,ANGLE,HKICK,VKICK,TILT;
+  TWISS , sequence=RNGINJSOL, FILE="optics_for_G4BL";
+}
+
+! PTC for eigen-vectors - will write to "./tracks/..."
+IF( PTCRIPKEN == 1 ){
+  CALL, file="ptc_eigentracks.mad";
+}
+
+stop; 
+
+
+
+
