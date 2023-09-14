@@ -17,8 +17,8 @@
   BETA  := sqrt(1-1/(GAMMA*GAMMA));  !  Value BETA  
 !--------------Select Nominal Tunes--------------------------  
 
-QH:=6.18435246252;
-QV:=6.19265241547;
+QH:=6.18435246;
+QV:=6.19265242;
   MUH:=QH/4.0;  
   MUV:=QV/4.0;  
 
@@ -32,7 +32,7 @@ QV:=6.19265241547;
 
 !--------------Call the Lattice file------------------------- 
 
-CALL, file = 'SNS_RING_dual_solenoid.lat';
+CALL, file = 'sns_ring_dual_solenoid.lat';
 
 !------------------------------------------------------------
 ! Set up the beam parameters
