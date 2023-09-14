@@ -3,6 +3,7 @@ import math
 import os
 import sys
 import time
+import warnings
 
 import numpy as np
 from scipy import optimize as opt
@@ -146,7 +147,7 @@ class SNS_RING(TEAPOT_Ring):
             "beta_1x",
             "beta_1y",
             "beta_2x",
-            "beta_1y",
+            "beta_2y",
             "alpha_1x",
             "alpha_1y",
             "alpha_2x",
@@ -680,6 +681,11 @@ class SNS_RING(TEAPOT_Ring):
         This does not work with the standard MADX output file. The parent nodes are currently 
         selected by index; they need to be selected by name.
         """
+        if True:
+            warnings.warn("Cannot add aperture nodes.")
+            return
+            
+    
         nodes = self.getNodes()
 
         a115p8 = 0.1158

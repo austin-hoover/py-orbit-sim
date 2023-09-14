@@ -196,7 +196,7 @@ ring.initialize()
 # Toggle solenoid.
 for name in ["scbdsol_c13a", "scbdsol_c13b"]:
     node = ring.getNodeForName(name)
-    B = 0.0
+    B = 1.00e-12
     if args.solenoid:
         B = 0.6 / (2.0 * node.getLength())
     node.setParam("B", B)
