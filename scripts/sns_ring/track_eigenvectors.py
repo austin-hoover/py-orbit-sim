@@ -4,9 +4,9 @@ import argparse
 import math
 import os
 import pickle
-from pprint import pprint
 import sys
 import time
+from pprint import pprint
 
 import numpy as np
 import yaml
@@ -78,6 +78,33 @@ from sns_ring import SNS_RING
 import pyorbit_sim
 
 
+# Parse command line arguments
+# --------------------------------------------------------------------------------------
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--outdir", type=str, default=None)
+parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.175_nuy6.175_sol.lattice")
+parser.add_argument("--madx-seq", type=str, default="rnginjsol")
+parser.add_argument("--save", type=int, default=1)
+
+parser.add_argument("--apertures", type=int, default=0)
+parser.add_argument("--sol", type=float, default=0.061, help="solenoid field [1/m]")
+
+parser.add_argument("--charge", type=float, default=1.0)  # [elementary charge units]
+parser.add_argument("--energy", type=float, default=1.0)  # [GeV]
+parser.add_argument("--mass", type=float, default=mass_proton)  # [GeV / c^2]
+parser.add_argument("--psi1", type=float, default=0.0)
+parser.add_argument("--psi2", type=float, default=0.0)
+parser.add_argument("--J1", type=float, default=50.0e-06)
+parser.add_argument("--J2", type=float, default=50.0e-06)
+
+parser.add_argument("--n-turns", type=int, default=100)
+parser.add_argument("--print-freq", type=int, default=1)
+
+args = parser.parse_args()
+
+
 # Setup
 # --------------------------------------------------------------------------------------
 file_path = os.path.realpath(__file__)
@@ -113,19 +140,9 @@ ring = SNS_RING()
 ring.readMADX(os.path.join(input_dir, args.madx_file), args.madx_seq)
 ring.initialize()
 
-for name in ["scbdsol_c13a", "scbdsol_c13b"]:
-    node = ring.getNodeForName(name)
-    B = 1.00e-12
-    if args.solenoid:
-        B = 0.6 / (2.0 * node.getLength())
-    node.setParam("B", B)
-    logger.info(
-        "{}: type={}, B={:.2f}, L={:.2f}".format(
-            node.getName(), 
-            type(node),
-            node.getParam("B"),
-            node.getLength())
-    )
+ring.set_solenoid_strengths(args.sol)
+ring.set_fringe_fields(False)
+
     
     
 # Initialize bunch
@@ -139,12 +156,10 @@ lostbunch = Bunch()
 lostbunch.addPartAttr("LostParticleAttributes")
 params_dict = {"bunch": bunch, "lostbunch": lostbunch}
 ring.set_bunch(bunch, lostbunch, params_dict)
-    
+
 
 # Linear transfer matrix analysis (uncoupled)
 # --------------------------------------------------------------------------------------
-
-ring.set_fringe_fields(False)
 
 # Analyze the one-turn transfer matrix.
 test_bunch = Bunch()
@@ -154,11 +169,13 @@ matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
 tmat_params = matrix_lattice.getRingParametersDict()
 
 logger.info("Transfer matrix parameters (uncoupled):")
-logger.info(tmat_params)
+for key, val in tmat_params.items():
+    logger.info("{}: {}".format(key, val))
 
-file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
-pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-file.close()
+if args.save:
+    file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
+    pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+    file.close()
 
 # Save the Twiss parameters throughout the ring.
 twiss = ring.get_ring_twiss(mass=args.mass, kin_energy=args.energy)
@@ -166,63 +183,39 @@ dispersion = ring.get_ring_dispersion(mass=args.mass, kin_energy=args.energy)
 
 logger.info("Twiss:")
 logger.info(twiss)
-twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
+if args.save:
+    twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
+
 logger.info("Dispersion:")
 logger.info(dispersion)
-dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
-
-ring.set_fringe_fields(args.fringe)
+if args.save:
+    dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
 
 
 # Linear transfer matrix analysis (coupled)
 # --------------------------------------------------------------------------------------
-
-ring.set_fringe_fields(False)
 
 # Analyze the one-turn transfer matrix.
 matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterization="LB")
 tmat_params = matrix_lattice.getRingParametersDict()
 
 logger.info("Transfer matrix parameters (coupled):")
-logger.info(tmat_params)
-
-file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
-pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-file.close()
+for key, val in tmat_params.items():
+    logger.info("{}: {}".format(key, val))
+    
+if args.save:
+    file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
+    pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+    file.close()
 
 # Compute Twiss parameters throughout the ring. (This method does not propagate
 # the Twiss parameters; it derives the parameters from the one-turn
 # transfer matrix at each node.
 twiss = ring.get_ring_twiss_coupled(mass=args.mass, kin_energy=args.energy)
-
 logger.info("Twiss (coupled):")
 logger.info(twiss)
-twiss.to_csv(man.get_filename("lattice_twiss_coupled.dat"), sep=" ")
-
-ring.set_fringe_fields(args.fringe)
-
-
-# Apertures
-# --------------------------------------------------------------------------------------
-
-if args.apertures:
-    ring.add_inj_chicane_aperture_displacement_nodes()
-    ring.add_collimator_nodes()
-    ring.add_aperture_nodes()  # not working
-
-if args.rf:
-    rf_nodes = ring.add_harmonic_rf_node(
-        rf1={
-            "phase": args.rf1_phase,
-            "hnum": args.rf1_hnum, 
-            "voltage": args.rf1_volt,
-        },
-        rf2={
-            "phase": args.rf2_phase, 
-            "hnum": args.rf2_hnum, 
-            "voltage": args.rf2_volt,
-        },
-    )
+if args.save:
+    twiss.to_csv(man.get_filename("lattice_twiss_coupled.dat"), sep=" ")
 
 
 # Tracking
@@ -232,21 +225,20 @@ if args.rf:
 eigenvectors = tmat_params["eigenvectors"]
 v1 = eigenvectors[:, 0]
 v2 = eigenvectors[:, 2]
-psi1 = 0.0
-psi2 = 0.0
-J1 = 50.0e-6
-J2 = 50.0e-6
+psi1 = args.psi1
+psi2 = args.psi2
+J1 = args.J1
+J2 = args.J2
 x1 = np.real(np.sqrt(2.0 * J1) * v1 * np.exp(-1.0j * psi1))
 x2 = np.real(np.sqrt(2.0 * J2) * v2 * np.exp(-1.0j * psi2))
 print("x1 =", x1)
 print("x2 =", x2)
 
-X = np.array([x1, x2])
 bunch.deleteAllParticles()
-for i in range(X.shape[0]):
-    x, xp, y, yp = X[i, :]
+for point in [x1, x2]:
+    x, xp, y, yp = point
     bunch.addParticle(x, xp, y, yp, 0.0, 0.0)
-    
+
 # Track the bunch.
 coords = [[], []] # n_modes x n_turns x 6
 for turn in range(args.n_turns + 1):
@@ -271,7 +263,7 @@ for turn in range(args.n_turns + 1):
             )
         )
     ring.trackBunch(bunch)
-
+    
 # Save TBT coordinates.
 for i in range(len(coords)):
     coords[i] = np.array(coords[i])
@@ -283,5 +275,6 @@ if args.save:
         np.savetxt(filename, coords[i]) 
 
 print("SIMULATION COMPLETE")
-print("outdir = {}".format(man.outdir))
-print("timestamp = {}".format(man.timestamp))
+if args.save:
+    print("outdir = {}".format(man.outdir))
+    print("timestamp = {}".format(man.timestamp))
