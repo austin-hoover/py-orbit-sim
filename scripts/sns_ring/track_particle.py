@@ -100,8 +100,7 @@ parser.add_argument("--rf1-volt", type=float, default=+2.00e-06)
 parser.add_argument("--rf2-phase", type=float, default=0.0)
 parser.add_argument("--rf2-hnum", type=float, default=2.0)
 parser.add_argument("--rf2-volt", type=float, default=-4.00e-06)
-parser.add_argument("--solenoid", type=int, default=0)
-parser.add_argument("--solB", type=float, default=0.6)
+parser.add_argument("--sol", type=float, default=0.061, help="solenoid field [1/m]")
 
 parser.add_argument("--charge", type=float, default=1.0)  # [elementary charge units]
 parser.add_argument("--energy", type=float, default=1.0)  # [GeV]
@@ -155,19 +154,9 @@ ring = SNS_RING()
 ring.readMADX(os.path.join(input_dir, args.madx_file), args.madx_seq)
 ring.initialize()
 
-for name in ["scbdsol_c13a", "scbdsol_c13b"]:
-    node = ring.getNodeForName(name)
-    B = 1.00e-12
-    if args.solenoid:
-        B = args.solB / (2.0 * node.getLength())
-    node.setParam("B", B)
-    logger.info(
-        "{}: type={}, B={:.2f}, L={:.2f}".format(
-            node.getName(), 
-            node.getType(),
-            node.getParam("B"),
-            node.getLength())
-    )
+
+
+ring.set_solenoid_strengths(args.sol)
     
     
 # Initialize bunch

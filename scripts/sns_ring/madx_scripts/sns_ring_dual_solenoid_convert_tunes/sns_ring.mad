@@ -1,4 +1,4 @@
-  Title, "SNS Linac Accumulator Ring";  
+! Title, "SNS Linac Accumulator Ring";  
 !------------------------------------------------------------
 ! Note: BEAM statement is excluded until after HARMON performed
 ! because the ENERGY definition leads to an error in the routine.
@@ -39,14 +39,14 @@ BEAM, PARTICLE=PROTON, ENERGY=EK+E0;
 
 !--------------Select Nominal Tunes--------------------------  
 
-QH:=6.17943145;
-QV:=6.18802303;
+QH:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
+QV:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
 
 IF( EXTTUNES == 1){ CALL, file='input/TUNES.OPT'; }
 
 ! SOLAMPS=321.15129; ! 
 ! SOLFIELD:=0.24555 * SOLAMPS/265.0; ! Attempting to use measured solenoid 
-SOLFIELD:=0.0;!Set to match observed tune splits
+SOLFIELD:=0.29758;!Set to match observed tune splits
 IF( EXTSOL ==1 ){ CALL, file='input/SOL.OPT'; }
 
 MUH:=QH/4.0;  
@@ -269,7 +269,6 @@ IF( PTCRIPKEN == 1 ){
 }
 
 stop; 
-
 
 
 

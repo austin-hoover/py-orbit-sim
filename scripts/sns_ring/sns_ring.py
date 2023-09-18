@@ -106,7 +106,29 @@ class SNS_RING(TEAPOT_Ring):
         self.params_dict = None
         self.x_inj = x_inj
         self.y_inj = y_inj
+               
+        self.aperture_nodes = []
+        self.collimator_nodes = []
+        self.inj_node = None
+        self.foil_node = None
+        self.trans_imp_nodes = []
+        self.trans_sc_nodes = []
+        self.long_imp_nodes = []
+        self.long_sc_nodes = []
+        self.rf_nodes = []
+        self.solenoid_nodes = []
         
+    def set_solenoid_strengths(self, B):
+        self.solenoid_nodes = []
+        for name in ["scbdsol_c13a", "scbdsol_c13b"]:
+            try: 
+                self.solenoid_nodes.append(self.getNodeForName(name))
+            except:
+                print("{} not in in lattice".format(name))
+        for node in self.solenoid_nodes:
+            node.setParam("B", B)
+
+                
     def set_bunch(self, bunch=None, lostbunch=None, params_dict=None):
         self.bunch = bunch
         self.lostbunch = lostbunch
