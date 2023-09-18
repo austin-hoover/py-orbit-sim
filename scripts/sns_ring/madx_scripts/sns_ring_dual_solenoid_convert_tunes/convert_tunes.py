@@ -16,8 +16,8 @@ from orbit.teapot import TEAPOT_MATRIX_Lattice
 from orbit.utils.consts import mass_proton
 
 sys.path.insert(0, "/home/46h/repo/py-orbit-sim/scripts/sns_ring/")
-from convert_tunes import MADXScript
-from convert_tunes import TuneConverter
+from tune_converter import MADXScript
+from tune_converter import TuneConverter
 
 
 MADX_PATH = "/home/46h/repo/madx/madx-linux64-intel"

@@ -39,8 +39,8 @@ BEAM, PARTICLE=PROTON, ENERGY=EK+E0;
 
 !--------------Select Nominal Tunes--------------------------  
 
-QH:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
-QV:=6.175435; ! Set to match final tunes for 2023-02-28 Experiment
+QH:=6.24221593;
+QV:=6.16115877;
 
 IF( EXTTUNES == 1){ CALL, file='input/TUNES.OPT'; }
 
