@@ -35,8 +35,7 @@ from orbit_mpi import mpi_datatype
 from orbit_mpi import mpi_op
 from orbit_utils import Matrix
 
-# Local
-import pyorbit_sim.stats
+import pyorbit_sim
 
 
 def initialize(mass=None, kin_energy=None):
@@ -110,6 +109,28 @@ def set_coords(bunch, X, start_index=0):
         bunch.dE(i, dE)
     return bunch
 
+
+def linear_transform(bunch, matrix):
+    assert matrix.shape[0] == matrix.shape[1]
+    assert matrix.shape[0] == 6
+    for i in range(bunch.getSize()):
+        x = bunch.x(i)
+        y = bunch.y(i)
+        z = bunch.z(i)
+        xp = bunch.xp(i)
+        yp = bunch.yp(i)
+        dE = bunch.dE(i)
+        vec = [x, xp, y, yp, z, dE]
+        vec = np.matmul(matrix, vec)
+        x, xp, y, yp, z, dE = vec
+        bunch.x(i, x)
+        bunch.y(i, y)
+        bunch.z(i, z)
+        bunch.xp(i, xp)
+        bunch.yp(i, yp)
+        bunch.dE(i, dE)
+        return bunch
+    
 
 def get_intensity(current=None, frequency=None, charge=-1.0):
     return (current / frequency) / (abs(charge) * consts.charge_electron)
@@ -235,9 +256,9 @@ def reverse(bunch):
 
 
 def get_centroid(bunch):
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    bunch_twiss_analysis.analyzeBunch(bunch)
-    return np.array([bunch_twiss_analysis.getAverage(i) for i in range(6)])
+    twiss_calc = BunchTwissAnalysis()
+    twiss_calc.analyzeBunch(bunch)
+    return np.array([twiss_calc.getAverage(i) for i in range(6)])
 
 
 def shift_centroid(bunch, delta=None, verbose=False):
@@ -286,66 +307,6 @@ def set_centroid(bunch, centroid=0.0, verbose=False):
             centroid[i] = old_centroid[i]
     delta = np.subtract(centroid, old_centroid)
     return shift_centroid(bunch, delta=delta, verbose=verbose)
-
-
-def get_stats(bunch, dispersion_flag=False, emit_norm_flag=False):
-    """Return bunch covariance matrix (Sigma) and centroid (mu)."""
-    order = 2
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    bunch_twiss_analysis.computeBunchMoments(
-        bunch, 
-        order, 
-        int(dispersion_flag), 
-        int(emit_norm_flag)
-    )
-    mu = []
-    for i in range(6):
-        value = bunch_twiss_analysis.getAverage(i)
-        mu.append(value)
-    Sigma = np.zeros((6, 6))
-    for i in range(6):
-        for j in range(i + 1):
-            value = bunch_twiss_analysis.getCorrelation(j, i)
-            Sigma[i, j] = Sigma[j, i] = value
-    return Sigma, mu
-
-    
-def get_info(bunch):
-    """Return dict with bunch parameters and stats."""
-    Sigma, mu = get_stats(bunch)
-    eps_x, eps_y, eps_z = pyorbit_sim.stats.apparent_emittance(Sigma)
-    alpha_x, beta_x, alpha_y, beta_y, alpha_z, beta_z = pyorbit_sim.stats.twiss(Sigma)
-    units = ["m", "rad", "m", "rad", "m", "GeV"]
-    info = {
-        "charge": {"value": bunch.charge(), "unit": "e"},
-        "mass": {"value": bunch.mass(), "unit": "GeV / c^2"},
-        # "kin_energy": {"value": bunch.getSyncParticle().kinEnergy(), "unit": "GeV"},
-        "macrosize": {"value": bunch.macroSize(), "unit": None},
-        # "size_local": {"value": bunch.getSize(), "unit": None},
-        "alpha_x": {"value": alpha_x, "unit": None},
-        "alpha_y": {"value": alpha_y, "unit": None},
-        "alpha_z": {"value": alpha_z, "unit": None},
-        "beta_x": {"value": beta_x, "unit": "{} / {}".format(units[0], units[1])},
-        "beta_y": {"value": beta_y, "unit": "{} / {}".format(units[2], units[3])},
-        "beta_z": {"value": beta_z, "unit": "{} / {}".format(units[4], units[5])},
-        "eps_x": {"value": eps_x, "unit": "{} * {}".format(units[0], units[1])},
-        "eps_y": {"value": eps_y, "unit": "{} * {}".format(units[2], units[3])},
-        "eps_z": {"value": eps_z, "unit": "{} * {}".format(units[4], units[5])},
-    }
-    for i in range(6):
-        for j in range(i + 1):
-            key = "cov_{}-{}".format(j, i)
-            info[key] = {
-                "value": Sigma[j, i], 
-                "unit": "{} * {}".format(units[j], units[i])
-            }
-    for i in range(6):
-        key = "mean_{}".format(i)
-        info[key] = {
-            "value": mu[i], 
-            "unit": "{}".format(units[i])
-        }
-    return info
 
 
 def load(
@@ -428,8 +389,8 @@ def load(
     return bunch
 
 
-def generate(dist=None, n=0, bunch=None, verbose=True):
-    """Generate bunch from distribution generator.
+def generate_xyz(dist=None, n=0, bunch=None, verbose=True):
+    """Generate bunch from an x-xp-y-yp-z-dE distribution generator.
     
     Parameters
     ----------
@@ -449,39 +410,122 @@ def generate(dist=None, n=0, bunch=None, verbose=True):
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    
     data_type = mpi_datatype.MPI_DOUBLE
     main_rank = 0
+    
     if bunch is None:
         bunch = Bunch()
     else:
         bunch.deleteAllParticles()
-    _range = range(n)
-    if verbose:
-        _range = tqdm(_range)
-    for i in _range:
+        
+    for i in (tqdm(range(n)) if verbose else range(n)):
         (x, xp, y, yp, z, dE) = dist.getCoordinates()
-        (x, xp, y, yp, z, dE) = orbit_mpi.MPI_Bcast(
-            (x, xp, y, yp, z, dE),
-            mpi_datatype.MPI_DOUBLE,
-            main_rank,
-            _mpi_comm,
-        )
+        (x, xp, y, yp, z, dE) = orbit_mpi.MPI_Bcast((x, xp, y, yp, z, dE), data_type, main_rank, _mpi_comm)
         if i % _mpi_size == _mpi_rank:
             bunch.addParticle(x, xp, y, yp, z, dE)
     return bunch 
 
 
-def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
-    """Generate rms-equivalent bunch from distribution generator.
+def generate_xy_z(dist_xy=None, dist_z=None, n=0, bunch=None, verbose=True):
+    """Generate bunch from x-xp-y-yp, z-dE distribution generators.
+        
+    Parameters
+    ----------
+    dist_xy, dist_z : object
+        Must have method `getCoordinates()` that returns (x, xp, y, yp), (z, dE) respectively.
+    n : int
+        The number of particles to generate.
+    bunch : Bunch
+        If provided, it is repopulated with `dist_gen`.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+    ring_length : float
+        Length of ring to fill uniformly in z.
+        
+    Returns
+    -------
+    Bunch
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    
+    data_type = mpi_datatype.MPI_DOUBLE
+    main_rank = 0
+    
+    if bunch is None:
+        bunch = Bunch()
+    else:
+        bunch.deleteAllParticles()
+        
+    for i in (tqdm(range(n)) if verbose else range(n)):
+        (x, xp, y, yp) = dist_xy.getCoordinates()
+        (x, xp, y, yp) = orbit_mpi.MPI_Bcast((x, xp, y, yp), data_type, main_rank, _mpi_comm)
+        
+        (z, dE) = dist_z.getCoordinates()
+        (z, dE) = orbit_mpi.MPI_Bcast((z, dE), data_type, main_rank, _mpi_comm)
+        
+        if i % _mpi_size == _mpi_rank:
+            bunch.addParticle(x, xp, y, yp, z, dE)
+    return bunch 
+
+
+def generate_x_y_z(dist_x=None, dist_y=None, dist_z=None, n=0, bunch=None, verbose=True):
+    """Generate bunch from x-xp, y-yp, z-dE distribution generators.
+
+    Parameters
+    ----------
+    dist_x, dist_y, dist_z : object
+        Must have method `getCoordinates()` that returns (x, xp), (y, yp), (z, dE), respectively.
+    n : int
+        The number of particles to generate.
+    bunch : Bunch
+        If provided, it is repopulated with `dist_gen`.
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+    ring_length : float
+        Length of ring to fill uniformly in z.
+        
+    Returns
+    -------
+    Bunch
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+    
+    data_type = mpi_datatype.MPI_DOUBLE
+    main_rank = 0
+    
+    if bunch is None:
+        bunch = Bunch()
+    else:
+        bunch.deleteAllParticles()
+
+    for i in (tqdm(range(n)) if verbose else range(n)):
+        (x, xp) = dist_x.getCoordinates()
+        (y, yp) = dist_y.getCoordinates()
+        (z, dE) = dist_z.getCoordinates()
+        (x, xp) = orbit_mpi.MPI_Bcast((x, xp), data_type, main_rank, _mpi_comm)
+        (y, yp) = orbit_mpi.MPI_Bcast((y, yp), data_type, main_rank, _mpi_comm)
+        (z, dE) = orbit_mpi.MPI_Bcast((z, dE), data_type, main_rank, _mpi_comm)
+        if i % _mpi_size == _mpi_rank:
+            bunch.addParticle(x, xp, y, yp, z, dE)
+    return bunch 
+
+
+def generate_rms_equiv_xyz(bunch=None, dist_constructor=None, n=None, verbose=True):
+    """Generate rms-equivalent bunch from x-xp-y-yp-z-dE distribution generator.
     
     Parameters
     ----------
-    dist : object
-        Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
-    n : int
-        The number of particles to generate. If None, use the global number of particles in `bunch`. 
     bunch : Bunch
         The bunch object to repopulate.
+    dist_constructor : class
+        The distribution generator constructor: `dist = dist_constructor(twiss_x, twiss_y, twiss_z)`.
+    n : int
+        The number of particles to generate. If None, use the global number of particles in `bunch`. 
     verbose : bool
         Whether to use progess bar when filling bunch.
         
@@ -492,23 +536,12 @@ def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
     if n is None:
         n = bunch.getSizeGlobal()
     if _mpi_rank == 0:
-        print("Forming rms-equivalent bunch from 2D Twiss parameters and {} generator.".format(dist))
-    bunch_twiss_analysis = BunchTwissAnalysis()
-    order = 2
-    dispersion_flag = 0
-    emit_norm_flag = 0
-    bunch_twiss_analysis.computeBunchMoments(bunch, order, dispersion_flag, emit_norm_flag)    
-    eps_x = bunch_twiss_analysis.getEffectiveEmittance(0)
-    eps_y = bunch_twiss_analysis.getEffectiveEmittance(1)
-    eps_z = bunch_twiss_analysis.getEffectiveEmittance(2)
-    beta_x = bunch_twiss_analysis.getEffectiveBeta(0)
-    beta_y = bunch_twiss_analysis.getEffectiveBeta(1)
-    beta_z = bunch_twiss_analysis.getEffectiveBeta(2)
-    alpha_x = bunch_twiss_analysis.getEffectiveAlpha(0)
-    alpha_y = bunch_twiss_analysis.getEffectiveAlpha(1)
-    alpha_z = bunch_twiss_analysis.getEffectiveAlpha(2)    
-    return generate(
-        dist=dist(
+        print("Forming rms-equivalent bunch from 2D Twiss parameters and {} generator.".format(dist_constructor))
+        
+    stats = pyorbit_sim.diagnostics.BunchStats(bunch)
+    (alpha_x, beta_x, eps_x, alpha_y, beta_y, eps_y, alpha_z, beta_z, eps_z) = stats.effective_twiss()
+    bunch = generate_xyz(
+        dist=dist_constructor(
             twissX=TwissContainer(alpha_x, beta_x, eps_x),
             twissY=TwissContainer(alpha_y, beta_y, eps_y),
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
@@ -517,10 +550,65 @@ def generate_rms_equivalent(dist=None, n=None, bunch=None, verbose=True):
         bunch=bunch, 
         verbose=verbose,
     )
+    return bunch
+
+
+def generate_rms_equiv_xy_z(
+    bunch=None,
+    dist_constructor_xy=None,
+    dist_constructor_z=None,
+    n=None, 
+    verbose=True
+):
+    """Generate rms-equivalent bunch from x-xp-y-yp-z-dE distribution generator.
+    
+    Parameters
+    ----------
+    bunch : Bunch
+        The bunch object to repopulate.
+    dist_constructor_xy : class
+        The transverse distribution generator constructor: `dist = dist_constructor(twiss_x, twiss_y)`.
+    dist_constructor_z : class
+        The longitudinal distribution generator constructor: `dist = dist_constructor(twiss_z)`.
+    n : int
+        The number of particles to generate. If None, use the global number of particles in `bunch`. 
+    verbose : bool
+        Whether to use progess bar when filling bunch.
+        
+    Returns
+    -------
+    Bunch
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
+
+    if n is None:
+        n = bunch.getSizeGlobal()
+    if _mpi_rank == 0:
+        print("Forming rms-equivalent bunch.")
+        print("Transverse generator: {}".format(dist_constructor_xy))
+        print("Longitudinal generator: {}".format(dist_constructor_xy))
+        
+    stats = pyorbit_sim.diagnostics.BunchStats(bunch)
+    (alpha_x, beta_x, eps_x, alpha_y, beta_y, eps_y, alpha_z, beta_z, eps_z) = stats.effective_twiss()
+    bunch = generate_xy_z(
+        dist_xy=dist_constructor_xy(
+            twissX=TwissContainer(alpha_x, beta_x, eps_x),
+            twissY=TwissContainer(alpha_y, beta_y, eps_y),
+        ),
+        dist_z=dist_constructor_z(
+            TwissContainer(alpha_z, beta_z, eps_z)
+        ),
+        n=n, 
+        bunch=bunch, 
+        verbose=verbose,
+    )
+    return bunch
 
 
 def generate_norm_twiss(
-    dist=None, 
+    dist_constructor=None, 
     n=None, 
     bunch=None, 
     alpha_x=-1.9620,
@@ -529,17 +617,17 @@ def generate_norm_twiss(
     beta_x=0.1831,
     beta_y=0.1620,
     beta_z=0.5844,
-    eps_x=0.21e-6,
-    eps_y=0.21e-6,
-    eps_z=0.24153e-6,
+    eps_x=0.21e-06,
+    eps_y=0.21e-06,
+    eps_z=0.24153e-06,
     verbose=True,
 ):
-    """Generate bunch from distribution generator and normalized Twiss parameters.
+    """Generate 6D bunch from distribution generator and normalized Twiss parameters.
     
     Parameters
     ----------
-    dist : object
-        Must have method `getCoordinates()` that returns (x, xp, y, yp, z, dE).
+    dist_constructor : class
+        The distribution generator constructor: `dist = dist_constructor(twissX, twissY, twissZ)`.
     n : int
         The number of particles to generate.
     bunch : Bunch
@@ -557,6 +645,7 @@ def generate_norm_twiss(
     """
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     
     if verbose and _mpi_rank == 0:
         print("Generating bunch from design Twiss parameters and {} generator.".format(dist))  
@@ -573,8 +662,8 @@ def generate_norm_twiss(
     eps_z = eps_z / (beta * gamma**3)  # [m * rad]    
     eps_z = eps_z * (gamma**3 * beta**2 * mass)  # [m * GeV]
     beta_z = beta_z / (gamma**3 * beta**2 * mass)    
-    bunch = generate(
-        dist=dist(
+    bunch = generate_xyz(
+        dist=dist_constructor(
             twissX=TwissContainer(alpha_x, beta_x, eps_x),
             twissY=TwissContainer(alpha_y, beta_y, eps_y),
             twissZ=TwissContainer(alpha_z, beta_z, eps_z),
