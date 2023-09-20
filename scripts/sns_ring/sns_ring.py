@@ -106,6 +106,7 @@ class SNS_RING(TEAPOT_Ring):
         self.params_dict = None
         self.x_inj = x_inj
         self.y_inj = y_inj
+        self.fringe = True
                
         self.aperture_nodes = []
         self.collimator_nodes = []
@@ -135,6 +136,7 @@ class SNS_RING(TEAPOT_Ring):
         self.params_dict = params_dict
         
     def set_fringe_fields(self, setting):
+        self.fringe = setting
         for node in self.getNodes():
             if node.getType() != "turn counter":
                 node.setUsageFringeFieldIN(setting)
@@ -195,6 +197,47 @@ class SNS_RING(TEAPOT_Ring):
         dispersion["dispp_x"] = np.array(pos_dispp_x)[:, 1]
         dispersion["dispp_y"] = np.array(pos_dispp_y)[:, 1]
         return dispersion
+    
+    def get_twiss_info(self):
+        ring.set_fringe_fields(False)
+
+        # Start with uncoupled transfer matrix.
+        
+        ## Analyze the one-turn transfer matrix.
+        test_bunch = Bunch()
+        test_bunch.mass(args.mass)
+        test_bunch.getSyncParticle().kinEnergy(args.energy)
+        matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
+        tmat_params = matrix_lattice.getRingParametersDict()
+
+        if _mpi_rank == 0:
+            logger.info("Transfer matrix parameters (uncoupled):")
+            for key, val in tmat_params.items():
+                logger.info("{}: {}".format(key, val))
+
+            if args.save:
+                file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
+                pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+                file.close()
+
+        # Save the Twiss parameters throughout the ring.
+        twiss = ring.get_ring_twiss(mass=args.mass, kin_energy=args.energy)
+        dispersion = ring.get_ring_dispersion(mass=args.mass, kin_energy=args.energy)
+
+        if _mpi_rank == 0:
+            logger.info("Twiss:")
+            logger.info(twiss)
+            if args.save:
+                twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
+
+            logger.info("Dispersion:")
+            logger.info(dispersion)
+            if args.save:
+                dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
+
+        ring.set_fringe_fields(self.fringe)
+
+        
         
 #     def get_injection_controller(self, **kws):
 #         kws.setdefault("mass", mass_proton)
@@ -1291,3 +1334,4 @@ class SNS_RING(TEAPOT_Ring):
         RFLatticeModifications.addRFNode(self, 188.868, rf_nodes[2])
         RFLatticeModifications.addRFNode(self, 191.165, rf_nodes[3])
         return rf_nodes
+    

@@ -154,26 +154,8 @@ ring = SNS_RING()
 ring.readMADX(os.path.join(input_dir, args.madx_file), args.madx_seq)
 ring.initialize()
 
-
-
 ring.set_solenoid_strengths(args.sol)
     
-    
-# Initialize bunch
-# --------------------------------------------------------------------------------------
-
-bunch = Bunch()
-bunch.mass(args.mass)
-sync_part = bunch.getSyncParticle()
-sync_part.kinEnergy(args.energy)
-lostbunch = Bunch()
-lostbunch.addPartAttr("LostParticleAttributes")
-params_dict = {"bunch": bunch, "lostbunch": lostbunch}
-ring.set_bunch(bunch, lostbunch, params_dict)
-
-bunch.addParticle(args.x, args.xp, args.y, args.yp, args.z, args.dE)
-
-
 
 # Linear transfer matrix analysis (uncoupled)
 # --------------------------------------------------------------------------------------
@@ -264,6 +246,22 @@ if args.rf:
             "voltage": args.rf2_volt,
         },
     )
+    
+    
+# Bunch
+# --------------------------------------------------------------------------------------
+
+bunch = Bunch()
+bunch.mass(args.mass)
+sync_part = bunch.getSyncParticle()
+sync_part.kinEnergy(args.energy)
+lostbunch = Bunch()
+lostbunch.addPartAttr("LostParticleAttributes")
+params_dict = {"bunch": bunch, "lostbunch": lostbunch}
+ring.set_bunch(bunch, lostbunch, params_dict)
+
+bunch.addParticle(args.x, args.xp, args.y, args.yp, args.z, args.dE)
+
 
 
 # Tracking
