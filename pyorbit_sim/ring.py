@@ -7,14 +7,15 @@ import time
 import numpy as np
 import pandas as pd
 
+import orbit_mpi
 from bunch import Bunch
 from bunch import BunchTwissAnalysis
 from bunch_utils_functions import copyCoordsToInitCoordsAttr
 from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
+from orbit.matrix_lattice.parameterizations import lebedev_bogacz as LB
 from orbit.teapot import DriftTEAPOT
 from orbit.utils import consts
-import orbit_mpi
 from orbit_utils import BunchExtremaCalculator
 
 import pyorbit_sim
@@ -141,8 +142,10 @@ class Monitor:
                 time.clock() - self.start_time,
                 n_parts,
             )
-            message = "{} epsx={:0.2e} epsy={:0.2e} eps1={:0.2e} eps2={:0.2e} ".format(
+            message = "{} xrms={:0.2e} yrms={:0.2e} epsx={:0.2e} epsy={:0.2e} eps1={:0.2e} eps2={:0.2e} ".format(
                 message,
+                1.00e+03 * x_rms,
+                1.00e+03 * y_rms,
                 1.00e+06 * eps_x,
                 1.00e+06 * eps_y,
                 1.00e+06 * eps_1,
@@ -159,4 +162,45 @@ class Monitor:
             line = line[:-1] + "\n"
             self.file.write(line)
 
-        self.iteration += 1
+        self.iteration += 1    
+
+
+def match_bunch(bunch=None, M=None):
+    """Match the covariance matrix to the ring using the transfer matrix eigenvectors.
+    
+    X -> V inv(W) X, where V is the lattice normalization matrix and 
+    W is the bunch normalization matrix.
+    
+    W transforms the bunch such that Sigma = diag(eps_1, eps_1, eps_2, eps_2), where
+    eps_j is the intrinsic emittance of mode j.
+    
+    TO DO: kv, danilov envelope matching options.
+    
+    Parameters
+    ----------
+    M : ndarray, shape (4, 4)
+        The one-turn transfer matrix.
+    """
+    _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+    _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+    
+    # Compute lattice normalization matrix V.
+    M = M[:4, :4]
+    eigenvalues, eigenvectors = np.linalg.eig(M)
+    eigenvectors = LB.normalize(eigenvectors)
+    V = LB.normalization_matrix_from_eigenvectors(eigenvectors)
+
+    # Compute bunch normalization matrix W.
+    stats = pyorbit_sim.diagnostics.BunchStats(bunch)
+    Sigma = stats.cov()
+    Sigma = Sigma[:4, :4]
+    U = LB.unit_symplectic_matrix(4)
+    SU = np.matmul(Sigma, U)
+    eigenvalues, eigenvectors = np.linalg.eig(SU)
+    eigenvectors = LB.normalize(eigenvectors)
+    W = LB.normalization_matrix_from_eigenvectors(eigenvectors)
+    
+    matrix = np.identity(6)
+    matrix[:4, :4] = np.matmul(V, np.linalg.inv(W))
+    bunch = pyorbit_sim.bunch_utils.linear_transform(bunch, matrix)
+    return bunch
