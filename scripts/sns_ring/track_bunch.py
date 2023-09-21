@@ -91,14 +91,7 @@ parser.add_argument("--rf2-hnum", type=float, default=2.0)
 parser.add_argument("--rf2-volt", type=float, default=-4.00e-06)
 
 parser.add_argument("--sc", type=int, default=0)
-parser.add_argument("--sc-long", type=int, default=1)
-parser.add_argument("--sc-long-b-a", type=float, default=(10.0 / 3.0))
-parser.add_argument("--sc-long-n-bins", type=int, default=64)
-parser.add_argument("--sc-long-n-macros-min", type=int, default=1000)
-parser.add_argument("--sc-long-pos", type=float, default=124.0)
-parser.add_argument("--sc-long-use", type=int, default=1)
-
-parser.add_argument("--sc-trans", type=str, default="2p5d", choices=["slicebyslice", "2p5d"])
+parser.add_argument("--sc-kind", type=str, default="2p5d", choices=["slicebyslice", "2p5d"])
 parser.add_argument("--sc-gridx", type=int, default=64)
 parser.add_argument("--sc-gridy", type=int, default=64)
 parser.add_argument("--sc-gridz", type=int, default=1)
@@ -108,6 +101,13 @@ parser.add_argument("--sc-n-bound", type=int, default=128)
 parser.add_argument("--sc-n-free", type=int, default=32)
 parser.add_argument("--sc-radius", type=int, default=0.220)
 
+parser.add_argument("--sc-long", type=int, default=None)
+parser.add_argument("--sc-long-b-a", type=float, default=(10.0 / 3.0))
+parser.add_argument("--sc-long-n-bins", type=int, default=64)
+parser.add_argument("--sc-long-n-macros-min", type=int, default=1000)
+parser.add_argument("--sc-long-pos", type=float, default=124.0)
+parser.add_argument("--sc-long-use", type=int, default=1)
+
 parser.add_argument("--sol", type=float, default=0.061)
 
 # Bunch
@@ -115,7 +115,7 @@ parser.add_argument("--bunch", type=str, default=None)
 parser.add_argument("--charge", type=float, default=1.0)
 parser.add_argument("--energy", type=float, default=0.800)  # [GeV]
 parser.add_argument("--mass", type=float, default=mass_proton)
-parser.add_argument("--intensity", type=float, default=int(1.50e+14))
+parser.add_argument("--intensity", type=float, default=0.45e+14)
 
 parser.add_argument("--mean-x", type=float, default=None)
 parser.add_argument("--mean-y", type=float, default=None)
@@ -253,10 +253,12 @@ if _mpi_rank == 0:
         file.close()
 
 twiss = ring.get_ring_twiss_coupled(mass=args.mass, kin_energy=args.energy)
-logger.info("Twiss (coupled):")
-logger.info(twiss)
-if args.save:
-    twiss.to_csv(man.get_filename("lattice_twiss_4d.dat"), sep=" ")
+
+if _mpi_rank == 0:
+    logger.info("Twiss (coupled):")
+    logger.info(twiss)
+    if args.save:
+        twiss.to_csv(man.get_filename("lattice_twiss_4d.dat"), sep=" ")
 
 ring.set_fringe_fields(args.fringe)
 
@@ -318,7 +320,7 @@ if args.imp_trans:
         filename=os.path.join(input_dir, args.imp_trans_file)
     )
 
-if args.sc and args.sc_long:
+if args.sc_long:
     long_sc_node = ring.add_longitudinal_space_charge_node(
         b_a=args.sc_long_b_a,
         n_macros_min=args.sc_n_macros_min,
@@ -337,7 +339,7 @@ if args.sc :
         n_boundary_points=args.sc_n_bound,
         n_free_space_modes=args.sc_n_free,
         radius=args.sc_radius,
-        kind=args.sc_trans,
+        kind=args.sc_kind,
     )
     
     
@@ -444,13 +446,13 @@ for turn in range(args.n_turns):
     ring.trackBunch(bunch, params_dict)  
     monitor.action(params_dict)
     if args.save and args.write_bunch_freq:
-        if (turn % args.write_bunch_freq == 0) or (turn == n_turns - 1):
+        if (turn % args.write_bunch_freq == 0) or (turn == args.n_turns - 1):
             filename = man.get_filename("bunch_{:05.0f}.dat".format(turn))
             bunch.dumpBunch(filename)
             
     if _mpi_rank == 0:
         if args.save and args.small_freq:
-            if (turn % args.small_freq == 0) or (turn == n_turns - 1):
+            if (turn % args.small_freq == 0) or (turn == args.n_turns - 1):
                 X = pyorbit_sim.bunch_utils.get_coords(bunch, n=args.small_size)
                 filename = "smallbunch_{:05.0f}.npy".format(turn)
                 filename = man.get_filename(filename)
