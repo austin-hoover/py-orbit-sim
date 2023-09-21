@@ -21,6 +21,7 @@ from orbit.bunch_generators import KVDist2D
 from orbit.bunch_generators import GaussDist1D
 from orbit.bunch_generators import GaussDist2D
 from orbit.bunch_generators import WaterBagDist2D
+from orbit.bunch_utils import ParticleIdNumber
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
 from orbit.lattice import AccLattice
@@ -47,9 +48,9 @@ parser.add_argument("--outdir", type=str, default=None)
 parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.175_nuy6.175_sol.lattice")
 parser.add_argument("--madx-seq", type=str, default="rnginjsol")
 parser.add_argument("--save", type=int, default=1)
+parser.add_argument("--save-ids", type=int, default=1)
 
 # Lattice
-parser.add_argument("--linear", type=int, default=0)  # turns off all nonlinear external forces (including impedance)
 parser.add_argument("--apertures", type=int, default=0)
 parser.add_argument("--fringe", type=int, default=0)
 
@@ -101,7 +102,7 @@ parser.add_argument("--sc-n-bound", type=int, default=128)
 parser.add_argument("--sc-n-free", type=int, default=32)
 parser.add_argument("--sc-radius", type=int, default=0.220)
 
-parser.add_argument("--sc-long", type=int, default=None)
+parser.add_argument("--sc-long", type=int, default=0)
 parser.add_argument("--sc-long-b-a", type=float, default=(10.0 / 3.0))
 parser.add_argument("--sc-long-n-bins", type=int, default=64)
 parser.add_argument("--sc-long-n-macros-min", type=int, default=1000)
@@ -422,6 +423,9 @@ if args.match:
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = args.intensity / bunch_size_global
 bunch.macroSize(macro_size)
+
+if args.save_ids:
+    ParticleIdNumber.addParticleIdNumbers(bunch)
 
 
 # Diagnostics
