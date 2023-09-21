@@ -120,16 +120,14 @@ def linear_transform(bunch, matrix):
         xp = bunch.xp(i)
         yp = bunch.yp(i)
         dE = bunch.dE(i)
-        vec = [x, xp, y, yp, z, dE]
-        vec = np.matmul(matrix, vec)
-        x, xp, y, yp, z, dE = vec
+        (x, xp, y, yp, z, dE) = np.matmul(matrix, (x, xp, y, yp, z, dE))
         bunch.x(i, x)
         bunch.y(i, y)
         bunch.z(i, z)
         bunch.xp(i, xp)
         bunch.yp(i, yp)
         bunch.dE(i, dE)
-        return bunch
+    return bunch
     
 
 def get_intensity(current=None, frequency=None, charge=-1.0):
