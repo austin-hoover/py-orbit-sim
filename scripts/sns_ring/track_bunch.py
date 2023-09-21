@@ -13,6 +13,7 @@ from pprint import pprint
 
 import numpy as np
 import yaml
+from tqdm import tqdm
 
 import orbit_mpi
 from bunch import Bunch
@@ -43,16 +44,16 @@ parser = argparse.ArgumentParser()
 
 # Settings
 parser.add_argument("--outdir", type=str, default=None)
-parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.18_nuy6.18_dual_solenoid/lattice.lat")
+parser.add_argument("--madx-file", type=str, default="sns_ring_nux6.175_nuy6.175_sol.lattice")
 parser.add_argument("--madx-seq", type=str, default="rnginjsol")
 parser.add_argument("--save", type=int, default=1)
 
 # Lattice
 parser.add_argument("--linear", type=int, default=0)  # turns off all nonlinear external forces (including impedance)
-parser.add_argument("--apertures", type=int, default=1)
-parser.add_argument("--fringe", type=int, default=1)
+parser.add_argument("--apertures", type=int, default=0)
+parser.add_argument("--fringe", type=int, default=0)
 
-parser.add_argument("--foil", type=int, default=1)
+parser.add_argument("--foil", type=int, default=0)
 parser.add_argument("--foil-xmin", type=float, default=-0.0085)
 parser.add_argument("--foil-xmax", type=float, default=+0.0085)
 parser.add_argument("--foil-ymin", type=float, default=-0.0080)
@@ -60,7 +61,7 @@ parser.add_argument("--foil-ymax", type=float, default=+0.1000)
 parser.add_argument("--foil-thick", type=float, default=390.0)
 parser.add_argument("--foil-scatter", type=str, default="full", choices=["full", "simple"])
 
-parser.add_argument("--imp-trans", type=int, default=1)
+parser.add_argument("--imp-trans", type=int, default=0)
 parser.add_argument("--imp-trans-n-macros-min", type=int, default=1000)
 parser.add_argument("--imp-trans-n-bins", type=int, default=64)
 parser.add_argument("--imp-trans-use-x", type=int, default=0)
@@ -74,14 +75,14 @@ parser.add_argument("--imp-trans-q-x", type=float, default=6.21991)
 parser.add_argument("--imp-trans-q-y", type=float, default=6.20936)
 parser.add_argument("--imp-trans-file", type=str, default="hahn_impedance.dat")
 
-parser.add_argument("--imp-long", type=float, default=1)
+parser.add_argument("--imp-long", type=int, default=0)
 parser.add_argument("--imp-long-n-macros-min", type=int, default=1000)
 parser.add_argument("--imp-long-n-bins", type=int, default=128)
 parser.add_argument("--imp-long-pos", type=float, default=124.0)
 parser.add_argument("--imp-long-zl-ekick-file", type=str, default="zl_ekicker.dat")
 parser.add_argument("--imp-long-zl-rf-file", type=str, default="zl_rf.dat")
 
-parser.add_argument("--rf", type=int, default=1)
+parser.add_argument("--rf", type=int, default=0)
 parser.add_argument("--rf1-phase", type=float, default=0.0)
 parser.add_argument("--rf1-hnum", type=float, default=1.0)
 parser.add_argument("--rf1-volt", type=float, default=+2.00e-06)
@@ -89,7 +90,7 @@ parser.add_argument("--rf2-phase", type=float, default=0.0)
 parser.add_argument("--rf2-hnum", type=float, default=2.0)
 parser.add_argument("--rf2-volt", type=float, default=-4.00e-06)
 
-parser.add_argument("--sc", type=int, default=1)
+parser.add_argument("--sc", type=int, default=0)
 parser.add_argument("--sc-long", type=int, default=1)
 parser.add_argument("--sc-long-b-a", type=float, default=(10.0 / 3.0))
 parser.add_argument("--sc-long-n-bins", type=int, default=64)
@@ -204,29 +205,29 @@ test_bunch.getSyncParticle().kinEnergy(args.energy)
 matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
 tmat_params = matrix_lattice.getRingParametersDict()
 
-if _mpi_rank == 0:
-    logger.info("Transfer matrix parameters (uncoupled):")
-    for key, val in tmat_params.items():
-        logger.info("{}: {}".format(key, val))
+# if _mpi_rank == 0:
+#     logger.info("Transfer matrix parameters (uncoupled):")
+#     for key, val in tmat_params.items():
+#         logger.info("{}: {}".format(key, val))
 
-    if args.save:
-        file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
-        pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-        file.close()
+#     if args.save:
+#         file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
+#         pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+#         file.close()
 
 twiss = ring.get_ring_twiss(mass=args.mass, kin_energy=args.energy)
 dispersion = ring.get_ring_dispersion(mass=args.mass, kin_energy=args.energy)
 
-if _mpi_rank == 0:
-    logger.info("Twiss:")
-    logger.info(twiss)
-    if args.save:
-        twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
+# if _mpi_rank == 0:
+#     logger.info("Twiss:")
+#     logger.info(twiss)
+#     if args.save:
+#         twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
 
-    logger.info("Dispersion:")
-    logger.info(dispersion)
-    if args.save:
-        dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
+#     logger.info("Dispersion:")
+#     logger.info(dispersion)
+#     if args.save:
+#         dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
 
 ring.set_fringe_fields(args.fringe)
 
@@ -237,17 +238,17 @@ ring.set_fringe_fields(args.fringe)
 ring.set_fringe_fields(False)
 
 matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterization="LB")
-tmat_params = matrix_lattice.getRingParametersDict()
+tmat_params_4d = matrix_lattice.getRingParametersDict()
 
-if _mpi_rank == 0:
-    logger.info("Transfer matrix parameters (coupled):")
-    for key, val in tmat_params.items():
-        logger.info("{}: {}".format(key, val))
+# if _mpi_rank == 0:
+#     logger.info("Transfer matrix parameters (coupled):")
+#     for key, val in tmat_params_4d.items():
+#         logger.info("{}: {}".format(key, val))
 
-    if args.save:
-        file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
-        pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-        file.close()
+#     if args.save:
+#         file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
+#         pickle.dump(tmat_params_4d, file, protocol=pickle.HIGHEST_PROTOCOL)
+#         file.close()
 
 twiss = ring.get_ring_twiss_coupled(mass=args.mass, kin_energy=args.energy)
 logger.info("Twiss (coupled):")
@@ -266,7 +267,7 @@ if args.apertures:
     ring.add_collimator_nodes()
     # ring.add_aperture_nodes()  # not working
     
-if args.foil and not args.linear:
+if args.foil:
     foil_node = ring.add_foil_node(
         xmin=args.foil_xmin,
         xmax=args.foil_xmax,
@@ -276,7 +277,7 @@ if args.foil and not args.linear:
         scatter=args.foil_scatter,
     )
 
-if args.rf and not args.linear:
+if args.rf:
     rf_nodes = ring.add_harmonic_rf_node(
         rf1={
             "phase": args.rf1_phase,
@@ -290,7 +291,7 @@ if args.rf and not args.linear:
         },
     )
 
-if args.imp_long and not args.linear:
+if args.imp_long:
     long_imp_node = ring.add_longitudinal_impedance_node(
         n_macros_min=args.imp_long_n_macros_min,
         n_bins=args.imp_long_n_bins,
@@ -299,7 +300,7 @@ if args.imp_long and not args.linear:
         zl_rf_filename=os.path.join(input_dir, args.imp_long_zl_rf_file),
     )
 
-if args.imp_trans and not args.linear:
+if args.imp_trans:
     trans_imp_node = ring.add_transverse_impedance_node(
         n_macros_min=args.imp_trans_n_macros_min,
         n_bins=args.imp_trans_n_bins,
@@ -324,7 +325,7 @@ if args.sc and args.sc_long:
         position=args.sc_long_pos,
     )
 
-if args.sc:
+if args.sc :
     trans_sc_nodes = ring.add_transverse_space_charge_nodes(
         n_macros_min=1000,
         size_x=args.sc_gridx,
@@ -367,10 +368,10 @@ if filename is None:
     for i in range(bunch.getSize()):
         bunch.z(i, np.random.uniform(-z_max, z_max))
         bunch.dE(i, 1.00e-12)
-    pyorbit_sim.ring.match_bunch(bunch, M=tmat_params["M"][:6, :6])
+    pyorbit_sim.ring.match_bunch(bunch, M=tmat_params_4d["M"][:4, :4])
 else:
     bunch = pyorbit_sim.bunch_utils.load(filename=filename, bunch=bunch, verbose=True)
-    
+
 bunch = pyorbit_sim.bunch_utils.set_centroid(
     bunch,
     centroid=[
@@ -399,7 +400,7 @@ if args.rms_equiv:
 if args.n_parts:
     bunch = pyorbit_sim.bunch_utils.downsample(
         bunch,
-        n=args.nparts,
+        n=args.n_parts,
         method="first",
         conserve_intensity=True,
         verbose=True,
@@ -412,7 +413,8 @@ if args.coast:
         bunch.dE(i, 1.00e-12)
     
 if args.match:
-    pyorbit_sim.ring.match_bunch(bunch, M=tmat_params["M"][:6, :6])
+    bunch = pyorbit_sim.ring.match_bunch(bunch, M=tmat_params_4d["M"][:6, :6])
+    
 
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = args.intensity / bunch_size_global
@@ -421,16 +423,16 @@ bunch.macroSize(macro_size)
 
 # Diagnostics
 # --------------------------------------------------------------------------------------
-#
+
+# Plotting node
 # [...]
-#
 
 
 # Tracking
 # --------------------------------------------------------------------------------------
 
 monitor = pyorbit_sim.ring.Monitor(
-    filename=man.get_filename("history.dat"), 
+    filename=(man.get_filename("history.dat") if args.save else None),
     verbose=True
 )
 
