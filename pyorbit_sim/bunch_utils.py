@@ -419,6 +419,8 @@ def generate_xyz(dist=None, n=0, bunch=None, verbose=True):
     else:
         bunch.deleteAllParticles()
         
+    if verbose:
+        print("(rank {}) generating particles".format(_mpi_rank))
     for i in (tqdm(range(n)) if verbose else range(n)):
         (x, xp, y, yp, z, dE) = dist.getCoordinates()
         (x, xp, y, yp, z, dE) = orbit_mpi.MPI_Bcast((x, xp, y, yp, z, dE), data_type, main_rank, _mpi_comm)
@@ -459,6 +461,8 @@ def generate_xy_z(dist_xy=None, dist_z=None, n=0, bunch=None, verbose=True):
     else:
         bunch.deleteAllParticles()
         
+    if verbose:
+        print("(rank {}) generating particles".format(_mpi_rank))
     for i in (tqdm(range(n)) if verbose else range(n)):
         (x, xp, y, yp) = dist_xy.getCoordinates()
         (x, xp, y, yp) = orbit_mpi.MPI_Bcast((x, xp, y, yp), data_type, main_rank, _mpi_comm)
@@ -503,6 +507,8 @@ def generate_x_y_z(dist_x=None, dist_y=None, dist_z=None, n=0, bunch=None, verbo
     else:
         bunch.deleteAllParticles()
 
+    if verbose:
+        print("(rank {}) generating particles".format(_mpi_rank))
     for i in (tqdm(range(n)) if verbose else range(n)):
         (x, xp) = dist_x.getCoordinates()
         (y, yp) = dist_y.getCoordinates()
