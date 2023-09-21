@@ -60,10 +60,13 @@ def initialize(mass=None, kin_energy=None):
     return bunch, params_dict
 
 
-def get_coords(bunch):
-    """Return phase space coordinate array from bunch."""
-    X = np.zeros((bunch.getSize(), 6))
-    for i in range(bunch.getSize()):
+def get_coords(bunch, n=None):
+    """Return phase space coordinate array from bunch on one mpi node."""
+    if n is None:
+        n = bunch.getSize()
+    n = min(n, bunch.getSize())
+    X = np.zeros((n, 6))
+    for i in range(n):
         X[i, 0] = bunch.x(i)
         X[i, 1] = bunch.xp(i)
         X[i, 2] = bunch.y(i)
@@ -77,7 +80,7 @@ def get_coords_global(bunch):
     _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
     _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
-    raise NotImplementedError
+    raise NotImplementedError()
 
 
 def set_coords(bunch, X, start_index=0):

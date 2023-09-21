@@ -130,11 +130,13 @@ parser.add_argument("--coast", type=int, default=0)
 parser.add_argument("--match", type=int, default=0)
 parser.add_argument("--rms-equiv", type=int, default=0)
 
-parser.add_argument("--n-turns", type=int, default=1000)
+parser.add_argument("--n-turns", type=int, default=100)
 parser.add_argument("--print-freq", type=int, default=1)
 parser.add_argument("--vis-freq", type=int, default=0)
 parser.add_argument("--write-bunch-freq", type=int, default=0)
 
+parser.add_argument("--small-size", type=int, default=10000)
+parser.add_argument("--small-freq", type=int, default=0)
 
 args = parser.parse_args()
 
@@ -205,29 +207,29 @@ test_bunch.getSyncParticle().kinEnergy(args.energy)
 matrix_lattice = TEAPOT_MATRIX_Lattice(ring, test_bunch)
 tmat_params = matrix_lattice.getRingParametersDict()
 
-# if _mpi_rank == 0:
-#     logger.info("Transfer matrix parameters (uncoupled):")
-#     for key, val in tmat_params.items():
-#         logger.info("{}: {}".format(key, val))
+if _mpi_rank == 0:
+    logger.info("Transfer matrix parameters (2D):")
+    for key, val in tmat_params.items():
+        logger.info("{}: {}".format(key, val))
 
-#     if args.save:
-#         file = open(man.get_filename("lattice_params_uncoupled.pkl"), "wb")
-#         pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
-#         file.close()
+    if args.save:
+        file = open(man.get_filename("lattice_params.pkl"), "wb")
+        pickle.dump(tmat_params, file, protocol=pickle.HIGHEST_PROTOCOL)
+        file.close()
 
 twiss = ring.get_ring_twiss(mass=args.mass, kin_energy=args.energy)
 dispersion = ring.get_ring_dispersion(mass=args.mass, kin_energy=args.energy)
 
-# if _mpi_rank == 0:
-#     logger.info("Twiss:")
-#     logger.info(twiss)
-#     if args.save:
-#         twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
+if _mpi_rank == 0:
+    logger.info("Twiss:")
+    logger.info(twiss)
+    if args.save:
+        twiss.to_csv(man.get_filename("lattice_twiss.dat"), sep=" ")
 
-#     logger.info("Dispersion:")
-#     logger.info(dispersion)
-#     if args.save:
-#         dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
+    logger.info("Dispersion:")
+    logger.info(dispersion)
+    if args.save:
+        dispersion.to_csv(man.get_filename("lattice_dispersion.dat"), sep=" ")
 
 ring.set_fringe_fields(args.fringe)
 
@@ -240,21 +242,21 @@ ring.set_fringe_fields(False)
 matrix_lattice = TEAPOT_MATRIX_Lattice_Coupled(ring, test_bunch, parameterization="LB")
 tmat_params_4d = matrix_lattice.getRingParametersDict()
 
-# if _mpi_rank == 0:
-#     logger.info("Transfer matrix parameters (coupled):")
-#     for key, val in tmat_params_4d.items():
-#         logger.info("{}: {}".format(key, val))
+if _mpi_rank == 0:
+    logger.info("Transfer matrix parameters (4D):")
+    for key, val in tmat_params_4d.items():
+        logger.info("{}: {}".format(key, val))
 
-#     if args.save:
-#         file = open(man.get_filename("lattice_params_coupled.pkl"), "wb")
-#         pickle.dump(tmat_params_4d, file, protocol=pickle.HIGHEST_PROTOCOL)
-#         file.close()
+    if args.save:
+        file = open(man.get_filename("lattice_params_4d.pkl"), "wb")
+        pickle.dump(tmat_params_4d, file, protocol=pickle.HIGHEST_PROTOCOL)
+        file.close()
 
 twiss = ring.get_ring_twiss_coupled(mass=args.mass, kin_energy=args.energy)
 logger.info("Twiss (coupled):")
 logger.info(twiss)
 if args.save:
-    twiss.to_csv(man.get_filename("lattice_twiss_coupled.dat"), sep=" ")
+    twiss.to_csv(man.get_filename("lattice_twiss_4d.dat"), sep=" ")
 
 ring.set_fringe_fields(args.fringe)
 
@@ -414,7 +416,6 @@ if args.coast:
     
 if args.match:
     bunch = pyorbit_sim.ring.match_bunch(bunch, M=tmat_params_4d["M"][:6, :6])
-    
 
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = args.intensity / bunch_size_global
@@ -442,12 +443,21 @@ if _mpi_rank == 0:
 for turn in range(args.n_turns):
     ring.trackBunch(bunch, params_dict)  
     monitor.action(params_dict)
-    if args.write_bunch_freq:
+    if args.save and args.write_bunch_freq:
         if (turn % args.write_bunch_freq == 0) or (turn == n_turns - 1):
             filename = man.get_filename("bunch_{:05.0f}.dat".format(turn))
             bunch.dumpBunch(filename)
+            
+    if _mpi_rank == 0:
+        if args.save and args.small_freq:
+            if (turn % args.small_freq == 0) or (turn == n_turns - 1):
+                X = pyorbit_sim.bunch_utils.get_coords(bunch, n=args.small_size)
+                filename = "smallbunch_{:05.0f}.npy".format(turn)
+                filename = man.get_filename(filename)
+                np.save(filename, X)
+
         
 if _mpi_rank == 0:
     print("SIMULATION COMPLETE")
-    print("outdir = {}".format(outdir))
-    print("timestamp = {}".format(timestamp))
+    print("outdir = {}".format(man.outdir))
+    print("timestamp = {}".format(man.timestamp))
