@@ -59,15 +59,6 @@ class BunchStats:
         )
 
     def effective_twiss_xy(self):    
-        eps_x = self.twiss_calc.getEffectiveEmittance(0)
-        eps_y = self.twiss_calc.getEffectiveEmittance(1)
-        eps_z = self.twiss_calc.getEffectiveEmittance(2)
-        beta_x = self.twiss_calc.getEffectiveBeta(0)
-        beta_y = self.twiss_calc.getEffectiveBeta(1)
-        beta_z = self.twiss_calc.getEffectiveBeta(2)
-        alpha_x = self.twiss_calc.getEffectiveAlpha(0)
-        alpha_y = self.twiss_calc.getEffectiveAlpha(1)
-        alpha_z = self.twiss_calc.getEffectiveAlpha(2) 
         return (
             self.twiss_calc.getEffectiveAlpha(0),
             self.twiss_calc.getEffectiveBeta(0),
