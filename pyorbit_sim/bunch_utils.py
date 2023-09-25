@@ -655,7 +655,7 @@ def generate_norm_twiss(
     _mpi_size = orbit_mpi.MPI_Comm_size(_mpi_comm)
     
     if verbose and _mpi_rank == 0:
-        print("Generating bunch from design Twiss parameters and {} generator.".format(dist))  
+        print("Generating bunch from design Twiss parameters and {} generator.".format(dist_constructor))  
         
     if n is None:
         n = int(1.00e+05)

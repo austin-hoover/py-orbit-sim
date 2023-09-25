@@ -121,11 +121,10 @@ class SNS_LINAC:
             rf_gap.setCppGapModel(rf_gap_model())
             
     def set_overlapping_rf_and_quad_fields(
-        self, sequences=None, z_step=0.002, xml_filename="sns_rf_fields.xml"
+        self, sequences=None, z_step=0.002, fields_filename="sns_rf_fields.xml"
     ):
         if sequences is None:
             sequences = self.sequences    
-        fields_filename = os.path.join(self.input_dir, xml_filename)
 
         # Replace hard-edge quads with soft-edge quads; replace zero-length RF gap models
         # with field-on-axis RF gap models. Can be used for any sequences, no limitations.
@@ -443,6 +442,7 @@ class SNS_LINAC:
             
         node_pos_dict = self.lattice.getNodePositionsDict()
         parent_nodes = self.lattice.getNodesOfClasses([Drift])
+                
         last_position, _ = node_pos_dict[parent_nodes[0]]
         last_position = last_position - 2.0 * step        
         child_nodes = []
