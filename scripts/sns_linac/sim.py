@@ -376,7 +376,7 @@ plot_kws = dict(
     divide_by_max=True,
     profx=True,
     profy=True,
-    bins=100,
+    bins=150,
     norm="log",
 )
 save_kws=dict(dpi=200)
@@ -466,7 +466,7 @@ if len(linac.aperture_nodes) > 0:
     total_loss = sum([loss for (node, loss) in aprt_nodes_losses])
     if _mpi_rank == 0:
         print("Total loss = {:.2e}".format(total_loss))
-    if switches["save"] and switches["save_losses"]:
+    if args.save and args.save_losses:
         filename = man.get_filename("losses.txt")
         if _mpi_rank == 0:
             print("Saving loss vs. node array to {}".format(filename))
