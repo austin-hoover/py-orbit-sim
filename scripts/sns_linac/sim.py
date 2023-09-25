@@ -352,20 +352,19 @@ if not args.save:
     stride["plot"] = float("inf")
         
     
-# Create bunch plotter.
-def transform(X):
-    X *= 1000.0
-    X = pyorbit_sim.cloud.norm_xxp_yyp_zzp(X, scale_emittance=True)
-    X = pyorbit_sim.cloud.slice_sphere(
+def transform_normalize(X):
+    return pyorbit_sim.cloud.norm_xxp_yyp_zzp(X, scale_emittance=True)
+
+def transform_slice_transverse_ellipsoid(X):
+    return pyorbit_sim.cloud.slice_sphere(
         X,
         axis=(0, 1, 2, 3),
         rmin=0.0,
         rmax=1.0,
     )
-    return X
 
 plotter = pyorbit_sim.plotting.Plotter(
-    transform=transform, 
+    transform=transform_normalize, 
     outdir=man.outdir,
     default_save_kws=None, 
     dims=["x", "xp", "y", "yp", "z", "dE"],
@@ -380,12 +379,24 @@ plot_kws = dict(
     bins=100,
     norm="log",
 )
+save_kws=dict(dpi=200)
+
 plotter.add_function(
     pyorbit_sim.plotting.proj2d, 
+    transform=None,
     axis=(4, 5),
     limits=[(-5.0, 5.0), (-5.0, 5.0)],
-    save_kws=dict(dpi=200), 
-    name=None, 
+    save_kws=save_kws,
+    name="proj2d_zdE", 
+    **plot_kws
+)
+plotter.add_function(
+    pyorbit_sim.plotting.proj2d, 
+    transform=transform_slice_transverse_ellipsoid,
+    axis=(4, 5),
+    limits=[(-5.0, 5.0), (-5.0, 5.0)],
+    save_kws=save_kws,
+    name="proj2d_zdE_slice_xxpyyp", 
     **plot_kws
 )
 

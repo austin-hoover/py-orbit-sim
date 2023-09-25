@@ -425,9 +425,11 @@ class Plotter:
         units=None,
     ):
         self.transform = transform
+        self.transforms = []
         self.outdir = outdir
         self.prefix = prefix
         self.functions = []
+        self.function_names = []
         self.kws = []
         self.save_kws = []
         self.default_save_kws = default_save_kws
@@ -444,10 +446,14 @@ class Plotter:
             else:
                 self.labels = ["{} [{}]".format(d, u) for d, u in zip(dims, units)]
         
-    def add_function(self, function, save_kws=None, name=None, **kws):
+    def add_function(self, function, transform=None, save_kws=None, name=None, **kws):
         self.functions.append(function)
+        self.transforms.append(transform)
         self.kws.append(kws)
         self.save_kws.append(save_kws if save_kws else self.default_save_kws)
+        if name is None:
+            name = function.__name__
+        self.function_names.append(name)
         
     def action(self, bunch, info=None, verbose=False):
         if info is None:
@@ -458,13 +464,18 @@ class Plotter:
         if self.transform is not None:
             X = self.transform(X)
             
-        for i, function in enumerate(self.functions):
+        for i, (function, transform) in enumerate(zip(self.functions, self.transforms)):
             if verbose:
-                print("Calling {}.".format(function.__name__))
+                print("Calling {}.".format(self.function_names[i]))
                 
-            function(X, info=info, **self.kws[i])
+            if transform is not None:
+                Y = transform(X)
+            else:
+                Y = X
+                
+            function(Y, info=info, **self.kws[i])
             
-            filename = "{}_{:04.0f}".format(function.__name__, self.index)
+            filename = "{}_{:04.0f}".format(self.function_names[i], self.index)
             if self.prefix is not None:
                 filename = "{}_{}".format(self.prefix, filename)
             if "node" in info:
@@ -475,9 +486,10 @@ class Plotter:
             plt.savefig(filename, **self.save_kws[i])
             plt.close()
             
-            self.index += 1
             if "position" in info:
                 self.position = info["position"]
+                
+        self.index += 1
             
 
 class PlotterNode(BaseLinacNode):
