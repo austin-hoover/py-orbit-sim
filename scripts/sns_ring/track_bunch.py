@@ -1,8 +1,3 @@
-"""Track a bunch through the SNS ring.
-
-Currently, the script requires the bunch to be read from a file. A future version 
-will allow the use to generate a bunch from a distribution function.
-"""
 from __future__ import print_function
 import argparse
 import os
@@ -131,6 +126,7 @@ parser.add_argument("--coast", type=int, default=0)
 parser.add_argument("--match", type=int, default=0)
 parser.add_argument("--rms-equiv", type=int, default=0)
 
+# Diagnostics
 parser.add_argument("--n-turns", type=int, default=100)
 parser.add_argument("--print-freq", type=int, default=1)
 parser.add_argument("--vis-freq", type=int, default=0)
@@ -138,6 +134,8 @@ parser.add_argument("--write-bunch-freq", type=int, default=0)
 
 parser.add_argument("--small-size", type=int, default=10000)
 parser.add_argument("--small-freq", type=int, default=0)
+
+parser.add_argument("--diag-tune", type=int, default=0)
 
 args = parser.parse_args()
 
@@ -430,6 +428,18 @@ if args.save_ids:
 
 # Diagnostics
 # --------------------------------------------------------------------------------------
+
+# Tune diagnostics node.
+tune_node = ring.add_tune_diagnostics_node(
+    filename=man.get_filename("tunes.dat"),
+    position=0.010,
+    alpha_x=tmat_params["alpha x"], 
+    alpha_y=tmat_params["alpha y"],
+    beta_x=tmat_params["beta x [m]"], 
+    beta_y=tmat_params["beta y [m]"], 
+    eta_x=tmat_params["dispersion x [m]"],
+    etap_x=tmat_params["dispersion prime x"],
+)   
 
 # Plotting node
 # [...]

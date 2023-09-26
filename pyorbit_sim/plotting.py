@@ -423,6 +423,7 @@ class Plotter:
         position=0.0,
         dims=None,
         units=None,
+        main_rank=0,
     ):
         self.transform = transform
         self.transforms = []
@@ -445,6 +446,7 @@ class Plotter:
                 self.labels = dims
             else:
                 self.labels = ["{} [{}]".format(d, u) for d, u in zip(dims, units)]
+        self.main_rank = main_rank
         
     def add_function(self, function, transform=None, save_kws=None, name=None, **kws):
         self.functions.append(function)
@@ -456,6 +458,13 @@ class Plotter:
         self.function_names.append(name)
         
     def action(self, bunch, info=None, verbose=False):
+        
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        
+        if _mpi_rank != self.main_rank:
+            return
+        
         if info is None:
             info = dict()
         info["labels"] = self.labels

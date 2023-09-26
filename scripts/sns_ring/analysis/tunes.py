@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.fft
 
 
 def compute_tunes_phase_diff(coords):
@@ -32,4 +33,26 @@ def compute_tunes_phase_diff(coords):
         tunes[np.where(tunes < 0.0)] += 1.0
         tunes_list.append(tunes)
     tunes = np.mean(tunes_list, axis=0)
+    return tunes
+
+
+def fft(signal):
+    """Return FFT without 0 component."""
+    N = len(signal)
+    M = N // 2
+    freq = (1.0 / N) * np.arange(M)
+    amp = (1.0 / M) * np.abs(scipy.fft.fft(signal)[:M])
+    return freq[1:], amp[1:]
+
+
+def compute_tunes_fft(coords):
+    def compute_tune(signal):
+        freq, amp = fft(signal)
+        return freq[np.argmax(amp)]
+
+    tunes = np.zeros((coords.shape[1], 2))
+    for i in range(tunes.shape[0]):
+        tune_x = compute_tune(coords[:, i, 0])
+        tune_y = compute_tune(coords[:, i, 2])
+        tunes[i, :] = [tune_x, tune_y]
     return tunes
