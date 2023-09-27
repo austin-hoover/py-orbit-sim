@@ -1434,23 +1434,6 @@ class InjectionController:
             self.ring.getNodeIndex(self.ring.getNodeForName(inj_end)),
         )        
         self.sublattices = [self.sublattice1, self.sublattice2]
-        
-        # # Add inactive monitor nodes
-        # self.monitor_nodes = []
-        # for sublattice in self.sublattices:
-        #     self.monitor_nodes.append([])
-        #     node_pos_dict = sublattice.getNodePositionsDict()
-        #     for node in sublattice.getNodes():
-        #         monitor_node = BunchCoordsNode(axis=(0, 1, 2, 3))
-        #         monitor_node.position = node_pos_dict[node][0]
-        #         monitor_node.active = False
-        #         add_diagnostics_node_as_child(
-        #             monitor_node,
-        #             parent_node=node,
-        #             part_index=0,
-        #             place_in_part=AccActionsContainer.BEFORE,
-        #         )
-        #         self.monitor_nodes[-1].append(monitor_node)
                 
         # Initialize bunch for single-particle tracking.
         self.bunch = Bunch()
