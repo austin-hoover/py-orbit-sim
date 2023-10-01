@@ -320,12 +320,14 @@ class Monitor:
                 for key in self.history:
                     if self.history[key]:
                         info[key] = self.history[key]
-                info["node"] = node.getName()
-                info["step"] = self.step
-                info["position"] = position
-                info["gamma"] = gamma
-                info["beta"] = beta
-                self.plotter.action(bunch, info=info, verbose=self.verbose)
+                
+                self.plotter.action(
+                    params_dict, 
+                    index=self.step,
+                    node=node.getName(),
+                    position=self.position,    
+                    verbose=self.verbose,
+                )
                 
         # Write new line to history file.
         if _mpi_rank == 0 and self.file is not None:

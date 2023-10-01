@@ -537,7 +537,7 @@ def corner(
                 
     if labels is not None:
         for i in range(d):
-            axs[-1, j].set_xlabel(labels[i])
+            axs[-1, i].set_xlabel(labels[i])
         for i in range(1, d):
             axs[i, 0].set_ylabel(labels[i])
     return axs
@@ -555,6 +555,7 @@ class Plotter:
         dims=None,
         units=None,
         main_rank=0,
+        save_proj=False,
     ):
         self.transform = transform
         self.transforms = []
@@ -578,6 +579,7 @@ class Plotter:
             else:
                 self.labels = ["{} [{}]".format(d, u) for d, u in zip(dims, units)]
         self.main_rank = main_rank
+        self.save_proj = save_proj
         
     def add_function(self, function, transform=None, save_kws=None, name=None, **kws):
         self.functions.append(function)
@@ -590,7 +592,7 @@ class Plotter:
         
     def action(
         self, 
-        params_dict=None, 
+        params_dict, 
         index=None,
         node=None,
         position=None,    
@@ -600,10 +602,49 @@ class Plotter:
         _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
         if _mpi_rank != self.main_rank:
             return
-                    
-        X = get_bunch_coords(params_dict["bunch"])
+                        
+        bunch = params_dict["bunch"]
+        X = get_bunch_coords(bunch)
+                
         if self.transform is not None:
             X = self.transform(X)
+            
+
+        # TEMP
+        # -------------------------------------------------------------------------
+        if self.save_proj:
+            _dims = ["x", "xp", "y", "yp", "z", "zp"]
+            _limits = 2 * [(-5.0, 5.0)]
+            axis_slice = (0, 1, 2, 3)
+            
+            import pyorbit_sim.cloud
+            Y = pyorbit_sim.cloud.slice_sphere(
+                X,
+                axis=(0, 1, 2, 3),
+                rmin=0.0,
+                rmax=1.0,
+            )
+            
+            axis = (4, 5)
+            hist, edges = np.histogramdd(Y[:, axis], bins=150, range=_limits, density=True)
+            coords = [0.5 * (e[:-1] + e[1:]) for e in edges]
+
+            data = np.zeros((1 + hist.shape[0], 1 + hist.shape[1]))
+            data[1:, 0] = coords[0]
+            data[0, 1:] = coords[1]
+            data[1:, 1:] = hist
+
+            filename = "snapshot_zzp_slice_xxpyyp_ellipsoid"
+            if node is not None:
+                filename = "{}_{}".format(filename, node)
+            filename = "{}_{:05.0f}".format(filename, index if index is not None else self.index)
+            if self.prefix is not None:
+                filename = "{}_{}.npy".format(self.prefix, filename)
+            filename = os.path.join(self.outdir, filename)
+            print("Saving file {}".format(filename))
+            np.save(filename, data)
+        # -------------------------------------------------------------------------
+            
             
         for i, (function, transform) in enumerate(zip(self.functions, self.transforms)):
             if verbose:
@@ -616,18 +657,16 @@ class Plotter:
             
             function(Y, labels=self.labels, node=node, position=position, **self.kws[i])
             
-            filename = "{}_{:05.0f}".format(
-                self.function_names[i], 
-                index if index is not None else self.index
-            )
+            filename = self.function_names[i]
             if node is not None:
-                filename = "{}_{}".format(node, filename)
+                filename = "{}_{}".format(filename, node)
+            filename = "{}_{:05.0f}".format(filename, index if index is not None else self.index)
             filename = "fig_{}".format(filename)
             if self.prefix is not None:
                 filename = "{}_{}".format(self.prefix, filename)
             filename = os.path.join(self.outdir, filename)
             
-            print("Saving figure to file {}".format(filename))
+            print("Saving file {}".format(filename))
             plt.savefig(filename, **self.save_kws[i])
             plt.close("all")
             
@@ -673,14 +712,20 @@ class TEAPOTPlotterNode(DriftTEAPOT):
     def set_active(self, active):
         self.active = active
         
-    def track(self, params_dict):
+    def track(self, params_dict):        
         if not self.active:
             return
-        if self.turn % self.freq == 1:
-            self.plotter.action(
-                params_dict, 
-                index=self.turn,
-                node=self.name,
-                verbose=self.verbose
-            )
+        
+        _mpi_comm = orbit_mpi.mpi_comm.MPI_COMM_WORLD
+        _mpi_rank = orbit_mpi.MPI_Comm_rank(_mpi_comm)
+        
+        bunch = params_dict["bunch"]
+        if bunch.getSize() > 0:
+            if self.turn % self.freq == 1:
+                self.plotter.action(
+                    params_dict, 
+                    index=self.turn,
+                    node=self.name,
+                    verbose=self.verbose
+                )            
         self.turn += 1
