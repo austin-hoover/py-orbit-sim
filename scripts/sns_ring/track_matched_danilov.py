@@ -16,7 +16,21 @@ from orbit.bunch_generators import KVDist2D
 from orbit.bunch_generators import GaussDist1D
 from orbit.bunch_generators import GaussDist2D
 from orbit.bunch_generators import WaterBagDist2D
+from orbit.bunch_generators import TwissContainer
 from orbit.bunch_utils import ParticleIdNumber
+
+
+from envelope import DanilovEnvelopeSolver20
+from envelope import DanilovEnvelopeSolver22
+
+from orbit.envelope import DanilovEnvelope20
+from orbit.envelope import DanilovEnvelopeSolverNode20
+from orbit.envelope import set_danilov_envelope_solver_nodes_20
+from orbit.envelope import DanilovEnvelope22
+from orbit.envelope import DanilovEnvelopeSolverNode22
+from orbit.envelope import set_danilov_envelope_solver_nodes_22
+
+
 from orbit.lattice import AccActionsContainer
 from orbit.lattice import AccNode
 from orbit.lattice import AccLattice
@@ -86,7 +100,7 @@ parser.add_argument("--rf2-phase", type=float, default=0.0)
 parser.add_argument("--rf2-hnum", type=float, default=2.0)
 parser.add_argument("--rf2-volt", type=float, default=-4.00e-06)
 
-parser.add_argument("--sc", type=int, default=0)
+parser.add_argument("--sc", type=int, default=1)
 parser.add_argument("--sc-kind", type=str, default="2p5d", choices=["slicebyslice", "2p5d"])
 parser.add_argument("--sc-gridx", type=int, default=64)
 parser.add_argument("--sc-gridy", type=int, default=64)
@@ -107,32 +121,20 @@ parser.add_argument("--sc-long-use", type=int, default=1)
 parser.add_argument("--sol", type=float, default=0.061)
 
 # Bunch
-parser.add_argument("--bunch", type=str, default=None)
 parser.add_argument("--charge", type=float, default=1.0)
 parser.add_argument("--energy", type=float, default=0.800)  # [GeV]
 parser.add_argument("--mass", type=float, default=mass_proton)
-parser.add_argument("--intensity", type=float, default=0.45e+14)
-
-parser.add_argument("--mean-x", type=float, default=None)
-parser.add_argument("--mean-y", type=float, default=None)
-parser.add_argument("--mean-z", type=float, default=None)
-parser.add_argument("--mean-xp", type=float, default=None)
-parser.add_argument("--mean-yp", type=float, default=None)
-parser.add_argument("--mean-dE", type=float, default=None)
-
+parser.add_argument("--intensity", type=float, default=0.5)  # e+14
 parser.add_argument("--n-parts", type=int, default=None)
-parser.add_argument("--dist", type=str, default="waterbag", choices=["waterbag", "gaussian", "kv", "danilov"])
-parser.add_argument("--coast", type=int, default=0)
-parser.add_argument("--match", type=int, default=0)
-parser.add_argument("--match-env", type=str, default=None, choices=["kv", "danilov"])
-parser.add_argument("--rms-equiv", type=int, default=0)
+parser.add_argument("--epsl", type=float, default=16.0)
+parser.add_argument("--noise", type=float, default=0.2)
+parser.add_argument("--gauss", type=int, default=0)
 
 # Diagnostics
 parser.add_argument("--n-turns", type=int, default=100)
 parser.add_argument("--print-freq", type=int, default=1)
 parser.add_argument("--vis-freq", type=int, default=0)
 parser.add_argument("--write-bunch-freq", type=int, default=0)
-
 parser.add_argument("--small-size", type=int, default=10000)
 parser.add_argument("--small-freq", type=int, default=0)
 
@@ -180,7 +182,8 @@ logger.info(args)
 ring = SNS_RING()
 ring.readMADX(os.path.join(input_dir, args.madx_file), args.madx_seq)
 ring.initialize()
-ring.set_solenoid_strengths(args.sol)
+if args.sol:
+    ring.set_solenoid_strengths(args.sol)
     
     
 # Initialize bunch (needed for some aperture constructors).
@@ -263,6 +266,78 @@ if _mpi_rank == 0:
 ring.set_fringe_fields(args.fringe)
 
 
+# Bunch
+# --------------------------------------------------------------------------------------
+
+n_parts = args.n_parts
+if n_parts is None:
+    n_parts = 100000
+intensity = args.intensity * 1.00e+14
+    
+lattice = SNS_RING()
+lattice.readMADX(os.path.join(input_dir, args.madx_file), args.madx_seq)
+lattice.initialize()
+if args.sol:
+    lattice.set_solenoid_strengths(args.sol)
+lattice.set_fringe_fields(False)
+
+envelope = DanilovEnvelope22(
+    eps_l=(args.epsl * 1.00e-06),
+    mode=1,
+    eps_x_frac=0.5,
+    mass=args.mass,
+    kin_energy=args.energy,
+    length=ring.getLength(),
+    intensity=intensity,
+)
+solver_nodes = set_danilov_envelope_solver_nodes_22(
+    lattice,
+    path_length_max=None,
+    path_length_min=0.010,
+    perveance=envelope.perveance,
+)
+envelope.match_bare(lattice, method="2D", solver_nodes=solver_nodes)
+envelope.match_lsq(
+    lattice, 
+    n_turns=10,
+    xtol=1.00e-12, 
+    ftol=1.00e-12, 
+    gtol=1.00e-12, 
+    verbose=2,
+)
+for (x, xp, y, yp) in envelope.generate_dist(n_parts):
+    z = np.random.uniform(-0.5 * ring.getLength(), 0.5 * ring.getLength())
+    dE = 1.00e-12
+    bunch.addParticle(x, xp, y, yp, z, dE)
+    
+# Add noise to the transverse distribution.
+stats = pyorbit_sim.diagnostics.BunchStats(bunch)
+stds = np.sqrt(np.diag(stats.cov()))
+for i in range(bunch.getSize()):
+    x = bunch.x(i)
+    y = bunch.y(i)
+    xp = bunch.xp(i)
+    yp = bunch.yp(i)
+    x += np.random.normal(scale=(args.noise * 2.0 * stds[0]))
+    y += np.random.normal(scale=(args.noise * 2.0 * stds[2]))
+    xp += np.random.normal(scale=(args.noise * 2.0 * stds[1]))
+    yp += np.random.normal(scale=(args.noise * 2.0 * stds[3]))
+    bunch.x(i, x)
+    bunch.y(i, y)
+    bunch.xp(i, xp)
+    bunch.yp(i, yp)
+    
+bunch = pyorbit_sim.bunch_utils.set_centroid(bunch, 0.0, verbose=True)
+    
+# Set macro size.
+bunch_size_global = bunch.getSizeGlobal()
+macro_size = intensity / bunch_size_global
+bunch.macroSize(macro_size)
+
+if args.save_ids:
+    ParticleIdNumber.addParticleIdNumbers(bunch)
+
+
 # Lattice
 # --------------------------------------------------------------------------------------
 
@@ -320,7 +395,7 @@ if args.imp_trans:
         filename=os.path.join(input_dir, args.imp_trans_file)
     )
 
-if args.sc_long:
+if args.sc_long and intensity > 0:
     long_sc_node = ring.add_longitudinal_space_charge_node(
         b_a=args.sc_long_b_a,
         n_macros_min=args.sc_n_macros_min,
@@ -329,7 +404,7 @@ if args.sc_long:
         position=args.sc_long_pos,
     )
 
-if args.sc :
+if args.sc and intensity > 0:
     trans_sc_nodes = ring.add_transverse_space_charge_nodes(
         n_macros_min=1000,
         size_x=args.sc_gridx,
@@ -341,93 +416,6 @@ if args.sc :
         radius=args.sc_radius,
         kind=args.sc_kind,
     )
-    
-    
-# Bunch
-# --------------------------------------------------------------------------------------
-
-filename = args.bunch
-
-dist_constructors = {
-    "kv": KVDist2D, 
-    "waterbag": WaterBagDist2D, 
-    "gaussian": GaussDist2D,
-}
-dist_constructor = dist_constructors[args.dist]
-
-n_parts = args.n_parts
-if n_parts is None:
-    n_parts = 100000
-
-    
-if filename is None:
-    twiss_x = TwissContainer(0.0, 1.0, 15.0e-06)
-    twiss_y = TwissContainer(0.0, 1.0, 15.0e-06)
-    bunch = pyorbit_sim.bunch_utils.generate_xy_z(
-        dist_xy=dist_constructor(twiss_x, twiss_y), 
-        dist_z=GaussDist1D(), 
-        n=n_parts, 
-        bunch=bunch,
-        verbose=True
-    )
-    z_max = 0.5 * ring.getLength()
-    for i in range(bunch.getSize()):
-        bunch.z(i, np.random.uniform(-z_max, z_max))
-        bunch.dE(i, 1.00e-12)
-    pyorbit_sim.ring.match_bunch(bunch, M=tmat_params_4d["M"][:4, :4])
-else:
-    bunch = pyorbit_sim.bunch_utils.load(filename=filename, bunch=bunch, verbose=True)
-
-bunch = pyorbit_sim.bunch_utils.set_centroid(
-    bunch,
-    centroid=[
-        args.mean_x, 
-        args.mean_y, 
-        args.mean_z, 
-        args.mean_xp, 
-        args.mean_xp, 
-        args.mean_dE,
-    ],
-    verbose=True,
-)
-
-if args.rms_equiv:
-    coords_z = [(bunch.z(i), bunch.dE(i)) for i in range(bunch.getSize())]
-    bunch = pyorbit_sim.bunch_utils.generate_rms_equiv_xy_z(
-        dist_constructor_xy=dist_constructor,
-        dist_constructor_z=GaussDist1D,
-        bunch=bunch,
-        verbose=True,
-    )
-    for i in range(bunch.getSize()):
-        bunch.z(i, coords_z[i][0])
-        bunch.dE(i, coords_z[i][0])
-
-if args.n_parts:
-    bunch = pyorbit_sim.bunch_utils.downsample(
-        bunch,
-        n=args.n_parts,
-        method="first",
-        conserve_intensity=True,
-        verbose=True,
-    )
-    
-if args.coast:
-    z_max = 0.5 * ring.getLength()
-    for i in range(bunch.getSize()):
-        bunch.z(i, np.random.uniform(-z_max, z_max))
-        bunch.dE(i, 1.00e-12)
-    
-if args.match:
-    bunch = pyorbit_sim.ring.match_bunch(bunch, M=tmat_params_4d["M"][:6, :6])
-        
-
-bunch_size_global = bunch.getSizeGlobal()
-macro_size = args.intensity / bunch_size_global
-bunch.macroSize(macro_size)
-
-if args.save_ids:
-    ParticleIdNumber.addParticleIdNumbers(bunch)
 
 
 # Diagnostics
@@ -460,8 +448,7 @@ monitor = pyorbit_sim.ring.Monitor(
 if _mpi_rank == 0:
     print("Tracking...")
     
-for turn in range(args.n_turns):
-    ring.trackBunch(bunch, params_dict)  
+for turn in range(args.n_turns + 1):
     monitor.action(params_dict)
     if args.save and args.write_bunch_freq:
         if (turn % args.write_bunch_freq == 0) or (turn == args.n_turns - 1):
@@ -475,8 +462,9 @@ for turn in range(args.n_turns):
                 filename = "smallbunch_{:05.0f}.npy".format(turn)
                 filename = man.get_filename(filename)
                 np.save(filename, X)
+                
+    ring.trackBunch(bunch, params_dict)  
 
-        
 if _mpi_rank == 0:
     print("SIMULATION COMPLETE")
     print("outdir = {}".format(man.outdir))

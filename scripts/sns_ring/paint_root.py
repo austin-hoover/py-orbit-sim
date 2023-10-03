@@ -11,7 +11,7 @@ import yaml
 from tqdm import tqdm
 
 import matplotlib
-matplotlib.use('agg')
+matplotlib.use("agg")
 from matplotlib import pyplot as plt
 
 import orbit_mpi
@@ -125,7 +125,7 @@ parser.add_argument("--inj-x", type=float, default=0.0486)
 parser.add_argument("--inj-y", type=float, default=0.0460)
 parser.add_argument("--inj-dist-x", type=str, default="joho", choices=["joho"])
 parser.add_argument("--inj-dist-y", type=str, default="joho", choices=["joho"])
-parser.add_argument("--inj-dist-z", type=str, default="snsespread", choices=["snsespread", "uniform"])
+parser.add_argument("--inj-dist-z", type=str, default="uniform", choices=["snsespread", "uniform"])
 parser.add_argument("--inj-dist-intensity", type=int, default=1.0)
 parser.add_argument("--inj-dist-length", type=int, default=0.72)
 
@@ -289,22 +289,18 @@ ring.set_fringe_fields(args.fringe)
             
 # Injection kicker optimization
 # --------------------------------------------------------------------------------------
-
-# Initial closed orbit coordinates at injection point [x, x', y, y'].
 inj_coords_t0 = np.zeros(4)
 inj_coords_t0[0] = args.x0 + args.inj_x
-inj_coords_t0[2] = args.y0 + args.inj_y
 inj_coords_t0[1] = args.xp0
+inj_coords_t0[2] = args.y0 + args.inj_y
 inj_coords_t0[3] = args.yp0
 
-# Final closed orbit coordinates at injection point  [x, x', y, y'].
 inj_coords_t1 = np.zeros(4)
 inj_coords_t1[0] = args.x1 + args.inj_x
 inj_coords_t1[2] = args.y1 + args.inj_y
 inj_coords_t1[1] = args.xp1
 inj_coords_t1[3] = args.yp1
 
-# Turn off fringe fields.
 ring.set_fringe_fields(False)
 
 ric = ring.get_injection_controller(
@@ -314,6 +310,8 @@ ric = ring.get_injection_controller(
     inj_start="bpm_a09", 
     inj_end="bpm_b01",
 )
+ric.scale_kicker_limits(2.0)
+
 opt_kws = {
     "max_nfev": 2500,
     "verbose": 1, 
@@ -330,16 +328,14 @@ if args.bias:
     if _mpi_rank == 0:
         traj.to_csv(man.get_filename("inj_orbit_bias.dat"), sep=" ")
 
-
-# Set the initial phase space coordinates at the injection point.
 print("Optimizing kickers (t=0.0)")
 kicker_angles_t0 = ric.get_kicker_angles()
 if not args.noopt:
     kicker_angles_t0 = ric.set_inj_coords(inj_coords_t0, **opt_kws)
-traj = ric.get_trajectory()
 
 print("Injection coords:")
 ric.print_inj_coords()
+traj = ric.get_trajectory()
 if _mpi_rank == 0:
     logger.info("Injection region trajectory:")
     logger.info(traj)
@@ -358,16 +354,14 @@ if _mpi_rank == 0:
         plt.savefig(man.get_filename("fig_inj_traj_t0.png"), dpi=200)
         plt.close("all")
 
-# Set the final phase space coordinates at the injection point.
 print("Optimizing kickers (t=1.0)")
-if args.flattop or args.noopt:
-    kicker_angles_t1 = kicker_angles_t0
-else:
+kicker_angles_t1 = kicker_angles_t0
+if not (args.flattop or args.noopt):
     kicker_angles_t1 = ric.set_inj_coords(inj_coords_t1, **opt_kws)
-traj = ric.get_trajectory()
     
 print("Injection coords:")
 ric.print_inj_coords()
+traj = ric.get_trajectory()
 if _mpi_rank == 0:
     logger.info("Injection region trajectory:")
     logger.info(traj)
@@ -397,10 +391,7 @@ if not (args.flattop or args.noopt):
         waveform = SquareRootWaveform(bunch.getSyncParticle(), ring.getLength(), t0, t1, s0, s1)
         node.setWaveform(waveform)
 
-# Set kickers to initial state.
 ric.set_kicker_angles(kicker_angles_t0)
-
-# Restore fringe fields.
 ring.set_fringe_fields(args.fringe)
 
     
@@ -548,54 +539,30 @@ def transform(X):
     X[:, 5] *= 1000.0
     return X
 
+
+dims = ["x", "xp", "y", "yp", "z", "dE"]
+units = ["mm", "mrad", "mm", "mrad", "m", "MeV"]
 plotter = pyorbit_sim.plotting.Plotter(
     transform=transform, 
     outdir=man.outdir,
-    default_save_kws=dict(dpi=200), 
-    dims=["x", "xp", "y", "yp", "z", "dE"],
-    units=["mm", "mrad", "mm", "mrad", "m", "MeV"],
+    default_save_kws=dict(dpi=200),
+    dims=dims,
+    units=units,
     main_rank=0,
 )
 
-
-## Add plot functions.
-fig_kws = dict(figsize=(5.0, 5.0))
-pad = 15.0
-xmax = 1000.0 * ring.x_inj + pad
-ymax = 1000.0 * ring.y_inj + pad
-plotter.add_function(
-    pyorbit_sim.plotting.proj2d, 
-    transform=None, 
-    save_kws=None, 
-    name="proj2d_xy",
-    fig_kws=fig_kws,
-    axis=(0, 2),
-    bins=100,
-    limits=[(-xmax, xmax), (-ymax, ymax)],
-)
-
-plotter.add_function(
-    pyorbit_sim.plotting.proj2d, 
-    transform=None, 
-    save_kws=None, 
-    name="proj2d_xxp",
-    fig_kws=dict(figsize=(5.0, 5.0)),
-    axis=(0, 1),
-    bins=75,
-    limits=None,
-)
-
-plotter.add_function(
-    pyorbit_sim.plotting.proj2d, 
-    transform=None, 
-    save_kws=None, 
-    name="proj2d_yyp",
-    fig_kws=dict(figsize=(5.0, 5.0)),
-    axis=(2, 3),
-    bins=75,
-    limits=None,
-)
-
+for axis in [(0, 1), (2, 3), (0, 2)]:
+    plotter.add_function(
+        pyorbit_sim.plotting.proj2d, 
+        transform=None, 
+        save_kws=None, 
+        name="proj2d_{}{}".format(dims[axis[0]], dims[axis[1]]),
+        fig_kws=dict(figsize=(5.0, 5.0)),
+        axis=axis,
+        bins=75,
+        limits=None,
+    )
+    
 plotter.add_function(
     pyorbit_sim.plotting.corner, 
     transform=None,
@@ -605,10 +572,9 @@ plotter.add_function(
     bins=75,
     limits=None,
     fig_kws=None,
-    autolim_kws=dict(zero_center=True, pad=0.1),
+    autolim_kws=dict(zero_center=False, pad=0.1),
     diag_kws=None,
 )
-
 
 # Add plotter node just after injection node.
 plot_node = pyorbit_sim.plotting.TEAPOTPlotterNode(
@@ -618,7 +584,8 @@ plot_node = pyorbit_sim.plotting.TEAPOTPlotterNode(
     verbose=True, 
     freq=args.plot_freq, 
 )
-inj_node.addChildNode(plot_node, AccNode.EXIT)
+parent_node = ring.getNodes()[1]
+parent_node.addChildNode(plot_node, AccNode.ENTRANCE)
 
 
 # Tracking
@@ -632,9 +599,10 @@ monitor = pyorbit_sim.ring.Monitor(
 if _mpi_rank == 0:
     print("Tracking...")
     
-for turn in range(args.inj_turns + args.stored_turns):
+for turn in range(args.inj_turns + args.stored_turns + 1):
     ring.trackBunch(bunch, params_dict)  
     monitor.action(params_dict)
+    
     if args.save and args.write_bunch_freq:
         if (turn % args.write_bunch_freq == 0) or (turn == args.n_turns - 1):
             filename = man.get_filename("bunch_{:05.0f}.dat".format(turn))
@@ -647,40 +615,6 @@ for turn in range(args.inj_turns + args.stored_turns):
                 filename = "smallbunch_{:05.0f}.npy".format(turn)
                 filename = man.get_filename(filename)
                 np.save(filename, X)
-                
-                
-#     if turn % 50 == 0:        
-#         if _mpi_rank == 0:
-#             # Plot 2D transverse projections.
-#             X = np.zeros((bunch.getSize(), 4))
-#             for i in range(X.shape[0]):
-#                 X[i, :] = [
-#                     1000.0 * bunch.x(i),
-#                     1000.0 * bunch.xp(i), 
-#                     1000.0 * bunch.y(i), 
-#                     1000.0 * bunch.yp(i), 
-#                 ]
-                
-#             dims = ["x", "xp", "y", "yp"]
-#             units = ["mm", "mrad", "mm", "mrad"]
-#             dims_units = ["{} [{}]".format(dim, unit) for dim, unit in zip(dims, units)]
-                        
-#             axis = (0, 2)
-#             pad = 15.0
-#             xmax = 1000.0 * ring.x_inj + pad
-#             ymax = 1000.0 * ring.y_inj + pad
-#             limits = [(-xmax, xmax), (-ymax, ymax)]
-#             hist, edges = np.histogramdd(X[:, axis], bins=100, range=limits)
-            
-#             fig, ax = plt.subplots(figsize=(5.0, 5.0))
-#             ax.pcolormesh(edges[0], edges[1], hist.T, cmap="viridis")
-#             ax.set_xlabel(dims_units[axis[0]])
-#             ax.set_xlabel(dims_units[axis[1]])
-#             ax.set_xlim(limits[0])
-#             ax.set_ylim(limits[1])
-#             plt.savefig(man.get_filename("fig_proj2d_{:05.0f}.png".format(turn)), dpi=200)
-#             plt.close("all")
-
                 
 if _mpi_rank == 0:
     print("SIMULATION COMPLETE")
