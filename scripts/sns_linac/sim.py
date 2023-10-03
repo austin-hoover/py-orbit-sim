@@ -368,6 +368,7 @@ plotter = pyorbit_sim.plotting.Plotter(
     outdir=man.outdir,
     default_save_kws=None, 
     dims=["x", "xp", "y", "yp", "z", "dE"],
+    save_proj=True,
 )
 plot_kws = dict(
     text=True,
@@ -383,7 +384,6 @@ save_kws=dict(dpi=200)
 
 plotter.add_function(
     pyorbit_sim.plotting.proj2d, 
-    transform=None,
     axis=(4, 5),
     limits=[(-5.0, 5.0), (-5.0, 5.0)],
     save_kws=save_kws,
@@ -397,6 +397,24 @@ plotter.add_function(
     limits=[(-5.0, 5.0), (-5.0, 5.0)],
     save_kws=save_kws,
     name="proj2d_zdE_slice_xxpyyp", 
+    **plot_kws
+)
+
+plotter.add_function(
+    pyorbit_sim.plotting.proj2d, 
+    axis=(0, 1),
+    limits=[(-5.0, 5.0), (-5.0, 5.0)],
+    save_kws=save_kws,
+    name="proj2d_xxp", 
+    **plot_kws
+)
+
+plotter.add_function(
+    pyorbit_sim.plotting.proj2d, 
+    axis=(2, 3),
+    limits=[(-5.0, 5.0), (-5.0, 5.0)],
+    save_kws=save_kws,
+    name="proj2d_yyp", 
     **plot_kws
 )
 
