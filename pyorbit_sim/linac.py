@@ -96,6 +96,7 @@ class Monitor:
         self,
         plotter=None,
         writer=None,
+        histogrammer=None,
         stride=None,
         dispersion_flag=False,
         emit_norm_flag=False,
@@ -116,9 +117,10 @@ class Monitor:
             If a list of node names is provided, an update will occur only at thos
             nodes.
             The dictionary can contain the following keys.
-                "update": proceed with all updates (print statement, etc.)
-                "write": call `bunch.dumpBunch`
-                "plot": call plotting routines
+                "update": proceed with all updates (print statement, etc.).
+                "write": call `bunch.dumpBunch`.
+                "plot": call plotting routines.
+                "histogram": save histograms.
         emit_norm_flag, dispersion_flag : bool
             Used by `BunchTwissAnalysis` class.
         position_offset : float
@@ -148,6 +150,7 @@ class Monitor:
         
         self.writer = writer
         self.plotter = plotter
+        self.histogrammer = histogrammer
         
         if _mpi_rank == 0:
             keys = [
@@ -220,7 +223,7 @@ class Monitor:
             self.history["beta"] = beta
             self.history["energy"] = bunch.getSyncParticle().kinEnergy()
 
-        # Record covariance matrix.
+        # Measure covariance matrix.
         twiss_analysis = BunchTwissAnalysis()
         order = 2
         twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
@@ -262,33 +265,44 @@ class Monitor:
                                 
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
-            fstr = "{:>5} | {:>10.2f} | {:>10.5f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.0f} | {} "
             if self.step == 0:
-                print(
-                    "{:<5} | {:<10} | {:<10} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
-                    .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
+                message = "{:<5} | {:<10} | {:<10} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}".format(
+                    "step", 
+                    "time [s]", 
+                    "s [m]", 
+                    "T [MeV]", 
+                    "xrms [mm]", 
+                    "yrms [mm]", 
+                    "zrms [deg]", 
+                    "nparts", 
+                    "node",
                 )
+                print(message)
                 print(115 * "-")
-            print(
-                fstr.format(
-                    self.step,
-                    time_ellapsed,  # [s]
-                    position,  # [m]
-                    1000.0 * bunch.getSyncParticle().kinEnergy(),
-                    1000.0 * x_rms,
-                    1000.0 * y_rms,
-                    z_rms_deg,
-                    n_parts,
-                    node.getName(),
-                )
+            message = "{:>5} | {:>10.2f} | {:>10.5f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.0f} | {} ".format(
+                self.step,
+                time_ellapsed,
+                position,
+                1000.0 * bunch.getSyncParticle().kinEnergy(),
+                1000.0 * x_rms,
+                1000.0 * y_rms,
+                z_rms_deg,
+                n_parts,
+                node.getName(),
             )
+            print(message)
         self.step += 1
                                                 
         # Write bunch coordinates to file.        
         if self.writer is not None and self.stride["write"] is not None:
             if (position - self.writer.position) >= self.stride["write"]:
                 self.writer.action(bunch, node_name=node.getName(), position=position)
-
+                
+        # Calling histogram routines.
+        if self.histogrammer is not None and self.stride["hist"] is not None:
+            if (position - self.histogrammer.position) >= self.stride["hist"]:
+                self.histogrammer.action(params_dict, index=self.step, node=node.getName(), position=self.position)   
+            
         # Call plotting routines.
         if self.plotter is not None and self.stride["plot"] is not None and _mpi_rank == 0:
             if (position - self.plotter.position) >= self.stride["plot"]:
@@ -304,7 +318,7 @@ class Monitor:
                     position=self.position,    
                     verbose=self.verbose,
                 )
-                
+                                
         # Write new line to history file.
         if _mpi_rank == 0 and self.file is not None:
             data = [self.history[key] for key in self.history]

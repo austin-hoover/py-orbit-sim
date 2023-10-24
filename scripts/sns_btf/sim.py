@@ -82,30 +82,31 @@ parser.add_argument("--quads", type=str, default="magnets/230905100947-quad_stre
     
 # Saving
 parser.add_argument("--save", type=int, default=1)
-parser.add_argument("--save_init_coords_attr", type=int, default=0)
-parser.add_argument("--save_input_bunch", type=int, default=1)
-parser.add_argument("--save_output_bunch", type=int, default=1)
-parser.add_argument("--save_lost_bunch", type=int, default=1)
-parser.add_argument("--save_losses", type=int, default=1)
-parser.add_argument("--save_ids", type=int, default=1)
+parser.add_argument("--save-init-coords-attr", type=int, default=0)
+parser.add_argument("--save-input-bunch", type=int, default=1)
+parser.add_argument("--save-output-bunch", type=int, default=1)
+parser.add_argument("--save-lost_bunch", type=int, default=1)
+parser.add_argument("--save-losses", type=int, default=1)
+parser.add_argument("--save-ids", type=int, default=1)
 parser.add_argument("--verbose", type=int, default=1)
 
-parser.add_argument("--stride_update", type=float, default=0.010)  # [m]
-parser.add_argument("--stride_write", type=float, default=float("inf"))  # [m]
-parser.add_argument("--stride_plot", type=float, default=float("inf"))  # [m]
+parser.add_argument("--stride-update", type=float, default=0.010)  # [m]
+parser.add_argument("--stride-write", type=float, default=float("inf"))  # [m]
+parser.add_argument("--stride-plot", type=float, default=float("inf"))  # [m]
+parser.add_argument("--stride-hist", type=float, default=float("inf"))  # [m]
 
 # Lattice
 parser.add_argument("--apertures", type=int, default=1)
-parser.add_argument("--linac_tracker", type=int, default=1)
-parser.add_argument("--max_drift", type=float, default=0.010)
+parser.add_argument("--linac-tracker", type=int, default=1)
+parser.add_argument("--max-drift", type=float, default=0.010)
 parser.add_argument("--overlap", type=int, default=1)
-parser.add_argument("--rf_freq", type=float, default=402.5e+06)
+parser.add_argument("--rf-freq", type=float, default=402.5e+06)
 
 # Space charge
 parser.add_argument("--spacecharge", type=int, default=1)
-parser.add_argument("--gridx", type=int, default=128)
-parser.add_argument("--gridy", type=int, default=128)
-parser.add_argument("--gridz", type=int, default=128)
+parser.add_argument("--gridx", type=int, default=64)
+parser.add_argument("--gridy", type=int, default=64)
+parser.add_argument("--gridz", type=int, default=64)
 parser.add_argument("--n_bunches", type=int, default=3)
 
 # Bunch
@@ -118,18 +119,18 @@ parser.add_argument("--dist", type=str, default="wb", choices=["kv", "wb", "gs"]
 parser.add_argument("--nparts", type=int, default=None)
 parser.add_argument("--decorr", type=int, default=0)
 parser.add_argument("--rms_equiv", type=int, default=0)
-parser.add_argument("--mean_x", type=float, default=None)
-parser.add_argument("--mean_y", type=float, default=None)
-parser.add_argument("--mean_z", type=float, default=None)
-parser.add_argument("--mean_xp", type=float, default=None)
-parser.add_argument("--mean_yp", type=float, default=None)
-parser.add_argument("--mean_dE", type=float, default=None)
+parser.add_argument("--mean-x", type=float, default=None)
+parser.add_argument("--mean-y", type=float, default=None)
+parser.add_argument("--mean-z", type=float, default=None)
+parser.add_argument("--mean-xp", type=float, default=None)
+parser.add_argument("--mean-yp", type=float, default=None)
+parser.add_argument("--mean-dE", type=float, default=None)
 
 # Tracking
 parser.add_argument("--start", type=str, default=None)
-parser.add_argument("--start_pos", type=float, default=None)
+parser.add_argument("--start-pos", type=float, default=None)
 parser.add_argument("--stop", type=str, default=None)
-parser.add_argument("--stop_pos", type=float, default=None)
+parser.add_argument("--stop-pos", type=float, default=None)
 
 args = parser.parse_args()
 
@@ -291,10 +292,13 @@ stride = {
     "update": args.stride_update,
     "write": args.stride_write,
     "plot": args.stride_plot,
+    "hist": args.stride_hist,
 }
 if not args.save:
-    stride["write_bunch"] = np.inf
-    stride["plot_bunch"] = np.inf
+    stride["write"] = np.inf
+    stride["plot"] = np.inf
+    stride["hist"] = np.inf
+    
 
     
 # Bunch plotter
@@ -355,7 +359,19 @@ if args.save_ids:
 # Write initial 6D coordinates to columns 8-13 of each bunch file.
 if args.save_init_coords_attr:
     copyCoordsToInitCoordsAttr(bunch)
-
+    
+    
+    
+# Histograms
+# ------------------------------
+histogrammer = pyorbit_sim.diagnostics.Histogrammer(
+    axes=[(0, 1), (2, 3)], 
+    limits=(6 * [(-5.0, 5.0)]),
+    n_bins=(6 * [75]),
+    transform=transform,         
+    outdir=man.outdir,
+)
+   
     
     
 # Bunch monitor
@@ -364,7 +380,7 @@ monitor = pyorbit_sim.linac.Monitor(
     stride=stride,
     writer=writer,
     plotter=plotter,
-    track_rms=True,
+    histogrammer=histogrammer,
     filename=(man.get_filename("history.dat") if args.save else None),
     rf_frequency=linac.rf_frequency,
     verbose=args.verbose,
