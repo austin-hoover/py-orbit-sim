@@ -37,3 +37,4 @@ for i in range(n_bins):
     for j in range(n_bins):
         value = grid.getValueOnGrid(i, j)
         print("(rank {}) grid[{}, {}] = {:0.3f}".format(_mpi_rank, i, j, value))
+        
