@@ -97,7 +97,6 @@ class Monitor:
         plotter=None,
         writer=None,
         stride=None,
-        track_rms=True,
         dispersion_flag=False,
         emit_norm_flag=False,
         position_offset=0.0,
@@ -120,8 +119,6 @@ class Monitor:
                 "update": proceed with all updates (print statement, etc.)
                 "write": call `bunch.dumpBunch`
                 "plot": call plotting routines
-        track_rms : bool
-            Whether include RMS bunch parameters in history arrays.
         emit_norm_flag, dispersion_flag : bool
             Used by `BunchTwissAnalysis` class.
         position_offset : float
@@ -140,7 +137,6 @@ class Monitor:
         self.rf_frequency = rf_frequency
         self.dispersion_flag = int(dispersion_flag)
         self.emit_norm_flag = int(emit_norm_flag)
-        self.track_rms = track_rms
         self.verbose = verbose
 
         self.stride = stride
@@ -225,24 +221,23 @@ class Monitor:
             self.history["energy"] = bunch.getSyncParticle().kinEnergy()
 
         # Record covariance matrix.
-        if self.track_rms:
-            twiss_analysis = BunchTwissAnalysis()
-            order = 2
-            twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
-            for i in range(6):
-                key = "mean_{}".format(i)
-                value = twiss_analysis.getAverage(i)
+        twiss_analysis = BunchTwissAnalysis()
+        order = 2
+        twiss_analysis.computeBunchMoments(bunch, order, self.dispersion_flag, self.emit_norm_flag)
+        for i in range(6):
+            key = "mean_{}".format(i)
+            value = twiss_analysis.getAverage(i)
+            if _mpi_rank == 0:
+                self.history[key] = value
+        for i in range(6):
+            for j in range(i + 1):
+                key = "cov_{}-{}".format(j, i)
+                value = twiss_analysis.getCorrelation(j, i)
                 if _mpi_rank == 0:
                     self.history[key] = value
-            for i in range(6):
-                for j in range(i + 1):
-                    key = "cov_{}-{}".format(j, i)
-                    value = twiss_analysis.getCorrelation(j, i)
-                    if _mpi_rank == 0:
-                        self.history[key] = value
                                                    
         # Update history array with standard deviations.
-        if _mpi_rank == 0 and self.track_rms:
+        if _mpi_rank == 0:
             x_rms = np.sqrt(self.history["cov_0-0"])
             y_rms = np.sqrt(self.history["cov_2-2"])
             z_rms = np.sqrt(self.history["cov_4-4"])
@@ -267,45 +262,26 @@ class Monitor:
                                 
         # Print update statement.
         if self.verbose and _mpi_rank == 0:
-            if self.track_rms:
-                fstr = "{:>5} | {:>10.2f} | {:>10.5f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.0f} | {} "
-                if self.step == 0:
-                    print(
-                        "{:<5} | {:<10} | {:<10} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
-                        .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
-                    )
-                    print(115 * "-")
+            fstr = "{:>5} | {:>10.2f} | {:>10.5f} | {:>8.4f} | {:>9.3f} | {:>9.3f} | {:>10.3f} | {:<9.0f} | {} "
+            if self.step == 0:
                 print(
-                    fstr.format(
-                        self.step,
-                        time_ellapsed,  # [s]
-                        position,  # [m]
-                        1000.0 * bunch.getSyncParticle().kinEnergy(),
-                        1000.0 * x_rms,
-                        1000.0 * y_rms,
-                        z_rms_deg,
-                        n_parts,
-                        node.getName(),
-                    )
+                    "{:<5} | {:<10} | {:<10} | {:<8} | {:<5} | {:<9} | {:<10} | {:<9} | {}"
+                    .format("step", "time [s]", "s [m]", "T [MeV]", "xrms [mm]", "yrms [mm]", "zrms [deg]", "nparts", "node")
                 )
-            else:
-                fstr = "{:>5} | {:>10.2f} | {:>10.3f} | {:>8.4f} | {:<9.0f} | {} "
-                if self.step == 0:
-                    print(
-                        "{:<5} | {:<10} | {:<10} | {:<10} | {:<9} | {}"
-                        .format("step", "time [s]", "s [m]", "T [MeV]", "nparts", "node")
-                    )
-                    print(80 * "-")
-                print(
-                    fstr.format(
-                        self.step,
-                        time_ellapsed,  # [s]
-                        position,  # [m]
-                        1000.0 * bunch.getSyncParticle().kinEnergy(),
-                        n_parts,
-                        node.getName(),
-                    )
+                print(115 * "-")
+            print(
+                fstr.format(
+                    self.step,
+                    time_ellapsed,  # [s]
+                    position,  # [m]
+                    1000.0 * bunch.getSyncParticle().kinEnergy(),
+                    1000.0 * x_rms,
+                    1000.0 * y_rms,
+                    z_rms_deg,
+                    n_parts,
+                    node.getName(),
                 )
+            )
         self.step += 1
                                                 
         # Write bunch coordinates to file.        
