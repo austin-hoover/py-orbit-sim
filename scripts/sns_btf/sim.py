@@ -83,8 +83,8 @@ parser.add_argument("--quads", type=str, default="magnets/230905100947-quad_stre
 # Saving
 parser.add_argument("--save", type=int, default=1)
 parser.add_argument("--save-init-coords-attr", type=int, default=0)
-parser.add_argument("--save-input-bunch", type=int, default=1)
-parser.add_argument("--save-output-bunch", type=int, default=1)
+parser.add_argument("--save-bunch-in", type=int, default=1)
+parser.add_argument("--save-bunch-out", type=int, default=1)
 parser.add_argument("--save-lost_bunch", type=int, default=1)
 parser.add_argument("--save-losses", type=int, default=1)
 parser.add_argument("--save-ids", type=int, default=1)
@@ -103,11 +103,11 @@ parser.add_argument("--overlap", type=int, default=1)
 parser.add_argument("--rf-freq", type=float, default=402.5e+06)
 
 # Space charge
-parser.add_argument("--spacecharge", type=int, default=1)
+parser.add_argument("--sc", type=int, default=1)
 parser.add_argument("--gridx", type=int, default=64)
 parser.add_argument("--gridy", type=int, default=64)
 parser.add_argument("--gridz", type=int, default=64)
-parser.add_argument("--n_bunches", type=int, default=3)
+parser.add_argument("--n-bunches", type=int, default=3)
 
 # Bunch
 parser.add_argument("--bunch", type=str, default=None)
@@ -193,7 +193,7 @@ if args.quads:
 if args.overlap:
     linac.set_overlapping_pmq_fields(z_step=args.max_drift, verbose=args.verbose)
 
-if args.spacecharge:
+if args.sc and (args.current > 0.0):
     linac.add_space_charge_nodes(
         grid_size_x=args.gridx,
         grid_size_y=args.gridy,
@@ -283,6 +283,8 @@ if args.decorr:
 intensity = pyorbit_sim.bunch_utils.get_intensity(args.current, linac.rf_frequency)
 bunch_size_global = bunch.getSizeGlobal()
 macro_size = intensity / bunch_size_global
+if intensity <= 0:
+    macro_size = 1.0
 bunch.macroSize(macro_size)
 
 
@@ -366,8 +368,8 @@ if args.save_init_coords_attr:
 # ------------------------------
 histogrammer = pyorbit_sim.diagnostics.Histogrammer(
     axes=[(0, 1), (2, 3)], 
-    limits=(6 * [(-5.0, 5.0)]),
-    n_bins=(6 * [75]),
+    limits=(6 * [(-10.0, 10.0)]),
+    n_bins=(6 * [150]),
     transform=transform,         
     outdir=man.outdir,
 )
@@ -397,7 +399,7 @@ stop = args.stop
 if args.stop_pos is not None:
     stop = args.stop_pos
 
-if args.save and args.save_input_bunch:
+if args.save and args.save_bunch_in:
     node_name = start
     if node_name is None or type(node_name) is not str:
         node_name = "START"
@@ -429,7 +431,7 @@ if args.save and args.save_lost_bunch:
     lostbunch = params_dict["lostbunch"]
     lostbunch.dumpBunch(filename)
 
-if args.save and args.save_output_bunch:
+if args.save and args.save_bunch_out:
     node_name = stop
     if node_name is None or type(node_name) is not str:
         node_name = "STOP"
