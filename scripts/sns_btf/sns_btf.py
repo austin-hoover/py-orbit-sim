@@ -459,11 +459,11 @@ class SNS_BTF:
         if filename is None:
             return
         setpoints = dict()
-        if value_type == "gradient":
+        if file == "gradient":
             setpoints = quad_readbacks_from_mstate(filename)
             for quad_name, gradient in setpoints.items():
                 self.set_quad_gradient(quad_name, gradient, verbose=verbose)
-        elif value_type == "current":
+        elif file == "current":
             setpoints = quad_setpoints_from_mstate(filename)
             for quad_name, current in setpoints.items():
                 self.set_quad_current(quad_name, current, verbose=verbose)

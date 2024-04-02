@@ -77,8 +77,8 @@ parser = argparse.ArgumentParser("sim")
 parser.add_argument("--outdir", type=str, default=None)
 parser.add_argument("--xml", type=str, default="xml/btf_lattice_straight.xml")
 parser.add_argument("--coef", type=str, default="magnets/default_i2gl_coeff_straight.csv")
-parser.add_argument("--mstate", type=str, default=None)
-parser.add_argument("--quads", type=str, default="magnets/230901113653_quad_settings_matched.dat")
+parser.add_argument("--mstate", type=str, default="mstate/Snapshot_20240111_173323.mstate")
+parser.add_argument("--quads", type=str, default=None)
     
 # Saving
 parser.add_argument("--save", type=int, default=1)
@@ -204,7 +204,7 @@ linac.init_lattice(
 # Set optics from file.
 if args.mstate:
     filename = os.path.join(input_dir, args.mstate)
-    linac.update_quads_from_mstate(filename, value_type="current")
+    linac.set_quads_from_mstate(filename, parameter="current")
 if args.quads:
     filename = os.path.join(input_dir, args.quads)
     linac.set_quads_from_file(filename, comment="#", verbose=args.verbose)
